@@ -10,7 +10,7 @@ use pyo3_polars::{PyDataFrame, PyLazyFrame};
 struct PyExtractionSettings {
     grouping_col: String,
     value_cols: Vec<String>,
-    dynamic_opts: Option<PyDynamicGroupBySettings>,
+    dynamic_settings: Option<PyDynamicGroupBySettings>,
 }
 
 #[pyclass(name = "DynamicGroupBySettings")]
@@ -20,6 +20,7 @@ struct PyDynamicGroupBySettings {
     every: String,
     period: String,
     offset: String,
+    datetime_format: Option<String>,
 }
 
 #[pymethods]
@@ -28,12 +29,12 @@ impl PyExtractionSettings {
     fn new(
         grouping_col: String,
         value_cols: Vec<String>,
-        dynamic_opts: Option<PyDynamicGroupBySettings>,
+        dynamic_settings: Option<PyDynamicGroupBySettings>,
     ) -> Self {
         PyExtractionSettings {
             grouping_col,
             value_cols,
-            dynamic_opts,
+            dynamic_settings,
         }
     }
 }
@@ -41,12 +42,19 @@ impl PyExtractionSettings {
 #[pymethods]
 impl PyDynamicGroupBySettings {
     #[new]
-    fn new(time_col: String, every: String, period: String, offset: String) -> Self {
+    fn new(
+        time_col: String,
+        every: String,
+        period: String,
+        offset: String,
+        datetime_format: Option<String>,
+    ) -> Self {
         PyDynamicGroupBySettings {
             time_col,
             every,
             period,
             offset,
+            datetime_format,
         }
     }
 }
@@ -58,23 +66,24 @@ impl From<PyDynamicGroupBySettings> for DynamicGroupBySettings {
             every: opts.every,
             period: opts.period,
             offset: opts.offset,
+            datetime_format: opts.datetime_format,
         }
     }
 }
 
 impl From<PyExtractionSettings> for ExtractionSettings {
     fn from(opts: PyExtractionSettings) -> Self {
-        if opts.dynamic_opts.is_none() {
+        if opts.dynamic_settings.is_none() {
             ExtractionSettings {
                 grouping_col: opts.grouping_col,
                 value_cols: opts.value_cols,
-                dynamic_opts: None,
+                dynamic_settings: None,
             }
         } else {
             ExtractionSettings {
                 grouping_col: opts.grouping_col,
                 value_cols: opts.value_cols,
-                dynamic_opts: Some(opts.dynamic_opts.unwrap().into()),
+                dynamic_settings: Some(opts.dynamic_settings.unwrap().into()),
             }
         }
     }

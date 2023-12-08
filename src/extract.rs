@@ -9,38 +9,44 @@ pub struct DynamicGroupBySettings {
     pub every: String,
     pub period: String,
     pub offset: String,
+    pub datetime_format: Option<String>,
 }
 
 #[derive(Clone, Debug)]
 pub struct ExtractionSettings {
     pub grouping_col: String,
     pub value_cols: Vec<String>,
-    pub dynamic_opts: Option<DynamicGroupBySettings>,
+    pub dynamic_settings: Option<DynamicGroupBySettings>,
 }
 
 pub fn lazy_feature_df(df: LazyFrame, opts: ExtractionSettings) -> LazyFrame {
     let aggregators = minimal_aggregators(&opts.value_cols);
     //aggregators.append(&mut extra_aggregators(&opts.value_cols));
-    let options = StrptimeOptions {
-        format: Some("%Y-%m-%d %H:%S:%M".into()),
-        ..Default::default()
-    };
     let mut selected_cols = Vec::new();
     selected_cols.push(col(&opts.grouping_col));
     for val_col in &opts.value_cols {
         selected_cols.push(col(val_col));
     }
-    let gdf = if opts.dynamic_opts.is_some() {
-        let dynamic_opts = opts.clone().dynamic_opts.unwrap();
-        selected_cols.push(col(&opts.dynamic_opts.unwrap().time_col));
+    let gdf = if opts.dynamic_settings.is_some() {
+        let dynamic_settings = opts.clone().dynamic_settings.unwrap();
+        let datetime_format = if dynamic_settings.datetime_format.is_some() {
+            dynamic_settings.clone().datetime_format.unwrap()
+        } else {
+            "%Y-%m-%d %H:%S:%M".to_string()
+        };
+        let time_options = StrptimeOptions {
+            format: Some(datetime_format.into()),
+            ..Default::default()
+        };
+        selected_cols.push(col(&dynamic_settings.time_col));
         df.select(&selected_cols).group_by_dynamic(
-            col(&dynamic_opts.time_col).str().to_date(options),
+            col(&dynamic_settings.time_col).str().to_date(time_options),
             [col(&opts.grouping_col)],
             DynamicGroupOptions {
-                index_column: dynamic_opts.time_col.into(),
-                every: Duration::parse(&dynamic_opts.every),
-                period: Duration::parse(&dynamic_opts.period),
-                offset: Duration::parse(&dynamic_opts.offset),
+                index_column: dynamic_settings.time_col.into(),
+                every: Duration::parse(&dynamic_settings.every),
+                period: Duration::parse(&dynamic_settings.period),
+                offset: Duration::parse(&dynamic_settings.offset),
                 ..Default::default()
             },
         )
@@ -69,7 +75,7 @@ mod tests {
         let opts = ExtractionSettings {
             grouping_col: "id".to_string(),
             value_cols: vec!["value".to_string()],
-            dynamic_opts: None,
+            dynamic_settings: None,
         };
         let gdf = lazy_feature_df(df, opts);
 
@@ -109,7 +115,7 @@ mod tests {
         let opts = ExtractionSettings {
             grouping_col: "id".to_string(),
             value_cols: vec!["value".to_string()],
-            dynamic_opts: None,
+            dynamic_settings: None,
         };
         let gdf = lazy_feature_df(df, opts);
         println!("{}", gdf.clone().collect().unwrap());

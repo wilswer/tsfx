@@ -18,7 +18,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 ExtractionSettings {
                     grouping_col: "id".to_string(),
                     value_cols: vec!["value".to_string()],
-                    dynamic_opts: None,
+                    dynamic_settings: None,
                 },
             )
             .collect()
