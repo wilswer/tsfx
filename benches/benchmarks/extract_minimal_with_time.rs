@@ -5,14 +5,19 @@ use tsfx::extract::{lazy_feature_df, DynamicGroupBySettings, ExtractionSettings}
 
 fn criterion_benchmark(c: &mut Criterion) {
     let df = LazyCsvReader::new("test_data/all_stocks_5yr.csv")
-        .with_dtype_overwrite(Some(&schema))
         .finish()
         .unwrap()
-        .drop_nulls();
+        .drop_nulls(Some(vec![
+            col("open"),
+            col("high"),
+            col("low"),
+            col("close"),
+            col("volume"),
+        ]));
     c.bench_function("extract_minimal_with_time", |b| {
         b.iter(|| {
             lazy_feature_df(
-                black_box(df),
+                black_box(df.clone()),
                 ExtractionSettings {
                     grouping_col: "Name".to_string(),
                     value_cols: vec![
@@ -27,7 +32,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         every: "1y".to_string(),
                         period: "1y".to_string(),
                         offset: "0".to_string(),
-                        datetime_format: "%Y-%m-%d".to_string(),
+                        datetime_format: Some("%Y-%m-%d".to_string()),
                     }),
                 },
             )

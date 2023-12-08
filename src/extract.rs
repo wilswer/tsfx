@@ -35,7 +35,7 @@ pub fn lazy_feature_df(df: LazyFrame, opts: ExtractionSettings) -> LazyFrame {
             "%Y-%m-%d %H:%S:%M".to_string()
         };
         let time_options = StrptimeOptions {
-            format: Some(datetime_format.into()),
+            format: Some(datetime_format),
             ..Default::default()
         };
         selected_cols.push(col(&dynamic_settings.time_col));

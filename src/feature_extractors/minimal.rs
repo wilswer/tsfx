@@ -40,11 +40,11 @@ pub fn sum(name: &str) -> Expr {
         .apply(_sum, o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_sum", name.to_string()))
+        .alias(&format!("{}_sum", name))
 }
 
 pub fn expr_sum(name: &str) -> Expr {
-    col(name).sum().alias(&format!("{}_sum", name.to_string()))
+    col(name).sum().alias(&format!("{}_sum", name))
 }
 
 fn _mean(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -63,13 +63,11 @@ pub fn mean(name: &str) -> Expr {
         .apply(_mean, o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_mean", name.to_string()))
+        .alias(&format!("{}_mean", name))
 }
 
 pub fn expr_mean(name: &str) -> Expr {
-    col(name)
-        .mean()
-        .alias(&format!("{}_mean", name.to_string()))
+    col(name).mean().alias(&format!("{}_mean", name))
 }
 
 fn _min(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -88,11 +86,11 @@ pub fn minimum(name: &str) -> Expr {
         .apply(_min, o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_min", name.to_string()))
+        .alias(&format!("{}_min", name))
 }
 
 pub fn expr_minimum(name: &str) -> Expr {
-    col(name).min().alias(&format!("{}_min", name.to_string()))
+    col(name).min().alias(&format!("{}_min", name))
 }
 
 fn _max(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -111,11 +109,11 @@ pub fn maximum(name: &str) -> Expr {
         .apply(_max, o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_max", name.to_string()))
+        .alias(&format!("{}_max", name))
 }
 
 pub fn expr_maximum(name: &str) -> Expr {
-    col(name).max().alias(&format!("{}_max", name.to_string()))
+    col(name).max().alias(&format!("{}_max", name))
 }
 
 fn _abs_max(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -135,13 +133,11 @@ pub fn absolute_maximum(name: &str, out_type: DataType) -> Expr {
         .apply(_abs_max, o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_abs_max", name.to_string()))
+        .alias(&format!("{}_abs_max", name))
 }
 
 pub fn expr_median(name: &str) -> Expr {
-    col(name)
-        .median()
-        .alias(&format!("{}_median", name.to_string()))
+    col(name).median().alias(&format!("{}_median", name))
 }
 
 fn _std(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -160,11 +156,11 @@ pub fn std(name: &str) -> Expr {
         .apply(_std, o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_std", name.to_string()))
+        .alias(&format!("{}_std", name))
 }
 
 pub fn expr_std(name: &str) -> Expr {
-    col(name).std(1).alias(&format!("{}_std", name.to_string()))
+    col(name).std(1).alias(&format!("{}_std", name))
 }
 
 fn _var(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -183,11 +179,11 @@ pub fn var(name: &str) -> Expr {
         .apply(_var, o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_var", name.to_string()))
+        .alias(&format!("{}_var", name))
 }
 
 pub fn expr_var(name: &str) -> Expr {
-    col(name).var(1).alias(&format!("{}_var", name.to_string()))
+    col(name).var(1).alias(&format!("{}_var", name))
 }
 
 fn _rms(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -206,7 +202,7 @@ pub fn root_mean_square(name: &str) -> Expr {
         .apply(_rms, o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_rms", name.to_string()))
+        .alias(&format!("{}_rms", name))
 }
 
 pub fn expr_root_mean_square(name: &str) -> Expr {
@@ -214,7 +210,7 @@ pub fn expr_root_mean_square(name: &str) -> Expr {
         .pow(2.0)
         .mean()
         .pow(0.5)
-        .alias(&format!("{}_rms", name.to_string()))
+        .alias(&format!("{}_rms", name))
 }
 
 pub fn expr_skewness(name: &str) -> Expr {
@@ -222,7 +218,7 @@ pub fn expr_skewness(name: &str) -> Expr {
     let mean = col(name).mean();
     let std = col(name).std(1);
     let skewness = ((col(name) - mean).pow(3)).sum() / ((n - lit(1.0)) * std.pow(3));
-    skewness.alias(&format!("{}_expr_skewness", name.to_string()))
+    skewness.alias(&format!("{}_expr_skewness", name))
 }
 
 fn _skewness(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -241,5 +237,5 @@ pub fn skewness(name: &str) -> Expr {
         .apply(_skewness, o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_skewness", name.to_string()))
+        .alias(&format!("{}_skewness", name))
 }
