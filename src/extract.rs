@@ -1,6 +1,6 @@
 use polars::prelude::*;
 
-// use crate::feature_extractors::extras::extra_aggregators;
+use crate::feature_extractors::extras::extra_aggregators;
 use crate::feature_extractors::minimal::minimal_aggregators;
 
 #[derive(Clone, Debug)]
@@ -20,8 +20,8 @@ pub struct ExtractionSettings {
 }
 
 pub fn lazy_feature_df(df: LazyFrame, opts: ExtractionSettings) -> LazyFrame {
-    let aggregators = minimal_aggregators(&opts.value_cols);
-    //aggregators.append(&mut extra_aggregators(&opts.value_cols));
+    let mut aggregators = minimal_aggregators(&opts.value_cols);
+    aggregators.append(&mut extra_aggregators(&opts.value_cols));
     let mut selected_cols = Vec::new();
     selected_cols.push(col(&opts.grouping_col));
     for val_col in &opts.value_cols {
