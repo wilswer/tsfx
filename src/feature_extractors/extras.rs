@@ -22,7 +22,7 @@ fn _abs_energy(s: Series) -> Result<Option<Series>, PolarsError> {
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
     let abs_energy = arr.mapv(|x| x.powi(2)).sum();
-    let s = Series::new("", &[abs_energy]).into_series();
+    let s = Series::new("", &[abs_energy]);
     Ok(Some(s))
 }
 
@@ -63,7 +63,7 @@ fn _mean_change(s: Series) -> Result<Option<Series>, PolarsError> {
         .unwrap();
     let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
     let mean_change = diffs.mean().unwrap();
-    let s = Series::new("", &[mean_change]).into_series();
+    let s = Series::new("", &[mean_change]);
     Ok(Some(s))
 }
 
@@ -88,7 +88,7 @@ fn _ndarray_sum(s: Series) -> Result<Option<Series>, PolarsError> {
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
     let sum: f32 = arr.sum();
-    let s = Series::new("", &[sum]).into_series();
+    let s = Series::new("", &[sum]);
     Ok(Some(s))
 }
 
@@ -115,7 +115,7 @@ fn _kurtosis(s: Series) -> Result<Option<Series>, PolarsError> {
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
     let kurtosis = arr.kurtosis().unwrap();
-    let s = Series::new("", &[kurtosis]).into_series();
+    let s = Series::new("", &[kurtosis]);
     Ok(Some(s))
 }
 
@@ -142,8 +142,8 @@ fn _linear_fit_intercept(s: Series) -> Result<Option<Series>, PolarsError> {
     let dataset = Dataset::new(x, arr);
     let lin_reg = LinearRegression::new();
     let model = lin_reg.fit(&dataset).unwrap();
-    let s_i = Series::new("intercept", &[model.intercept()]).into_series();
-    //let s_p = Series::new("param", &[model.params()[0]]).into_series();
+    let s_i = Series::new("intercept", &[model.intercept()]);
+    //let s_p = Series::new("param", &[model.params()[0]]);
     Ok(Some(s_i))
 }
 
@@ -170,7 +170,7 @@ fn _linear_fit_slope(s: Series) -> Result<Option<Series>, PolarsError> {
     let dataset = Dataset::new(x, arr);
     let lin_reg = LinearRegression::new();
     let model = lin_reg.fit(&dataset).unwrap();
-    let s_p = Series::new("", &[model.params()[0]]).into_series();
+    let s_p = Series::new("", &[model.params()[0]]);
     Ok(Some(s_p))
 }
 
@@ -182,3 +182,30 @@ pub fn linear_fit_slope(name: &str) -> Expr {
         .get(0)
         .alias(&format!("{}_linear_fit_slope", name))
 }
+
+// fn _linear_fit(s: Series) -> Result<DataFrame, PolarsError> {
+//     let arr = s
+//         .into_frame()
+//         .to_ndarray::<Float32Type>(IndexOrder::C)
+//         .unwrap();
+//     let arr = arr
+//         .remove_axis(Axis(1))
+//         .into_dimensionality::<Ix1>()
+//         .unwrap();
+//     let x = ndarray::Array::range(0., arr.len() as f32, 1.);
+//     let x = x.insert_axis(Axis(1));
+//     let dataset = Dataset::new(x, arr);
+//     let lin_reg = LinearRegression::new();
+//     let model = lin_reg.fit(&dataset).unwrap();
+//     let s_i = Series::new("intercept", &[model.intercept()]);
+//     let s_p = Series::new("slope", &[model.params()[0]]);
+//     DataFrame::new(vec![s_i, s_p])
+// }
+//
+// pub fn linear_fit(name: &str) -> Expr {
+//     col(name)
+//         .apply(_linear_fit, None)
+//         .cast(DataType::Float32)
+//         .get(0)
+//         .alias(&format!("{}_linear_fit", name))
+// }

@@ -30,7 +30,7 @@ fn _sum(s: Series) -> Result<Option<Series>, PolarsError> {
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
     let sum = arr.sum();
-    let s = Series::new("", &[sum]).into_series();
+    let s = Series::new("", &[sum]);
     Ok(Some(s))
 }
 
@@ -53,7 +53,7 @@ fn _mean(s: Series) -> Result<Option<Series>, PolarsError> {
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
     let mean = arr.mean();
-    let s = Series::new("", &[mean]).into_series();
+    let s = Series::new("", &[mean]);
     Ok(Some(s))
 }
 
@@ -76,7 +76,7 @@ fn _min(s: Series) -> Result<Option<Series>, PolarsError> {
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
     let min = arr.min().unwrap();
-    let s = Series::new("", &[*min]).into_series();
+    let s = Series::new("", &[*min]);
     Ok(Some(s))
 }
 
@@ -99,7 +99,7 @@ fn _max(s: Series) -> Result<Option<Series>, PolarsError> {
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
     let max = arr.max().unwrap();
-    let s = Series::new("", &[*max]).into_series();
+    let s = Series::new("", &[*max]);
     Ok(Some(s))
 }
 
@@ -123,7 +123,7 @@ fn _abs_max(s: Series) -> Result<Option<Series>, PolarsError> {
         .unwrap();
     let abs_arr: Array1<f32> = arr.iter().map(|x| x.abs()).collect::<Vec<f32>>().into();
     let abs_max = *abs_arr.max().unwrap();
-    let s = Series::new("", &[abs_max]).into_series();
+    let s = Series::new("", &[abs_max]);
     Ok(Some(s))
 }
 
@@ -146,7 +146,7 @@ fn _std(s: Series) -> Result<Option<Series>, PolarsError> {
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
     let std = arr.std_axis(Axis(0), 1.0)[0];
-    let s = Series::new("", &[std]).into_series();
+    let s = Series::new("", &[std]);
     Ok(Some(s))
 }
 
@@ -169,7 +169,7 @@ fn _var(s: Series) -> Result<Option<Series>, PolarsError> {
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
     let var = arr.var_axis(Axis(0), 1.0)[0];
-    let s = Series::new("", &[var]).into_series();
+    let s = Series::new("", &[var]);
     Ok(Some(s))
 }
 
@@ -192,7 +192,7 @@ fn _rms(s: Series) -> Result<Option<Series>, PolarsError> {
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
     let rms = arr.mapv(|x| x.powi(2)).mean().map(f32::sqrt).unwrap();
-    let s = Series::new("", &[rms]).into_series();
+    let s = Series::new("", &[rms]);
     Ok(Some(s))
 }
 
@@ -227,7 +227,7 @@ fn _skewness(s: Series) -> Result<Option<Series>, PolarsError> {
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
     let skewness = arr.skewness().unwrap();
-    let s = Series::new("", &[skewness]).into_series();
+    let s = Series::new("", &[skewness]);
     Ok(Some(s))
 }
 
