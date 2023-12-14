@@ -1,15 +1,23 @@
 pub mod extract;
 pub mod feature_extractors;
 
-use crate::extract::{lazy_feature_df, DynamicGroupBySettings, ExtractionSettings};
+use crate::extract::{lazy_feature_df, DynamicGroupBySettings, ExtractionSettings, FeatureSetting};
 use pyo3::prelude::*;
 use pyo3_polars::{PyDataFrame, PyLazyFrame};
+
+#[pyclass(name = "FeatureSetting")]
+#[derive(Clone)]
+enum PyFeatureSetting {
+    Minimal,
+    Comprehensive,
+}
 
 #[pyclass(name = "ExtractionSettings")]
 #[derive(Clone)]
 struct PyExtractionSettings {
     grouping_col: String,
     value_cols: Vec<String>,
+    feature_setting: PyFeatureSetting,
     dynamic_settings: Option<PyDynamicGroupBySettings>,
 }
 
@@ -29,11 +37,13 @@ impl PyExtractionSettings {
     fn new(
         grouping_col: String,
         value_cols: Vec<String>,
+        feature_setting: PyFeatureSetting,
         dynamic_settings: Option<PyDynamicGroupBySettings>,
     ) -> Self {
         PyExtractionSettings {
             grouping_col,
             value_cols,
+            feature_setting,
             dynamic_settings,
         }
     }
@@ -59,6 +69,15 @@ impl PyDynamicGroupBySettings {
     }
 }
 
+impl From<PyFeatureSetting> for FeatureSetting {
+    fn from(setting: PyFeatureSetting) -> Self {
+        match setting {
+            PyFeatureSetting::Minimal => FeatureSetting::Minimal,
+            PyFeatureSetting::Comprehensive => FeatureSetting::Comprehensive,
+        }
+    }
+}
+
 impl From<PyDynamicGroupBySettings> for DynamicGroupBySettings {
     fn from(opts: PyDynamicGroupBySettings) -> Self {
         DynamicGroupBySettings {
@@ -77,12 +96,14 @@ impl From<PyExtractionSettings> for ExtractionSettings {
             ExtractionSettings {
                 grouping_col: opts.grouping_col,
                 value_cols: opts.value_cols,
+                feature_setting: opts.feature_setting.into(),
                 dynamic_settings: None,
             }
         } else {
             ExtractionSettings {
                 grouping_col: opts.grouping_col,
                 value_cols: opts.value_cols,
+                feature_setting: opts.feature_setting.into(),
                 dynamic_settings: Some(opts.dynamic_settings.unwrap().into()),
             }
         }
@@ -99,6 +120,7 @@ fn extract_features(df: PyLazyFrame, opts: PyExtractionSettings) -> PyResult<PyD
 /// A Python module implemented in Rust.
 #[pymodule]
 fn tsfx(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_class::<PyFeatureSetting>()?;
     m.add_class::<PyExtractionSettings>()?;
     m.add_class::<PyDynamicGroupBySettings>()?;
     m.add_function(wrap_pyfunction!(extract_features, m)?)?;

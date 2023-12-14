@@ -1,7 +1,8 @@
 use linfa::prelude::*;
 use linfa_linear::LinearRegression;
 use ndarray::{s, Axis, Ix1};
-use ndarray_stats::SummaryStatisticsExt;
+use ndarray_stats::{interpolate::Midpoint, QuantileExt, SummaryStatisticsExt};
+use noisy_float::types::n64;
 use polars::{prelude::*, series::ops::NullBehavior};
 
 pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
@@ -12,6 +13,23 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         aggregators.push(mean_change(col));
         aggregators.push(linear_fit_intercept(col));
         aggregators.push(linear_fit_slope(col));
+        aggregators.push(variance_larger_than_standard_deviation(col));
+        aggregators.push(ratio_beyond_r_sigma(col, 0.5));
+        aggregators.push(ratio_beyond_r_sigma(col, 1.0));
+        aggregators.push(ratio_beyond_r_sigma(col, 1.5));
+        aggregators.push(ratio_beyond_r_sigma(col, 2.0));
+        aggregators.push(ratio_beyond_r_sigma(col, 2.5));
+        aggregators.push(ratio_beyond_r_sigma(col, 3.0));
+        aggregators.push(ratio_beyond_r_sigma(col, 5.0));
+        aggregators.push(ratio_beyond_r_sigma(col, 6.0));
+        aggregators.push(ratio_beyond_r_sigma(col, 7.0));
+        aggregators.push(ratio_beyond_r_sigma(col, 10.0));
+        for r in ndarray::Array::range(0.05, 1.0, 0.05).iter() {
+            aggregators.push(large_standard_deviation(col, *r));
+        }
+        for r in ndarray::Array::range(0.05, 1.0, 0.05).iter() {
+            aggregators.push(symmetry_looking(col, *r));
+        }
     }
     aggregators
 }
@@ -209,3 +227,81 @@ pub fn linear_fit_slope(name: &str) -> Expr {
 //         .get(0)
 //         .alias(&format!("{}_linear_fit", name))
 // }
+
+pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
+    let std = col(name).std(1);
+    let var = col(name).var(1);
+    (var.gt(std))
+        .cast(DataType::Float32)
+        .alias(&format!("{}_variance_larger_than_standard_deviation", name))
+}
+
+fn _ratio_beyond_r_sigma(s: Series, r: f32) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let mean = arr.mean().unwrap();
+    let std = arr.std(1.0);
+    let count = arr
+        .mapv(|x| if (x - mean).abs() > r * std { 1.0 } else { 0.0 })
+        .sum();
+    let ratio = count as f32 / arr.len() as f32;
+    let s = Series::new("", &[ratio]);
+    Ok(Some(s))
+}
+
+pub fn ratio_beyond_r_sigma(name: &str, r: f32) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _ratio_beyond_r_sigma(s, r), o)
+        .cast(DataType::Float32)
+        .get(0)
+        .alias(&format!("{}_ratio_beyond_{}_sigma", name, r))
+}
+
+fn _large_standard_deviation(s: Series, r: f32) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let min = arr.min().unwrap();
+    let max = arr.max().unwrap();
+    let std = arr.std(1.0);
+    let out = std > r * (max - min);
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn large_standard_deviation(name: &str, r: f32) -> Expr {
+    let o = GetOutput::from_type(DataType::Boolean);
+    col(name)
+        .apply(move |s| _large_standard_deviation(s, r), o)
+        .cast(DataType::Float32)
+        .get(0)
+        .alias(&format!("{}_large_standard_deviation_r_{}", name, r))
+}
+
+fn _symmetry_looking(s: Series, r: f32) -> Result<Option<Series>, PolarsError> {
+    let mut arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let median = arr
+        .quantile_axis_skipnan_mut(Axis(0), n64(0.5), &Midpoint)
+        .unwrap()[0];
+    let mean_median_diff = (arr.mean().unwrap() - median).abs();
+    let max_min_diff = arr.max().unwrap() - arr.min().unwrap();
+    let out = mean_median_diff < r * max_min_diff;
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn symmetry_looking(name: &str, r: f32) -> Expr {
+    let o = GetOutput::from_type(DataType::Boolean);
+    col(name)
+        .apply(move |s| _symmetry_looking(s, r), o)
+        .cast(DataType::Float32)
+        .get(0)
+        .alias(&format!("{}_symmetry_looking_r_{}", name, r))
+}

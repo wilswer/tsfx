@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from enum import Enum, auto
+
 import polars as pl
+
+class FeatureSetting(Enum):
+    Mimimal = auto()
+    Comprehensive = auto()
 
 class ExtractionSettings:
     def __init__(self) -> None:
         self.grouping_col: str
         self.value_cols: list[str]
+        self.feature_setting: FeatureSetting
         self.dynamic_settings: DynamicGroupBySettings | None = None
 
 class DynamicGroupBySettings:

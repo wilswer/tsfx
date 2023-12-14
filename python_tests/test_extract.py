@@ -1,5 +1,10 @@
 import polars as pl
-from tsfx import DynamicGroupBySettings, ExtractionSettings, extract_features
+from tsfx import (
+    DynamicGroupBySettings,
+    ExtractionSettings,
+    extract_features,
+    FeatureSetting,
+)
 
 df = pl.DataFrame(
     {
@@ -10,6 +15,7 @@ df = pl.DataFrame(
 ).lazy()
 opts = ExtractionSettings(
     grouping_col="id",
+    feature_setting=FeatureSetting.Minimal,
     value_cols=["val", "value"],
 )
 gdf = extract_features(df, opts)
@@ -44,6 +50,7 @@ dyn_opts = DynamicGroupBySettings(
 opts = ExtractionSettings(
     grouping_col="id",
     value_cols=["val", "value"],
+    feature_setting=FeatureSetting.Minimal,
     dynamic_settings=dyn_opts,
 )
 gdf = extract_features(tdf, opts)

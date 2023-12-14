@@ -4,6 +4,12 @@ use crate::feature_extractors::extras::extra_aggregators;
 use crate::feature_extractors::minimal::minimal_aggregators;
 
 #[derive(Clone, Debug)]
+pub enum FeatureSetting {
+    Minimal,
+    Comprehensive,
+}
+
+#[derive(Clone, Debug)]
 pub struct DynamicGroupBySettings {
     pub time_col: String,
     pub every: String,
@@ -16,12 +22,23 @@ pub struct DynamicGroupBySettings {
 pub struct ExtractionSettings {
     pub grouping_col: String,
     pub value_cols: Vec<String>,
+    pub feature_setting: FeatureSetting,
     pub dynamic_settings: Option<DynamicGroupBySettings>,
 }
 
-pub fn lazy_feature_df(df: LazyFrame, opts: ExtractionSettings) -> LazyFrame {
+fn get_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
     let mut aggregators = minimal_aggregators(&opts.value_cols);
-    aggregators.append(&mut extra_aggregators(&opts.value_cols));
+    match opts.feature_setting {
+        FeatureSetting::Minimal => aggregators,
+        FeatureSetting::Comprehensive => {
+            aggregators.append(&mut extra_aggregators(&opts.value_cols));
+            aggregators
+        }
+    }
+}
+
+pub fn lazy_feature_df(df: LazyFrame, opts: ExtractionSettings) -> LazyFrame {
+    let aggregators = get_aggregators(&opts);
     let mut selected_cols = Vec::new();
     selected_cols.push(col(&opts.grouping_col));
     for val_col in &opts.value_cols {
@@ -61,7 +78,7 @@ pub fn lazy_feature_df(df: LazyFrame, opts: ExtractionSettings) -> LazyFrame {
 mod tests {
     use std::f32::NAN;
 
-    use super::{lazy_feature_df, ExtractionSettings};
+    use super::{lazy_feature_df, ExtractionSettings, FeatureSetting};
     use polars::prelude::*;
 
     #[test]
@@ -75,6 +92,7 @@ mod tests {
         let opts = ExtractionSettings {
             grouping_col: "id".to_string(),
             value_cols: vec!["value".to_string()],
+            feature_setting: FeatureSetting::Minimal,
             dynamic_settings: None,
         };
         let gdf = lazy_feature_df(df, opts);
@@ -115,6 +133,7 @@ mod tests {
         let opts = ExtractionSettings {
             grouping_col: "id".to_string(),
             value_cols: vec!["value".to_string()],
+            feature_setting: FeatureSetting::Minimal,
             dynamic_settings: None,
         };
         let gdf = lazy_feature_df(df, opts);

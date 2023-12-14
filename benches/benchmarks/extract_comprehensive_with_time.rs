@@ -14,7 +14,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             col("close"),
             col("volume"),
         ]));
-    c.bench_function("extract_minimal_with_time", |b| {
+    c.bench_function("extract_comprehensive_with_time", |b| {
         b.iter(|| {
             lazy_feature_df(
                 black_box(df.clone()),
@@ -27,7 +27,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         "close".to_string(),
                         "volume".to_string(),
                     ],
-                    feature_setting: FeatureSetting::Minimal,
+                    feature_setting: FeatureSetting::Comprehensive,
                     dynamic_settings: Some(DynamicGroupBySettings {
                         time_col: "date".to_string(),
                         every: "1y".to_string(),
@@ -44,7 +44,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 }
 
 fn few_samples() -> Criterion {
-    Criterion::default().sample_size(100)
+    Criterion::default().sample_size(10)
 }
 
 criterion_group! {
