@@ -45,6 +45,8 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         aggregators.push(first_location_of_minimum(col));
         aggregators.push(last_location_of_maximum(col));
         aggregators.push(last_location_of_minimum(col));
+        aggregators.push(longest_strike_below_mean(col));
+        aggregators.push(longest_strike_above_mean(col));
     }
     aggregators
 }
