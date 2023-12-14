@@ -1,4 +1,4 @@
-use ndarray::{Array1, Axis};
+use ndarray::Array1;
 use ndarray_stats::{QuantileExt, SummaryStatisticsExt};
 use polars::prelude::*;
 
@@ -15,7 +15,7 @@ pub fn minimal_aggregators(value_cols: &[String]) -> Vec<Expr> {
         aggregators.push(var(col));
         aggregators.push(skewness(col));
         aggregators.push(root_mean_square(col));
-        aggregators.push(absolute_maximum(col, DataType::Float32));
+        aggregators.push(absolute_maximum(col));
     }
     aggregators
 }
@@ -38,7 +38,6 @@ pub fn sum(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
         .apply(_sum, o)
-        .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_sum", name))
 }
@@ -61,7 +60,6 @@ pub fn mean(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
         .apply(_mean, o)
-        .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_mean", name))
 }
@@ -84,7 +82,6 @@ pub fn minimum(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
         .apply(_min, o)
-        .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_min", name))
 }
@@ -107,7 +104,6 @@ pub fn maximum(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
         .apply(_max, o)
-        .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_max", name))
 }
@@ -127,11 +123,10 @@ fn _abs_max(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
-pub fn absolute_maximum(name: &str, out_type: DataType) -> Expr {
-    let o = GetOutput::from_type(out_type);
+pub fn absolute_maximum(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
     col(name)
         .apply(_abs_max, o)
-        .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_abs_max", name))
 }
@@ -145,7 +140,7 @@ fn _std(s: Series) -> Result<Option<Series>, PolarsError> {
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let std = arr.std_axis(Axis(0), 1.0)[0];
+    let std = arr.std(1.0);
     let s = Series::new("", &[std]);
     Ok(Some(s))
 }
@@ -154,7 +149,6 @@ pub fn std(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
         .apply(_std, o)
-        .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_std", name))
 }
@@ -168,7 +162,7 @@ fn _var(s: Series) -> Result<Option<Series>, PolarsError> {
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let var = arr.var_axis(Axis(0), 1.0)[0];
+    let var = arr.var(1.0);
     let s = Series::new("", &[var]);
     Ok(Some(s))
 }
@@ -177,7 +171,6 @@ pub fn var(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
         .apply(_var, o)
-        .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_var", name))
 }
@@ -200,9 +193,8 @@ pub fn root_mean_square(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
         .apply(_rms, o)
-        .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_rms", name))
+        .alias(&format!("{}_root_mean_sqaure", name))
 }
 
 pub fn expr_root_mean_square(name: &str) -> Expr {
@@ -235,7 +227,6 @@ pub fn skewness(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
         .apply(_skewness, o)
-        .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_skewness", name))
 }

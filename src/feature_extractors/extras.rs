@@ -9,8 +9,8 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
     let mut aggregators = Vec::new();
     for col in value_cols {
         aggregators.push(kurtosis(col));
-        aggregators.push(abs_energy(col));
-        aggregators.push(mean_change(col));
+        aggregators.push(absolute_energy(col));
+        aggregators.push(mean_absolute_change(col));
         aggregators.push(linear_fit_intercept(col));
         aggregators.push(linear_fit_slope(col));
         aggregators.push(variance_larger_than_standard_deviation(col));
@@ -30,11 +30,15 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         for r in ndarray::Array::range(0.05, 1.0, 0.05).iter() {
             aggregators.push(symmetry_looking(col, *r));
         }
+        aggregators.push(has_duplicate_max(col));
+        aggregators.push(has_duplicate_min(col));
+        aggregators.push(cid_ce(col, true));
+        aggregators.push(cid_ce(col, false));
     }
     aggregators
 }
 
-fn _abs_energy(s: Series) -> Result<Option<Series>, PolarsError> {
+fn _absolute_energy(s: Series) -> Result<Option<Series>, PolarsError> {
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -44,11 +48,10 @@ fn _abs_energy(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
-pub fn abs_energy(name: &str) -> Expr {
+pub fn absolute_energy(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
-        .apply(_abs_energy, o)
-        .cast(DataType::Float32)
+        .apply(_absolute_energy, o)
         .get(0)
         .alias(&format!("{}_abs_energy", name))
 }
@@ -70,7 +73,7 @@ pub fn test_mean(name: &str) -> Expr {
     (s / n).alias(&format!("{}_test_mean", name))
 }
 
-fn _mean_change(s: Series) -> Result<Option<Series>, PolarsError> {
+fn _mean_absolute_change(s: Series) -> Result<Option<Series>, PolarsError> {
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -80,18 +83,17 @@ fn _mean_change(s: Series) -> Result<Option<Series>, PolarsError> {
         .into_dimensionality::<Ix1>()
         .unwrap();
     let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
-    let mean_change = diffs.mean().unwrap();
-    let s = Series::new("", &[mean_change]);
+    let mean_abs_change = diffs.mapv(|x| x.abs()).mean().unwrap();
+    let s = Series::new("", &[mean_abs_change]);
     Ok(Some(s))
 }
 
-pub fn mean_change(name: &str) -> Expr {
+pub fn mean_absolute_change(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
-        .apply(_mean_change, o)
-        .cast(DataType::Float32)
+        .apply(_mean_absolute_change, o)
         .get(0)
-        .alias(&format!("{}_mean_change", name))
+        .alias(&format!("{}_mean_absolute_change", name))
 }
 
 pub fn expr_mean_change(name: &str) -> Expr {
@@ -114,7 +116,6 @@ pub fn ndarray_sum(name: &str, out_type: DataType) -> Expr {
     let o = GetOutput::from_type(out_type);
     col(name)
         .apply(_ndarray_sum, o)
-        .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_ndarray_sum", name))
 }
@@ -141,7 +142,6 @@ pub fn kurtosis(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
         .apply(_kurtosis, o)
-        .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_kurtosis", name))
 }
@@ -169,7 +169,6 @@ pub fn linear_fit_intercept(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
         .apply(_linear_fit_intercept, o)
-        .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_linear_fit_intercept", name))
 }
@@ -196,7 +195,6 @@ pub fn linear_fit_slope(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
         .apply(_linear_fit_slope, o)
-        .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_linear_fit_slope", name))
 }
@@ -304,4 +302,76 @@ pub fn symmetry_looking(name: &str, r: f32) -> Expr {
         .cast(DataType::Float32)
         .get(0)
         .alias(&format!("{}_symmetry_looking_r_{}", name, r))
+}
+
+fn _has_duplicate_max(s: Series) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let max = arr.max().unwrap();
+    let count = arr.mapv(|x| if x == *max { 1.0 } else { 0.0 }).sum();
+    let out = count > 1.0;
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn has_duplicate_max(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Boolean);
+    col(name)
+        .apply(_has_duplicate_max, o)
+        .cast(DataType::Float32)
+        .get(0)
+        .alias(&format!("{}_has_duplicate_max", name))
+}
+
+fn _has_duplicate_min(s: Series) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let min = arr.min().unwrap();
+    let count = arr.mapv(|x| if x == *min { 1.0 } else { 0.0 }).sum();
+    let out = count > 1.0;
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn has_duplicate_min(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Boolean);
+    col(name)
+        .apply(_has_duplicate_min, o)
+        .cast(DataType::Float32)
+        .get(0)
+        .alias(&format!("{}_has_duplicate_min", name))
+}
+
+fn _cid_ce(s: Series, normalize: bool) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let arr = if normalize {
+        let mean = arr.mean().unwrap();
+        let std = arr.std(1.0);
+        (arr - mean) / std
+    } else {
+        arr
+    };
+    let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
+    let out = diffs.mapv(|x| x.powi(2)).sum().sqrt();
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn cid_ce(name: &str, normalize: bool) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _cid_ce(s, normalize), o)
+        .get(0)
+        .alias(&format!("{}_cid_ce_normalize_{}", name, normalize))
 }
