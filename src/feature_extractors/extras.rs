@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use linfa::prelude::*;
 use linfa_linear::LinearRegression;
 use ndarray::{s, Axis, Ix1};
@@ -34,8 +35,28 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         aggregators.push(has_duplicate_min(col));
         aggregators.push(cid_ce(col, true));
         aggregators.push(cid_ce(col, false));
+        aggregators.push(absolute_maximum(col));
+        aggregators.push(absolute_sum_of_changes(col));
+        aggregators.push(count_above_mean(col));
+        aggregators.push(count_below_mean(col));
+        aggregators.push(count_above(col, 0.0));
+        aggregators.push(count_below(col, 0.0));
+        aggregators.push(first_location_of_maximum(col));
+        aggregators.push(first_location_of_minimum(col));
+        aggregators.push(last_location_of_maximum(col));
+        aggregators.push(last_location_of_minimum(col));
     }
     aggregators
+}
+
+fn _get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize> {
+    let mut group_lengths = Vec::new();
+    for (key, group) in &x.into_iter().group_by(|elt| *elt) {
+        if *key {
+            group_lengths.push(group.count());
+        }
+    }
+    group_lengths
 }
 
 fn _absolute_energy(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -374,4 +395,265 @@ pub fn cid_ce(name: &str, normalize: bool) -> Expr {
         .apply(move |s| _cid_ce(s, normalize), o)
         .get(0)
         .alias(&format!("{}_cid_ce_normalize_{}", name, normalize))
+}
+
+fn _absolute_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let out = *arr.mapv(|x| x.abs()).max().unwrap();
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn absolute_maximum(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_absolute_maximum, o)
+        .get(0)
+        .alias(&format!("{}_absolute_maximum", name))
+}
+
+fn _absolute_sum_of_changes(s: Series) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
+    let out = diffs.mapv(|x| x.abs()).sum();
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn absolute_sum_of_changes(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_absolute_sum_of_changes, o)
+        .get(0)
+        .alias(&format!("{}_absolute_sum_of_changes", name))
+}
+
+fn _count_above_mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let mean = arr.mean().unwrap();
+    let out = arr.mapv(|x| if x > mean { 1.0 } else { 0.0 }).sum();
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn count_above_mean(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_count_above_mean, o)
+        .get(0)
+        .alias(&format!("{}_count_above_mean", name))
+}
+
+fn _count_below_mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let mean = arr.mean().unwrap();
+    let out = arr.mapv(|x| if x < mean { 1.0 } else { 0.0 }).sum();
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn count_below_mean(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_count_below_mean, o)
+        .get(0)
+        .alias(&format!("{}_count_below_mean", name))
+}
+
+fn _count_above(s: Series, t: f32) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let out = arr.mapv(|x| if x > t { 1.0 } else { 0.0 }).sum();
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn count_above(name: &str, t: f32) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _count_above(s, t), o)
+        .get(0)
+        .alias(&format!("{}_count_above_t_{}", name, t))
+}
+
+fn _count_below(s: Series, t: f32) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let out = arr.mapv(|x| if x > t { 1.0 } else { 0.0 }).sum();
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn count_below(name: &str, t: f32) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _count_below(s, t), o)
+        .get(0)
+        .alias(&format!("{}_count_below_t_{}", name, t))
+}
+
+fn _first_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let max = arr.argmax().unwrap();
+    let out = max as f32 / arr.len() as f32;
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn first_location_of_maximum(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_first_location_of_maximum, o)
+        .get(0)
+        .alias(&format!("{}_first_location_of_maximum", name))
+}
+
+fn _first_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let min = arr.argmin().unwrap();
+    let out = min as f32 / arr.len() as f32;
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn first_location_of_minimum(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_first_location_of_minimum, o)
+        .get(0)
+        .alias(&format!("{}_first_location_of_minimum", name))
+}
+
+fn _last_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let max = arr.argmax().unwrap();
+    let out = 1.0 - (max as f32 / arr.len() as f32);
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn last_location_of_maximum(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_last_location_of_maximum, o)
+        .get(0)
+        .alias(&format!("{}_last_location_of_maximum", name))
+}
+
+fn _last_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let min = arr.argmin().unwrap();
+    let out = 1.0 - (min as f32 / arr.len() as f32);
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn last_location_of_minimum(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_last_location_of_minimum, o)
+        .get(0)
+        .alias(&format!("{}_last_location_of_minimum", name))
+}
+
+fn _longest_strike_below_mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let mean = arr.mean().unwrap();
+    let bool_arr = arr.mapv(|x| x < mean);
+    let out = _get_length_sequences_where(&bool_arr)
+        .into_iter()
+        .max()
+        .unwrap();
+    let s = Series::new("", &[out as f32]);
+    Ok(Some(s))
+}
+
+pub fn longest_strike_below_mean(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_longest_strike_below_mean, o)
+        .get(0)
+        .alias(&format!("{}_longest_strike_below_mean", name))
+}
+
+fn _longest_strike_above_mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let mean = arr.mean().unwrap();
+    let bool_arr = arr.mapv(|x| x > mean);
+    let out = _get_length_sequences_where(&bool_arr)
+        .into_iter()
+        .max()
+        .unwrap();
+    let s = Series::new("", &[out as f32]);
+    Ok(Some(s))
+}
+
+pub fn longest_strike_above_mean(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_longest_strike_above_mean, o)
+        .get(0)
+        .alias(&format!("{}_longest_strike_above_mean", name))
 }
