@@ -2,8 +2,8 @@ import polars as pl
 from tsfx import (
     DynamicGroupBySettings,
     ExtractionSettings,
-    extract_features,
     FeatureSetting,
+    extract_features,
 )
 
 df = pl.DataFrame(
@@ -11,7 +11,7 @@ df = pl.DataFrame(
         "id": ["a", "a", "a", "b", "b", "b", "c", "c", "c"],
         "val": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
         "value": [4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 4.0, 5.0, 6.0],
-    }
+    },
 ).lazy()
 opts = ExtractionSettings(
     grouping_col="id",
@@ -37,7 +37,7 @@ tdf = pl.DataFrame(
         ],
         "val": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
         "value": [4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 4.0, 5.0, 6.0],
-    }
+    },
 ).lazy()
 
 dyn_opts = DynamicGroupBySettings(
