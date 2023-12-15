@@ -28,6 +28,7 @@ linfa = "0"
 linfa-linear = "0"
 noisy_float = "0"
 itertools = "0"
+ordered-float = "4"
 
 [dev-dependencies]
 criterion = { version = "0", features = ["html_reports"] }

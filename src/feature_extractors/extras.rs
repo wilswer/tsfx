@@ -4,6 +4,7 @@ use linfa_linear::LinearRegression;
 use ndarray::{s, Axis, Ix1};
 use ndarray_stats::{interpolate::Midpoint, QuantileExt, SummaryStatisticsExt};
 use noisy_float::types::n64;
+use ordered_float::OrderedFloat;
 use polars::{prelude::*, series::ops::NullBehavior};
 
 pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
@@ -48,6 +49,11 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         aggregators.push(longest_strike_below_mean(col));
         aggregators.push(longest_strike_above_mean(col));
         aggregators.push(has_duplicate(col));
+        aggregators.push(variation_coefficient(col));
+        aggregators.push(mean_change(col));
+        aggregators.push(ratio_value_number_to_time_series_length(col));
+        aggregators.push(sum_of_reoccurring_values(col));
+        aggregators.push(sum_of_reoccurring_data_points(col));
     }
     aggregators
 }
@@ -80,24 +86,24 @@ pub fn absolute_energy(name: &str) -> Expr {
     col(name)
         .apply(_absolute_energy, o)
         .get(0)
-        .alias(&format!("{}_abs_energy", name))
+        .alias(&format!("{}__abs_energy", name))
 }
 
 pub fn expr_abs_energy(name: &str) -> Expr {
     col(name)
         .pow(2)
         .sum()
-        .alias(&format!("{}_abs_energy", name))
+        .alias(&format!("{}__abs_energy", name))
 }
 
 pub fn test_sum(name: &str) -> Expr {
-    col(name).sum().alias(&format!("{}_test_sum", name))
+    col(name).sum().alias(&format!("{}__test_sum", name))
 }
 
 pub fn test_mean(name: &str) -> Expr {
     let n = col(name).count();
     let s = col(name).sum();
-    (s / n).alias(&format!("{}_test_mean", name))
+    (s / n).alias(&format!("{}__test_mean", name))
 }
 
 fn _mean_absolute_change(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -123,13 +129,13 @@ pub fn mean_absolute_change(name: &str) -> Expr {
     col(name)
         .apply(_mean_absolute_change, o)
         .get(0)
-        .alias(&format!("{}_mean_absolute_change", name))
+        .alias(&format!("{}__mean_absolute_change", name))
 }
 
 pub fn expr_mean_change(name: &str) -> Expr {
     let diffs = col(name).diff(1, NullBehavior::Drop);
     let n = col(name).count() - lit(1);
-    (diffs.sum() / n).alias(&format!("{}_mean_change", name))
+    (diffs.sum() / n).alias(&format!("{}__mean_change", name))
 }
 
 fn _ndarray_sum(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -150,7 +156,7 @@ pub fn ndarray_sum(name: &str, out_type: DataType) -> Expr {
     col(name)
         .apply(_ndarray_sum, o)
         .get(0)
-        .alias(&format!("{}_ndarray_sum", name))
+        .alias(&format!("{}__ndarray_sum", name))
 }
 
 pub fn expr_kurtosis(name: &str) -> Expr {
@@ -158,7 +164,7 @@ pub fn expr_kurtosis(name: &str) -> Expr {
     let mean = col(name).mean();
     let std = col(name).std(1);
     let skewness = ((col(name) - mean).pow(4)).sum() / ((n - lit(1.0)) * std.pow(4));
-    skewness.alias(&format!("{}_expr_kurtosis", name))
+    skewness.alias(&format!("{}__expr_kurtosis", name))
 }
 
 fn _kurtosis(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -179,7 +185,7 @@ pub fn kurtosis(name: &str) -> Expr {
     col(name)
         .apply(_kurtosis, o)
         .get(0)
-        .alias(&format!("{}_kurtosis", name))
+        .alias(&format!("{}__kurtosis", name))
 }
 
 fn _linear_fit_intercept(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -213,7 +219,7 @@ pub fn linear_fit_intercept(name: &str) -> Expr {
     col(name)
         .apply(_linear_fit_intercept, o)
         .get(0)
-        .alias(&format!("{}_linear_fit_intercept", name))
+        .alias(&format!("{}__linear_fit_intercept", name))
 }
 
 fn _linear_fit_slope(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -247,7 +253,7 @@ pub fn linear_fit_slope(name: &str) -> Expr {
     col(name)
         .apply(_linear_fit_slope, o)
         .get(0)
-        .alias(&format!("{}_linear_fit_slope", name))
+        .alias(&format!("{}__linear_fit_slope", name))
 }
 
 // fn _linear_fit(s: Series) -> Result<DataFrame, PolarsError> {
@@ -274,15 +280,16 @@ pub fn linear_fit_slope(name: &str) -> Expr {
 //         .apply(_linear_fit, None)
 //         .cast(DataType::Float32)
 //         .get(0)
-//         .alias(&format!("{}_linear_fit", name))
+//         .alias(&format!("{}__linear_fit", name))
 // }
 
 pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
     let std = col(name).std(1);
     let var = col(name).var(1);
-    (var.gt(std))
-        .cast(DataType::Float32)
-        .alias(&format!("{}_variance_larger_than_standard_deviation", name))
+    (var.gt(std)).cast(DataType::Float32).alias(&format!(
+        "{}__variance_larger_than_standard_deviation",
+        name
+    ))
 }
 
 fn _ratio_beyond_r_sigma(s: Series, r: f32) -> Result<Option<Series>, PolarsError> {
@@ -293,7 +300,11 @@ fn _ratio_beyond_r_sigma(s: Series, r: f32) -> Result<Option<Series>, PolarsErro
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let mean = arr.mean().unwrap();
+    let mean_opt = arr.mean();
+    let mean = match mean_opt {
+        Some(m) => m,
+        None => return Ok(None),
+    };
     let std = arr.std(1.0);
     let count = arr
         .mapv(|x| if (x - mean).abs() > r * std { 1.0 } else { 0.0 })
@@ -309,7 +320,7 @@ pub fn ratio_beyond_r_sigma(name: &str, r: f32) -> Expr {
         .apply(move |s| _ratio_beyond_r_sigma(s, r), o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_ratio_beyond_{}_sigma", name, r))
+        .alias(&format!("{}__ratio_beyond_r_sigma__r_{}", name, r))
 }
 
 fn _large_standard_deviation(s: Series, r: f32) -> Result<Option<Series>, PolarsError> {
@@ -334,7 +345,7 @@ pub fn large_standard_deviation(name: &str, r: f32) -> Expr {
         .apply(move |s| _large_standard_deviation(s, r), o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_large_standard_deviation_r_{}", name, r))
+        .alias(&format!("{}__large_standard_deviation__r_{}", name, r))
 }
 
 fn _symmetry_looking(s: Series, r: f32) -> Result<Option<Series>, PolarsError> {
@@ -378,7 +389,7 @@ pub fn symmetry_looking(name: &str, r: f32) -> Expr {
         .apply(move |s| _symmetry_looking(s, r), o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_symmetry_looking_r_{}", name, r))
+        .alias(&format!("{}__symmetry_looking__r_{}", name, r))
 }
 
 fn _has_duplicate_max(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -406,7 +417,7 @@ pub fn has_duplicate_max(name: &str) -> Expr {
         .apply(_has_duplicate_max, o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_has_duplicate_max", name))
+        .alias(&format!("{}__has_duplicate_max", name))
 }
 
 fn _has_duplicate_min(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -434,7 +445,7 @@ pub fn has_duplicate_min(name: &str) -> Expr {
         .apply(_has_duplicate_min, o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_has_duplicate_min", name))
+        .alias(&format!("{}__has_duplicate_min", name))
 }
 
 fn _cid_ce(s: Series, normalize: bool) -> Result<Option<Series>, PolarsError> {
@@ -467,7 +478,7 @@ pub fn cid_ce(name: &str, normalize: bool) -> Expr {
     col(name)
         .apply(move |s| _cid_ce(s, normalize), o)
         .get(0)
-        .alias(&format!("{}_cid_ce_normalize_{}", name, normalize))
+        .alias(&format!("{}__cid_ce__normalize_{}", name, normalize))
 }
 
 fn _absolute_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -493,7 +504,7 @@ pub fn absolute_maximum(name: &str) -> Expr {
     col(name)
         .apply(_absolute_maximum, o)
         .get(0)
-        .alias(&format!("{}_absolute_maximum", name))
+        .alias(&format!("{}__absolute_maximum", name))
 }
 
 fn _absolute_sum_of_changes(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -519,7 +530,7 @@ pub fn absolute_sum_of_changes(name: &str) -> Expr {
     col(name)
         .apply(_absolute_sum_of_changes, o)
         .get(0)
-        .alias(&format!("{}_absolute_sum_of_changes", name))
+        .alias(&format!("{}__absolute_sum_of_changes", name))
 }
 
 fn _count_above_mean(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -545,7 +556,7 @@ pub fn count_above_mean(name: &str) -> Expr {
     col(name)
         .apply(_count_above_mean, o)
         .get(0)
-        .alias(&format!("{}_count_above_mean", name))
+        .alias(&format!("{}__count_above_mean", name))
 }
 
 fn _count_below_mean(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -571,7 +582,7 @@ pub fn count_below_mean(name: &str) -> Expr {
     col(name)
         .apply(_count_below_mean, o)
         .get(0)
-        .alias(&format!("{}_count_below_mean", name))
+        .alias(&format!("{}__count_below_mean", name))
 }
 
 fn _count_above(s: Series, t: f32) -> Result<Option<Series>, PolarsError> {
@@ -592,7 +603,7 @@ pub fn count_above(name: &str, t: f32) -> Expr {
     col(name)
         .apply(move |s| _count_above(s, t), o)
         .get(0)
-        .alias(&format!("{}_count_above_t_{}", name, t))
+        .alias(&format!("{}__count_above__t_{}", name, t))
 }
 
 fn _count_below(s: Series, t: f32) -> Result<Option<Series>, PolarsError> {
@@ -613,7 +624,7 @@ pub fn count_below(name: &str, t: f32) -> Expr {
     col(name)
         .apply(move |s| _count_below(s, t), o)
         .get(0)
-        .alias(&format!("{}_count_below_t_{}", name, t))
+        .alias(&format!("{}__count_below__t_{}", name, t))
 }
 
 fn _first_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -643,7 +654,7 @@ pub fn first_location_of_maximum(name: &str) -> Expr {
     col(name)
         .apply(_first_location_of_maximum, o)
         .get(0)
-        .alias(&format!("{}_first_location_of_maximum", name))
+        .alias(&format!("{}__first_location_of_maximum", name))
 }
 
 fn _first_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -673,7 +684,7 @@ pub fn first_location_of_minimum(name: &str) -> Expr {
     col(name)
         .apply(_first_location_of_minimum, o)
         .get(0)
-        .alias(&format!("{}_first_location_of_minimum", name))
+        .alias(&format!("{}__first_location_of_minimum", name))
 }
 
 fn _last_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -703,7 +714,7 @@ pub fn last_location_of_maximum(name: &str) -> Expr {
     col(name)
         .apply(_last_location_of_maximum, o)
         .get(0)
-        .alias(&format!("{}_last_location_of_maximum", name))
+        .alias(&format!("{}__last_location_of_maximum", name))
 }
 
 fn _last_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -733,7 +744,7 @@ pub fn last_location_of_minimum(name: &str) -> Expr {
     col(name)
         .apply(_last_location_of_minimum, o)
         .get(0)
-        .alias(&format!("{}_last_location_of_minimum", name))
+        .alias(&format!("{}__last_location_of_minimum", name))
 }
 
 fn _longest_strike_below_mean(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -767,7 +778,7 @@ pub fn longest_strike_below_mean(name: &str) -> Expr {
     col(name)
         .apply(_longest_strike_below_mean, o)
         .get(0)
-        .alias(&format!("{}_longest_strike_below_mean", name))
+        .alias(&format!("{}__longest_strike_below_mean", name))
 }
 
 fn _longest_strike_above_mean(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -801,7 +812,7 @@ pub fn longest_strike_above_mean(name: &str) -> Expr {
     col(name)
         .apply(_longest_strike_above_mean, o)
         .get(0)
-        .alias(&format!("{}_longest_strike_above_mean", name))
+        .alias(&format!("{}__longest_strike_above_mean", name))
 }
 
 fn _has_duplicate(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -838,5 +849,158 @@ pub fn has_duplicate(name: &str) -> Expr {
         .apply(_has_duplicate, o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}_has_duplicate", name))
+        .alias(&format!("{}__has_duplicate", name))
+}
+
+fn _variation_coefficient(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let mean_opt = arr.mean();
+    let mean = match mean_opt {
+        Some(m) => m,
+        None => return Ok(None),
+    };
+    let std = arr.std(1.0);
+    let out = if mean == 0.0 { f64::NAN } else { std / mean };
+    let s = Series::new("", &[out as f32]);
+    Ok(Some(s))
+}
+
+pub fn variation_coefficient(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_variation_coefficient, o)
+        .get(0)
+        .alias(&format!("{}__variation_coefficient", name))
+}
+
+fn _mean_change(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let out = if arr.len() < 2 {
+        f64::NAN
+    } else {
+        (arr[arr.len() - 1] - arr[0]) / ((arr.len() - 1) as f64)
+    };
+    let s = Series::new("", &[out as f32]);
+    Ok(Some(s))
+}
+
+pub fn mean_change(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_mean_change, o)
+        .get(0)
+        .alias(&format!("{}__mean_change", name))
+}
+
+fn _ratio_value_number_to_time_series_length(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let sarr = arr
+        .as_slice()
+        .unwrap()
+        .iter()
+        .sorted_by(|a, b| a.partial_cmp(b).unwrap())
+        .collect::<Vec<_>>();
+    let len_unique = if sarr.is_empty() {
+        0
+    } else {
+        1 + sarr.windows(2).filter(|win| win[0] != win[1]).count()
+    };
+    let out = len_unique as f32 / arr.len() as f32;
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn ratio_value_number_to_time_series_length(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_ratio_value_number_to_time_series_length, o)
+        .get(0)
+        .alias(&format!(
+            "{}__ratio_value_number_to_time_series_length",
+            name
+        ))
+}
+
+fn _sum_of_reoccurring_values(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr.mapv(OrderedFloat);
+    let counts = arr.into_iter().counts();
+    let mut sum: f64 = 0.0;
+    for (k, v) in counts {
+        if v > 1 {
+            let k: f64 = k.into();
+            sum += k;
+        }
+    }
+    let s = Series::new("", &[sum as f32]);
+    Ok(Some(s))
+}
+
+pub fn sum_of_reoccurring_values(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_sum_of_reoccurring_values, o)
+        .get(0)
+        .alias(&format!("{}__sum_of_reoccurring_values", name))
+}
+
+fn _sum_of_reoccurring_data_points(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr.mapv(OrderedFloat);
+    let counts = arr.into_iter().counts();
+    let mut sum: f64 = 0.0;
+    for (k, v) in counts {
+        if v > 1 {
+            let k: f64 = k.into();
+            sum += (v as f64) * k;
+        }
+    }
+    let s = Series::new("", &[sum as f32]);
+    Ok(Some(s))
+}
+
+pub fn sum_of_reoccurring_data_points(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_sum_of_reoccurring_data_points, o)
+        .get(0)
+        .alias(&format!("{}__sum_of_reoccurring_data_points", name))
 }

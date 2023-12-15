@@ -42,11 +42,11 @@ pub fn sum(name: &str) -> Expr {
     col(name)
         .apply(_sum, o)
         .get(0)
-        .alias(&format!("{}_sum", name))
+        .alias(&format!("{}__sum", name))
 }
 
 pub fn expr_sum(name: &str) -> Expr {
-    col(name).sum().alias(&format!("{}_sum", name))
+    col(name).sum().alias(&format!("{}__sum", name))
 }
 
 fn _mean(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -67,11 +67,11 @@ pub fn mean(name: &str) -> Expr {
     col(name)
         .apply(_mean, o)
         .get(0)
-        .alias(&format!("{}_mean", name))
+        .alias(&format!("{}__mean", name))
 }
 
 pub fn expr_mean(name: &str) -> Expr {
-    col(name).mean().alias(&format!("{}_mean", name))
+    col(name).mean().alias(&format!("{}__mean", name))
 }
 
 fn _min(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -92,11 +92,11 @@ pub fn minimum(name: &str) -> Expr {
     col(name)
         .apply(_min, o)
         .get(0)
-        .alias(&format!("{}_min", name))
+        .alias(&format!("{}__min", name))
 }
 
 pub fn expr_minimum(name: &str) -> Expr {
-    col(name).min().alias(&format!("{}_min", name))
+    col(name).min().alias(&format!("{}__min", name))
 }
 
 fn _max(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -117,11 +117,11 @@ pub fn maximum(name: &str) -> Expr {
     col(name)
         .apply(_max, o)
         .get(0)
-        .alias(&format!("{}_max", name))
+        .alias(&format!("{}__max", name))
 }
 
 pub fn expr_maximum(name: &str) -> Expr {
-    col(name).max().alias(&format!("{}_max", name))
+    col(name).max().alias(&format!("{}__max", name))
 }
 
 fn _abs_max(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -143,11 +143,11 @@ pub fn absolute_maximum(name: &str) -> Expr {
     col(name)
         .apply(_abs_max, o)
         .get(0)
-        .alias(&format!("{}_abs_max", name))
+        .alias(&format!("{}__abs_max", name))
 }
 
 pub fn expr_median(name: &str) -> Expr {
-    col(name).median().alias(&format!("{}_median", name))
+    col(name).median().alias(&format!("{}__median", name))
 }
 
 fn _std(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -168,11 +168,11 @@ pub fn std(name: &str) -> Expr {
     col(name)
         .apply(_std, o)
         .get(0)
-        .alias(&format!("{}_std", name))
+        .alias(&format!("{}__std", name))
 }
 
 pub fn expr_std(name: &str) -> Expr {
-    col(name).std(1).alias(&format!("{}_std", name))
+    col(name).std(1).alias(&format!("{}__std", name))
 }
 
 fn _var(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -193,11 +193,11 @@ pub fn var(name: &str) -> Expr {
     col(name)
         .apply(_var, o)
         .get(0)
-        .alias(&format!("{}_var", name))
+        .alias(&format!("{}__var", name))
 }
 
 pub fn expr_var(name: &str) -> Expr {
-    col(name).var(1).alias(&format!("{}_var", name))
+    col(name).var(1).alias(&format!("{}__var", name))
 }
 
 fn _rms(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -222,7 +222,7 @@ pub fn root_mean_square(name: &str) -> Expr {
     col(name)
         .apply(_rms, o)
         .get(0)
-        .alias(&format!("{}_root_mean_sqaure", name))
+        .alias(&format!("{}__root_mean_sqaure", name))
 }
 
 pub fn expr_root_mean_square(name: &str) -> Expr {
@@ -230,7 +230,7 @@ pub fn expr_root_mean_square(name: &str) -> Expr {
         .pow(2.0)
         .mean()
         .pow(0.5)
-        .alias(&format!("{}_rms", name))
+        .alias(&format!("{}__rms", name))
 }
 
 pub fn expr_skewness(name: &str) -> Expr {
@@ -238,7 +238,7 @@ pub fn expr_skewness(name: &str) -> Expr {
     let mean = col(name).mean();
     let std = col(name).std(1);
     let skewness = ((col(name) - mean).pow(3)).sum() / ((n - lit(1.0)) * std.pow(3));
-    skewness.alias(&format!("{}_expr_skewness", name))
+    skewness.alias(&format!("{}__expr_skewness", name))
 }
 
 fn _skewness(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -259,5 +259,5 @@ pub fn skewness(name: &str) -> Expr {
     col(name)
         .apply(_skewness, o)
         .get(0)
-        .alias(&format!("{}_skewness", name))
+        .alias(&format!("{}__skewness", name))
 }
