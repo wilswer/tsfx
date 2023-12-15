@@ -29,6 +29,9 @@ python_version = "3.11"
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
 
+[tool.pytest.ini_options]
+testpaths = ["python_tests"]
+
 [tool.ruff]
 line-length = 88
 
@@ -83,6 +86,7 @@ exclude = [
   "dist",
   "node_modules",
   "venv",
+  "python_tests",
 ]
 
 # Allow unused variables when underscore-prefixed.

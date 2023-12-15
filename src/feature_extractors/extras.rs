@@ -47,6 +47,7 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         aggregators.push(last_location_of_minimum(col));
         aggregators.push(longest_strike_below_mean(col));
         aggregators.push(longest_strike_above_mean(col));
+        aggregators.push(has_duplicate(col));
     }
     aggregators
 }
@@ -62,6 +63,9 @@ fn _get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize> {
 }
 
 fn _absolute_energy(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -97,6 +101,9 @@ pub fn test_mean(name: &str) -> Expr {
 }
 
 fn _mean_absolute_change(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -106,7 +113,7 @@ fn _mean_absolute_change(s: Series) -> Result<Option<Series>, PolarsError> {
         .into_dimensionality::<Ix1>()
         .unwrap();
     let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
-    let mean_abs_change = diffs.mapv(|x| x.abs()).mean().unwrap();
+    let mean_abs_change = diffs.mapv(|x| x.abs()).mean().unwrap_or(f32::NAN);
     let s = Series::new("", &[mean_abs_change]);
     Ok(Some(s))
 }
@@ -126,6 +133,9 @@ pub fn expr_mean_change(name: &str) -> Expr {
 }
 
 fn _ndarray_sum(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -152,11 +162,14 @@ pub fn expr_kurtosis(name: &str) -> Expr {
 }
 
 fn _kurtosis(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let kurtosis = arr.kurtosis().unwrap();
+    let kurtosis = arr.kurtosis().unwrap_or(f32::NAN);
     let s = Series::new("", &[kurtosis]);
     Ok(Some(s))
 }
@@ -170,6 +183,9 @@ pub fn kurtosis(name: &str) -> Expr {
 }
 
 fn _linear_fit_intercept(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -182,10 +198,14 @@ fn _linear_fit_intercept(s: Series) -> Result<Option<Series>, PolarsError> {
     let x = x.insert_axis(Axis(1));
     let dataset = Dataset::new(x, arr);
     let lin_reg = LinearRegression::new();
-    let model = lin_reg.fit(&dataset).unwrap();
-    let s_i = Series::new("intercept", &[model.intercept()]);
-    //let s_p = Series::new("param", &[model.params()[0]]);
-    Ok(Some(s_i))
+    let model = lin_reg.fit(&dataset);
+    match model {
+        Ok(model) => {
+            let s_i = Series::new("", &[model.intercept()]);
+            Ok(Some(s_i))
+        }
+        Err(_) => Ok(None),
+    }
 }
 
 pub fn linear_fit_intercept(name: &str) -> Expr {
@@ -197,6 +217,9 @@ pub fn linear_fit_intercept(name: &str) -> Expr {
 }
 
 fn _linear_fit_slope(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -209,9 +232,14 @@ fn _linear_fit_slope(s: Series) -> Result<Option<Series>, PolarsError> {
     let x = x.insert_axis(Axis(1));
     let dataset = Dataset::new(x, arr);
     let lin_reg = LinearRegression::new();
-    let model = lin_reg.fit(&dataset).unwrap();
-    let s_p = Series::new("", &[model.params()[0]]);
-    Ok(Some(s_p))
+    let model = lin_reg.fit(&dataset);
+    match model {
+        Ok(model) => {
+            let s_p = Series::new("", &[model.params()[0]]);
+            Ok(Some(s_p))
+        }
+        Err(_) => Ok(None),
+    }
 }
 
 pub fn linear_fit_slope(name: &str) -> Expr {
@@ -258,6 +286,9 @@ pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
 }
 
 fn _ratio_beyond_r_sigma(s: Series, r: f32) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -282,12 +313,15 @@ pub fn ratio_beyond_r_sigma(name: &str, r: f32) -> Expr {
 }
 
 fn _large_standard_deviation(s: Series, r: f32) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let min = arr.min().unwrap();
-    let max = arr.max().unwrap();
+    let min = arr.min().unwrap_or(&0.0);
+    let max = arr.max().unwrap_or(&0.0);
     let std = arr.std(1.0);
     let out = std > r * (max - min);
     let s = Series::new("", &[out]);
@@ -304,15 +338,35 @@ pub fn large_standard_deviation(name: &str, r: f32) -> Expr {
 }
 
 fn _symmetry_looking(s: Series, r: f32) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let mut arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let median = arr
-        .quantile_axis_skipnan_mut(Axis(0), n64(0.5), &Midpoint)
-        .unwrap()[0];
-    let mean_median_diff = (arr.mean().unwrap() - median).abs();
-    let max_min_diff = arr.max().unwrap() - arr.min().unwrap();
+    let median_res = arr.quantile_axis_skipnan_mut(Axis(0), n64(0.5), &Midpoint);
+    let median = match median_res {
+        Ok(m) => m[0],
+        Err(_) => return Ok(None),
+    };
+    let mean_opt = arr.mean();
+    let mean = match mean_opt {
+        Some(m) => m,
+        None => return Ok(None),
+    };
+    let mean_median_diff = (mean - median).abs();
+    let max_res = arr.max();
+    let max = match max_res {
+        Ok(m) => m,
+        Err(_) => return Ok(None),
+    };
+    let min_res = arr.min();
+    let min = match min_res {
+        Ok(m) => m,
+        Err(_) => return Ok(None),
+    };
+    let max_min_diff = max - min;
     let out = mean_median_diff < r * max_min_diff;
     let s = Series::new("", &[out]);
     Ok(Some(s))
@@ -328,11 +382,18 @@ pub fn symmetry_looking(name: &str, r: f32) -> Expr {
 }
 
 fn _has_duplicate_max(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let max = arr.max().unwrap();
+    let max_res = arr.max();
+    let max = match max_res {
+        Ok(m) => m,
+        Err(_) => return Ok(None),
+    };
     let count = arr.mapv(|x| if x == *max { 1.0 } else { 0.0 }).sum();
     let out = count > 1.0;
     let s = Series::new("", &[out]);
@@ -349,11 +410,18 @@ pub fn has_duplicate_max(name: &str) -> Expr {
 }
 
 fn _has_duplicate_min(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let min = arr.min().unwrap();
+    let min_res = arr.min();
+    let min = match min_res {
+        Ok(m) => m,
+        Err(_) => return Ok(None),
+    };
     let count = arr.mapv(|x| if x == *min { 1.0 } else { 0.0 }).sum();
     let out = count > 1.0;
     let s = Series::new("", &[out]);
@@ -370,6 +438,9 @@ pub fn has_duplicate_min(name: &str) -> Expr {
 }
 
 fn _cid_ce(s: Series, normalize: bool) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -379,7 +450,7 @@ fn _cid_ce(s: Series, normalize: bool) -> Result<Option<Series>, PolarsError> {
         .into_dimensionality::<Ix1>()
         .unwrap();
     let arr = if normalize {
-        let mean = arr.mean().unwrap();
+        let mean = arr.mean().unwrap_or(f32::NAN);
         let std = arr.std(1.0);
         (arr - mean) / std
     } else {
@@ -400,12 +471,20 @@ pub fn cid_ce(name: &str, normalize: bool) -> Expr {
 }
 
 fn _absolute_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let out = *arr.mapv(|x| x.abs()).max().unwrap();
-    let s = Series::new("", &[out]);
+    let abs_arr = arr.mapv(|x| x.abs());
+    let max_res = abs_arr.max();
+    let max = match max_res {
+        Ok(m) => *m,
+        Err(_) => return Ok(None),
+    };
+    let s = Series::new("", &[max]);
     Ok(Some(s))
 }
 
@@ -418,6 +497,9 @@ pub fn absolute_maximum(name: &str) -> Expr {
 }
 
 fn _absolute_sum_of_changes(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -441,11 +523,18 @@ pub fn absolute_sum_of_changes(name: &str) -> Expr {
 }
 
 fn _count_above_mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let mean = arr.mean().unwrap();
+    let mean_opt = arr.mean();
+    let mean = match mean_opt {
+        Some(m) => m,
+        None => return Ok(None),
+    };
     let out = arr.mapv(|x| if x > mean { 1.0 } else { 0.0 }).sum();
     let s = Series::new("", &[out]);
     Ok(Some(s))
@@ -460,11 +549,18 @@ pub fn count_above_mean(name: &str) -> Expr {
 }
 
 fn _count_below_mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let mean = arr.mean().unwrap();
+    let mean_opt = arr.mean();
+    let mean = match mean_opt {
+        Some(m) => m,
+        None => return Ok(None),
+    };
     let out = arr.mapv(|x| if x < mean { 1.0 } else { 0.0 }).sum();
     let s = Series::new("", &[out]);
     Ok(Some(s))
@@ -479,6 +575,9 @@ pub fn count_below_mean(name: &str) -> Expr {
 }
 
 fn _count_above(s: Series, t: f32) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -497,6 +596,9 @@ pub fn count_above(name: &str, t: f32) -> Expr {
 }
 
 fn _count_below(s: Series, t: f32) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -515,6 +617,9 @@ pub fn count_below(name: &str, t: f32) -> Expr {
 }
 
 fn _first_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -523,7 +628,11 @@ fn _first_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> 
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .unwrap();
-    let max = arr.argmax().unwrap();
+    let max_res = arr.argmax();
+    let max = match max_res {
+        Ok(m) => m,
+        Err(_) => return Ok(None),
+    };
     let out = max as f32 / arr.len() as f32;
     let s = Series::new("", &[out]);
     Ok(Some(s))
@@ -538,6 +647,9 @@ pub fn first_location_of_maximum(name: &str) -> Expr {
 }
 
 fn _first_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -546,7 +658,11 @@ fn _first_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> 
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .unwrap();
-    let min = arr.argmin().unwrap();
+    let min_res = arr.argmin();
+    let min = match min_res {
+        Ok(m) => m,
+        Err(_) => return Ok(None),
+    };
     let out = min as f32 / arr.len() as f32;
     let s = Series::new("", &[out]);
     Ok(Some(s))
@@ -561,6 +677,9 @@ pub fn first_location_of_minimum(name: &str) -> Expr {
 }
 
 fn _last_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -569,7 +688,11 @@ fn _last_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .unwrap();
-    let max = arr.argmax().unwrap();
+    let max_res = arr.argmax();
+    let max = match max_res {
+        Ok(m) => m,
+        Err(_) => return Ok(None),
+    };
     let out = 1.0 - (max as f32 / arr.len() as f32);
     let s = Series::new("", &[out]);
     Ok(Some(s))
@@ -584,6 +707,9 @@ pub fn last_location_of_maximum(name: &str) -> Expr {
 }
 
 fn _last_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -592,7 +718,11 @@ fn _last_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .unwrap();
-    let min = arr.argmin().unwrap();
+    let min_res = arr.argmin();
+    let min = match min_res {
+        Ok(m) => m,
+        Err(_) => return Ok(None),
+    };
     let out = 1.0 - (min as f32 / arr.len() as f32);
     let s = Series::new("", &[out]);
     Ok(Some(s))
@@ -607,6 +737,9 @@ pub fn last_location_of_minimum(name: &str) -> Expr {
 }
 
 fn _longest_strike_below_mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -615,12 +748,16 @@ fn _longest_strike_below_mean(s: Series) -> Result<Option<Series>, PolarsError> 
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .unwrap();
-    let mean = arr.mean().unwrap();
+    let mean_opt = arr.mean();
+    let mean = match mean_opt {
+        Some(m) => m,
+        None => return Ok(None),
+    };
     let bool_arr = arr.mapv(|x| x < mean);
     let out = _get_length_sequences_where(&bool_arr)
         .into_iter()
         .max()
-        .unwrap();
+        .unwrap_or(0);
     let s = Series::new("", &[out as f32]);
     Ok(Some(s))
 }
@@ -634,6 +771,9 @@ pub fn longest_strike_below_mean(name: &str) -> Expr {
 }
 
 fn _longest_strike_above_mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
     let arr = s
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -642,12 +782,16 @@ fn _longest_strike_above_mean(s: Series) -> Result<Option<Series>, PolarsError> 
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .unwrap();
-    let mean = arr.mean().unwrap();
+    let mean_opt = arr.mean();
+    let mean = match mean_opt {
+        Some(m) => m,
+        None => return Ok(None),
+    };
     let bool_arr = arr.mapv(|x| x > mean);
     let out = _get_length_sequences_where(&bool_arr)
         .into_iter()
         .max()
-        .unwrap();
+        .unwrap_or(0);
     let s = Series::new("", &[out as f32]);
     Ok(Some(s))
 }
@@ -658,4 +802,41 @@ pub fn longest_strike_above_mean(name: &str) -> Expr {
         .apply(_longest_strike_above_mean, o)
         .get(0)
         .alias(&format!("{}_longest_strike_above_mean", name))
+}
+
+fn _has_duplicate(s: Series) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let sarr = arr
+        .as_slice()
+        .unwrap()
+        .iter()
+        .sorted_by(|a, b| a.partial_cmp(b).unwrap())
+        .collect::<Vec<_>>();
+    let len = if sarr.is_empty() {
+        0
+    } else {
+        1 + sarr.windows(2).filter(|win| win[0] != win[1]).count()
+    };
+    let out = len < arr.len();
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn has_duplicate(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Boolean);
+    col(name)
+        .apply(_has_duplicate, o)
+        .cast(DataType::Float32)
+        .get(0)
+        .alias(&format!("{}_has_duplicate", name))
 }
