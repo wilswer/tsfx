@@ -6,13 +6,13 @@ pub fn minimal_aggregators(value_cols: &[String]) -> Vec<Expr> {
     let mut aggregators = Vec::new();
     aggregators.push(count(&value_cols[0]));
     for col in value_cols {
-        aggregators.push(sum(col));
+        aggregators.push(sum_values(col));
         aggregators.push(mean(col));
         aggregators.push(expr_median(col));
         aggregators.push(minimum(col));
         aggregators.push(maximum(col));
-        aggregators.push(std(col));
-        aggregators.push(var(col));
+        aggregators.push(standard_deviation(col));
+        aggregators.push(variance(col));
         aggregators.push(skewness(col));
         aggregators.push(root_mean_square(col));
         aggregators.push(absolute_maximum(col));
@@ -24,7 +24,7 @@ pub fn count(name: &str) -> Expr {
     col(name).count().alias("length")
 }
 
-fn _sum(s: Series) -> Result<Option<Series>, PolarsError> {
+fn _sum_values(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(None);
     }
@@ -37,12 +37,12 @@ fn _sum(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
-pub fn sum(name: &str) -> Expr {
+pub fn sum_values(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
-        .apply(_sum, o)
+        .apply(_sum_values, o)
         .get(0)
-        .alias(&format!("{}__sum", name))
+        .alias(&format!("{}__sum_values", name))
 }
 
 pub fn expr_sum(name: &str) -> Expr {
@@ -92,11 +92,11 @@ pub fn minimum(name: &str) -> Expr {
     col(name)
         .apply(_min, o)
         .get(0)
-        .alias(&format!("{}__min", name))
+        .alias(&format!("{}__minimum", name))
 }
 
 pub fn expr_minimum(name: &str) -> Expr {
-    col(name).min().alias(&format!("{}__min", name))
+    col(name).min().alias(&format!("{}__minimum", name))
 }
 
 fn _max(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -117,11 +117,11 @@ pub fn maximum(name: &str) -> Expr {
     col(name)
         .apply(_max, o)
         .get(0)
-        .alias(&format!("{}__max", name))
+        .alias(&format!("{}__maximum", name))
 }
 
 pub fn expr_maximum(name: &str) -> Expr {
-    col(name).max().alias(&format!("{}__max", name))
+    col(name).max().alias(&format!("{}__maximum", name))
 }
 
 fn _abs_max(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -150,7 +150,7 @@ pub fn expr_median(name: &str) -> Expr {
     col(name).median().alias(&format!("{}__median", name))
 }
 
-fn _std(s: Series) -> Result<Option<Series>, PolarsError> {
+fn _standard_deviation(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(None);
     }
@@ -158,24 +158,26 @@ fn _std(s: Series) -> Result<Option<Series>, PolarsError> {
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let std = arr.std(1.0);
-    let s = Series::new("", &[std]);
+    let standard_deviation = arr.std(1.0);
+    let s = Series::new("", &[standard_deviation]);
     Ok(Some(s))
 }
 
-pub fn std(name: &str) -> Expr {
+pub fn standard_deviation(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
-        .apply(_std, o)
+        .apply(_standard_deviation, o)
         .get(0)
-        .alias(&format!("{}__std", name))
+        .alias(&format!("{}__standard_deviation", name))
 }
 
-pub fn expr_std(name: &str) -> Expr {
-    col(name).std(1).alias(&format!("{}__std", name))
+pub fn expr_standard_deviation(name: &str) -> Expr {
+    col(name)
+        .std(1)
+        .alias(&format!("{}__standard_deviation", name))
 }
 
-fn _var(s: Series) -> Result<Option<Series>, PolarsError> {
+fn _variance(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(None);
     }
@@ -183,21 +185,21 @@ fn _var(s: Series) -> Result<Option<Series>, PolarsError> {
         .into_frame()
         .to_ndarray::<Float32Type>(IndexOrder::C)
         .unwrap();
-    let var = arr.var(1.0);
-    let s = Series::new("", &[var]);
+    let variance = arr.var(1.0);
+    let s = Series::new("", &[variance]);
     Ok(Some(s))
 }
 
-pub fn var(name: &str) -> Expr {
+pub fn variance(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
-        .apply(_var, o)
+        .apply(_variance, o)
         .get(0)
-        .alias(&format!("{}__var", name))
+        .alias(&format!("{}__variance", name))
 }
 
-pub fn expr_var(name: &str) -> Expr {
-    col(name).var(1).alias(&format!("{}__var", name))
+pub fn expr_variance(name: &str) -> Expr {
+    col(name).var(1).alias(&format!("{}__variance", name))
 }
 
 fn _rms(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -236,8 +238,8 @@ pub fn expr_root_mean_square(name: &str) -> Expr {
 pub fn expr_skewness(name: &str) -> Expr {
     let n = col(name).count();
     let mean = col(name).mean();
-    let std = col(name).std(1);
-    let skewness = ((col(name) - mean).pow(3)).sum() / ((n - lit(1.0)) * std.pow(3));
+    let standard_deviation = col(name).std(1);
+    let skewness = ((col(name) - mean).pow(3)).sum() / ((n - lit(1.0)) * standard_deviation.pow(3));
     skewness.alias(&format!("{}__expr_skewness", name))
 }
 

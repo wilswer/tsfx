@@ -1,7 +1,10 @@
+use core::f64;
+use std::{fmt::Display, str::FromStr};
+
 use itertools::Itertools;
 use linfa::prelude::*;
 use linfa_linear::LinearRegression;
-use ndarray::{s, Axis, Ix1};
+use ndarray::{s, Array, Array1, Axis, Ix1};
 use ndarray_stats::{interpolate::Midpoint, QuantileExt, SummaryStatisticsExt};
 use noisy_float::types::n64;
 use ordered_float::OrderedFloat;
@@ -13,8 +16,8 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         aggregators.push(kurtosis(col));
         aggregators.push(absolute_energy(col));
         aggregators.push(mean_absolute_change(col));
-        aggregators.push(linear_fit_intercept(col));
-        aggregators.push(linear_fit_slope(col));
+        aggregators.push(linear_trend_intercept(col));
+        aggregators.push(linear_trend_slope(col));
         aggregators.push(variance_larger_than_standard_deviation(col));
         aggregators.push(ratio_beyond_r_sigma(col, 0.5));
         aggregators.push(ratio_beyond_r_sigma(col, 1.0));
@@ -54,8 +57,63 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         aggregators.push(ratio_value_number_to_time_series_length(col));
         aggregators.push(sum_of_reoccurring_values(col));
         aggregators.push(sum_of_reoccurring_data_points(col));
+        aggregators.push(percentage_of_reoccurring_values_to_all_values(col));
+        aggregators.push(percentage_of_reoccurring_values_to_all_datapoints(col));
+        let chunk_sizes: [usize; 3] = [5, 10, 50];
+        let chunk_aggs: [&str; 4] = ["mean", "min", "max", "var"];
+        for ca in chunk_aggs.into_iter() {
+            for chunk_size in chunk_sizes.into_iter() {
+                aggregators.push(agg_linear_trend_intercept(
+                    col,
+                    chunk_size,
+                    ChunkAggregator::from_str(ca).unwrap(),
+                ));
+            }
+        }
+        for ca in chunk_aggs.into_iter() {
+            for chunk_size in chunk_sizes.into_iter() {
+                aggregators.push(agg_linear_trend_slope(
+                    col,
+                    chunk_size,
+                    ChunkAggregator::from_str(ca).unwrap(),
+                ));
+            }
+        }
     }
     aggregators
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ChunkAggregator {
+    Mean,
+    Min,
+    Max,
+    Var,
+}
+
+impl FromStr for ChunkAggregator {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<ChunkAggregator, Self::Err> {
+        match input {
+            "mean" => Ok(ChunkAggregator::Mean),
+            "min" => Ok(ChunkAggregator::Min),
+            "max" => Ok(ChunkAggregator::Max),
+            "var" => Ok(ChunkAggregator::Var),
+            _ => Err(()),
+        }
+    }
+}
+
+impl Display for ChunkAggregator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            ChunkAggregator::Mean => write!(f, "mean"),
+            ChunkAggregator::Max => write!(f, "max"),
+            ChunkAggregator::Min => write!(f, "min"),
+            ChunkAggregator::Var => write!(f, "var"),
+        }
+    }
 }
 
 fn _get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize> {
@@ -66,6 +124,18 @@ fn _get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize> {
         }
     }
     group_lengths
+}
+
+fn _aggregate_on_chunks(
+    x: Array1<f32>,
+    chunk_size: usize,
+    aggregator: impl Fn(Array1<f32>) -> f32,
+) -> Array1<f32> {
+    let mut agg_arr = Vec::with_capacity(x.len().div_ceil(chunk_size));
+    for chunk in x.axis_chunks_iter(Axis(0), chunk_size) {
+        agg_arr.push(aggregator(chunk.to_owned()));
+    }
+    Array1::from_vec(agg_arr)
 }
 
 fn _absolute_energy(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -86,14 +156,14 @@ pub fn absolute_energy(name: &str) -> Expr {
     col(name)
         .apply(_absolute_energy, o)
         .get(0)
-        .alias(&format!("{}__abs_energy", name))
+        .alias(&format!("{}__absolute_energy", name))
 }
 
 pub fn expr_abs_energy(name: &str) -> Expr {
     col(name)
         .pow(2)
         .sum()
-        .alias(&format!("{}__abs_energy", name))
+        .alias(&format!("{}__absolute_energy", name))
 }
 
 pub fn test_sum(name: &str) -> Expr {
@@ -188,7 +258,7 @@ pub fn kurtosis(name: &str) -> Expr {
         .alias(&format!("{}__kurtosis", name))
 }
 
-fn _linear_fit_intercept(s: Series) -> Result<Option<Series>, PolarsError> {
+fn _linear_trend_intercept(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(None);
     }
@@ -214,15 +284,15 @@ fn _linear_fit_intercept(s: Series) -> Result<Option<Series>, PolarsError> {
     }
 }
 
-pub fn linear_fit_intercept(name: &str) -> Expr {
+pub fn linear_trend_intercept(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
-        .apply(_linear_fit_intercept, o)
+        .apply(_linear_trend_intercept, o)
         .get(0)
-        .alias(&format!("{}__linear_fit_intercept", name))
+        .alias(&format!("{}__linear_trend_intercept", name))
 }
 
-fn _linear_fit_slope(s: Series) -> Result<Option<Series>, PolarsError> {
+fn _linear_trend_slope(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(None);
     }
@@ -248,15 +318,15 @@ fn _linear_fit_slope(s: Series) -> Result<Option<Series>, PolarsError> {
     }
 }
 
-pub fn linear_fit_slope(name: &str) -> Expr {
+pub fn linear_trend_slope(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float32);
     col(name)
-        .apply(_linear_fit_slope, o)
+        .apply(_linear_trend_slope, o)
         .get(0)
-        .alias(&format!("{}__linear_fit_slope", name))
+        .alias(&format!("{}__linear_trend_slope", name))
 }
 
-// fn _linear_fit(s: Series) -> Result<DataFrame, PolarsError> {
+// fn _linear_trend(s: Series) -> Result<DataFrame, PolarsError> {
 //     let arr = s
 //         .into_frame()
 //         .to_ndarray::<Float32Type>(IndexOrder::C)
@@ -275,12 +345,12 @@ pub fn linear_fit_slope(name: &str) -> Expr {
 //     DataFrame::new(vec![s_i, s_p])
 // }
 //
-// pub fn linear_fit(name: &str) -> Expr {
+// pub fn linear_trend(name: &str) -> Expr {
 //     col(name)
-//         .apply(_linear_fit, None)
+//         .apply(_linear_trend, None)
 //         .cast(DataType::Float32)
 //         .get(0)
-//         .alias(&format!("{}__linear_fit", name))
+//         .alias(&format!("{}__linear_trend", name))
 // }
 
 pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
@@ -1003,4 +1073,182 @@ pub fn sum_of_reoccurring_data_points(name: &str) -> Expr {
         .apply(_sum_of_reoccurring_data_points, o)
         .get(0)
         .alias(&format!("{}__sum_of_reoccurring_data_points", name))
+}
+
+fn _percentage_of_reoccurring_values_to_all_values(
+    s: Series,
+) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr.mapv(OrderedFloat);
+    let counts = arr.into_iter().counts();
+    let mut more_than_once = 0;
+    for (_, v) in counts.iter() {
+        if *v > 1 {
+            more_than_once += 1;
+        }
+    }
+    let out = (more_than_once as f64) / counts.keys().len() as f64;
+    let s = Series::new("", &[out as f32]);
+    Ok(Some(s))
+}
+
+pub fn percentage_of_reoccurring_values_to_all_values(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_percentage_of_reoccurring_values_to_all_values, o)
+        .get(0)
+        .alias(&format!(
+            "{}__percentage_of_reoccurring_values_to_all_values",
+            name
+        ))
+}
+
+fn _percentage_of_reoccurring_values_to_all_datapoints(
+    s: Series,
+) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr.mapv(OrderedFloat);
+    let counts = arr.iter().counts();
+    let mut more_than_once = 0;
+    for (_, v) in counts.iter() {
+        if *v > 1 {
+            more_than_once += 1;
+        }
+    }
+    let out = (more_than_once as f64) / arr.len() as f64;
+    let s = Series::new("", &[out as f32]);
+    Ok(Some(s))
+}
+
+pub fn percentage_of_reoccurring_values_to_all_datapoints(name: &str) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(_percentage_of_reoccurring_values_to_all_datapoints, o)
+        .get(0)
+        .alias(&format!(
+            "{}__percentage_of_reoccurring_values_to_all_datapoints",
+            name
+        ))
+}
+
+fn _agg_linear_trend_intercept(
+    s: Series,
+    chunk_size: usize,
+    aggregator: ChunkAggregator,
+) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    if s.len() < chunk_size {
+        return Ok(Some(Series::new("", &[f32::NAN])));
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap()
+        .mapv(|x| x as f32);
+    let agg_arr = match aggregator {
+        ChunkAggregator::Mean => _aggregate_on_chunks(arr, chunk_size, |x| x.mean().unwrap()),
+        ChunkAggregator::Max => _aggregate_on_chunks(arr, chunk_size, |x| *x.max().unwrap()),
+        ChunkAggregator::Min => _aggregate_on_chunks(arr, chunk_size, |x| *x.min().unwrap()),
+        ChunkAggregator::Var => _aggregate_on_chunks(arr, chunk_size, |x| x.var(1.0)),
+    };
+    let x = Array::range(0., agg_arr.len() as f32, 1.);
+    let x = x.insert_axis(Axis(1));
+    let dataset = Dataset::new(x, agg_arr);
+    let linreg = LinearRegression::new();
+    let model = linreg.fit(&dataset);
+    match model {
+        Ok(model) => {
+            let s_i = Series::new("", &[model.intercept()]);
+            Ok(Some(s_i))
+        }
+        Err(_) => Ok(Some(Series::new("", &[f32::NAN]))),
+    }
+}
+
+fn agg_linear_trend_intercept(name: &str, chunk_size: usize, aggregator: ChunkAggregator) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    let agg_clone = aggregator.clone();
+    col(name)
+        .apply(
+            move |s| _agg_linear_trend_intercept(s, chunk_size, aggregator.clone()),
+            o,
+        )
+        .get(0)
+        .alias(&format!(
+            "{}__agg_linear_trend_intercept__chunk_size_{}__agg_{}",
+            name, chunk_size, agg_clone
+        ))
+}
+
+fn _agg_linear_trend_slope(
+    s: Series,
+    chunk_size: usize,
+    aggregator: ChunkAggregator,
+) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    if s.len() < chunk_size {
+        return Ok(Some(Series::new("", &[f32::NAN])));
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap()
+        .mapv(|x| x as f32);
+    let agg_arr = match aggregator {
+        ChunkAggregator::Mean => _aggregate_on_chunks(arr, chunk_size, |x| x.mean().unwrap()),
+        ChunkAggregator::Max => _aggregate_on_chunks(arr, chunk_size, |x| *x.max().unwrap()),
+        ChunkAggregator::Min => _aggregate_on_chunks(arr, chunk_size, |x| *x.min().unwrap()),
+        ChunkAggregator::Var => _aggregate_on_chunks(arr, chunk_size, |x| x.var(1.0)),
+    };
+    let x = Array::range(0., agg_arr.len() as f32, 1.);
+    let x = x.insert_axis(Axis(1));
+    let dataset = Dataset::new(x, agg_arr);
+    let linreg = LinearRegression::new();
+    let model = linreg.fit(&dataset);
+    match model {
+        Ok(model) => {
+            let s_i = Series::new("", &[model.params()[0]]);
+            Ok(Some(s_i))
+        }
+        Err(_) => Ok(Some(Series::new("", &[f32::NAN]))),
+    }
+}
+
+fn agg_linear_trend_slope(name: &str, chunk_size: usize, aggregator: ChunkAggregator) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    let agg_clone = aggregator.clone();
+    col(name)
+        .apply(
+            move |s| _agg_linear_trend_slope(s, chunk_size, aggregator.clone()),
+            o,
+        )
+        .get(0)
+        .alias(&format!(
+            "{}__agg_linear_trend_slope__chunk_size_{}__agg_{}",
+            name, chunk_size, agg_clone
+        ))
 }

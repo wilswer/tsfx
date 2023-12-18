@@ -1,4 +1,5 @@
 import math
+import pytest
 
 import polars as pl
 from tsfx import (
@@ -17,6 +18,16 @@ def test_empty_df():
     )
     fdf = extract_features(df, opts)
     assert fdf.is_empty()
+
+def test_unit_length_df():
+    df = pl.DataFrame({"id": ["a"], "val": [1.0]}).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    assert fdf.shape[0] == 1
 
 def test_only_nan_group_dropped():
     df = pl.DataFrame({"id": ["a", "b", "c"], "val": [1.0, 2.0, None]}).lazy()
@@ -41,13 +52,11 @@ def test_nan_df():
     assert fdf.get_column("id").to_list() == ["a", "b", "c"]
     assert fdf.get_column("val__mean").to_list() == [1.0, 2.0, 1.0]
 
-
 def test_has_duplicate():
     df = pl.DataFrame(
         {
             "id": ["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d"],
             "val": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 1.0, 1.0],
-            "value": [4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 4.0, 5.0, 6.0, 6.0, 5.0, 4.0],
         },
     ).lazy()
     opts = ExtractionSettings(
@@ -60,12 +69,215 @@ def test_has_duplicate():
 
     assert fdf.get_column("val__has_duplicate").to_list() == [0.0, 0.0, 0.0, 1.0]
 
+def test_length():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 1.0, 1.0, 1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("length").to_list() == [1.0, 2.0, 3.0, 4.0]
+
+def test_sum_values():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 1.0, 1.0, 1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__sum_values").to_list() == [1.0, 3.0, 6.0, 4.0]
+
+def test_minimum():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 1.0, -1.0, -1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__minimum").to_list() == [1.0, 1.0, 1.0, -1.0]
+
+def test_maximum():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 1.0, -1.0, -1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__maximum").to_list() == [1.0, 2.0, 3.0, 1.0]
+
+def test_median():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 1.0, -1.0, -1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__median").to_list() == [1.0, 1.5, 2.0, 0.0]
+
+def test_absolute_energy():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, -2.0, 1.0, -2.0, 3.0, 1.0, 1.0, -1.0, -1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__absolute_energy").to_list() == [1.0, 5.0, 14.0, 4.0]
+
+def test_median():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 1.0, -1.0, -1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__median").to_list() == [1.0, 1.5, 2.0, 0.0]
+
+def test_linear_trend_intercept():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 1.0, 2.0, 3.0, 2.0, 1.0, -1.0, -1.0, -1.0, -1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__linear_trend_intercept").to_list() == pytest.approx([1.0, 1.0, 3.0, -1.0], abs=1e-6)
+
+def test_linear_trend_slope():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 1.0, 2.0, 3.0, 2.0, 1.0, -1.0, -1.0, -1.0, -1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__linear_trend_slope").to_list() == pytest.approx([0.0, 1.0, -1.0, 0.0], abs=1e-6)
+
+def test_has_duplicate_max():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 2.0, 2.0, 2.0, 1.0, -1.0, -1.0, -1.0, -1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__has_duplicate_max").to_list() == [0.0, 0.0, 1.0, 1.0]
+
+def test_has_duplicate_min():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 2.0, 2.0, 2.0, 1.0, -1.0, -1.0, -1.0, -1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__has_duplicate_min").to_list() == [0.0, 0.0, 0.0, 1.0]
+
+def test_has_duplicate():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 2.0, 2.0, 2.0, 1.0, -1.0, -1.0, -1.0, -1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__has_duplicate").to_list() == [0.0, 0.0, 1.0, 1.0]
+
 def test_ratio_value_number_to_time_series_length():
     df = pl.DataFrame(
         {
             "id": ["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
             "val": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 1.0, 1.0, 1.0],
-            "value": [4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 3.0],
         },
     ).lazy()
     opts = ExtractionSettings(
@@ -83,7 +295,6 @@ def test_variation_coefficient():
         {
             "id": ["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d"],
             "val": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0, -1.0, 0.0, 1.0],
-            "value": [4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 4.0, 5.0, 6.0, 6.0, 5.0, 4.0],
         },
     ).lazy()
     opts = ExtractionSettings(
@@ -114,7 +325,7 @@ def test_sum_of_reoccurring_values():
 
     assert fdf.get_column("val__sum_of_reoccurring_values").to_list() == [0.0, 0.0, 0.0, 3.0]
 
-def test_sum_of_reoccurring_values():
+def test_sum_of_reoccurring_data_points():
     df = pl.DataFrame(
         {
             "id": ["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d", "d", "d", "d"],
@@ -131,3 +342,114 @@ def test_sum_of_reoccurring_values():
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__sum_of_reoccurring_data_points").to_list() == [0.0, 0.0, 0.0, 7.0]
+
+def test_standard_deviation():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "a", "b", "b", "b", "c"],
+            "val": [1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 1.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__standard_deviation").to_list()[0] == 0
+    assert math.isnan(fdf.get_column("val__standard_deviation").to_list()[-1])
+
+def test_variance():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "a", "b", "b", "b", "c"],
+            "val": [1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 1.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__variance").to_list()[0] == 0
+    assert math.isnan(fdf.get_column("val__variance").to_list()[-1])
+
+def test_percentage_of_reoccurring_values_to_all_values():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "a", "b", "b", "b", "b", "b", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 2.0, 1.0, 2.0, 3.0, 3.0, 4.0, 1.0, 1.0, 1.0, -1.0, -1.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+    assert fdf.get_column("val__percentage_of_reoccurring_values_to_all_values").to_list() == [0.5, 0.25, 0.0, 1.0]
+
+def test_percentage_of_reoccurring_values_to_all_datapoints():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "a", "a", "b", "b", "b", "b", "b", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 3.0, 4.0, 1.0, 1.0, 1.0, -1.0, -1.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__percentage_of_reoccurring_values_to_all_datapoints").to_list() == pytest.approx([0.25, 0.2, 0.0, 0.5])
+
+def test_agg_linear_trend_slope():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b", "b"],
+            "val": [1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert math.isnan(fdf.get_column("val__agg_linear_trend_slope__chunk_size_5__agg_mean").to_list()[0])
+    assert fdf.get_column("val__agg_linear_trend_slope__chunk_size_5__agg_mean").to_list()[1] == pytest.approx(1.0, abs=1e-6)
+
+def test_agg_linear_trend_intercept():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b", "b"],
+            "val": [1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert math.isnan(fdf.get_column("val__agg_linear_trend_intercept__chunk_size_5__agg_mean").to_list()[0])
+    assert fdf.get_column("val__agg_linear_trend_intercept__chunk_size_5__agg_mean").to_list()[1] == pytest.approx(2.0, abs=1e-6)
