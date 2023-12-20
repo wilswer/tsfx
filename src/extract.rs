@@ -1,11 +1,13 @@
 use polars::prelude::*;
 
 use crate::feature_extractors::extras::extra_aggregators;
+use crate::feature_extractors::high_comp_cost::high_comp_cost_aggregators;
 use crate::feature_extractors::minimal::minimal_aggregators;
 
 #[derive(Clone, Debug)]
 pub enum FeatureSetting {
     Minimal,
+    Efficient,
     Comprehensive,
 }
 
@@ -30,8 +32,13 @@ fn get_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
     let mut aggregators = minimal_aggregators(&opts.value_cols);
     match opts.feature_setting {
         FeatureSetting::Minimal => aggregators,
+        FeatureSetting::Efficient => {
+            aggregators.append(&mut extra_aggregators(&opts.value_cols));
+            aggregators
+        }
         FeatureSetting::Comprehensive => {
             aggregators.append(&mut extra_aggregators(&opts.value_cols));
+            aggregators.append(&mut high_comp_cost_aggregators(&opts.value_cols));
             aggregators
         }
     }

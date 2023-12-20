@@ -11,14 +11,14 @@ fn criterion_benchmark(c: &mut Criterion) {
     .unwrap()
     .lazy();
 
-    c.bench_function("extract_comprehensive", |b| {
+    c.bench_function("extract_efficient", |b| {
         b.iter(|| {
             lazy_feature_df(
                 black_box(cdf.clone()),
                 ExtractionSettings {
                     grouping_col: "id".to_string(),
                     value_cols: vec!["value".to_string()],
-                    feature_setting: FeatureSetting::Comprehensive,
+                    feature_setting: FeatureSetting::Efficient,
                     dynamic_settings: None,
                 },
             )

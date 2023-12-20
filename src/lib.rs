@@ -9,6 +9,7 @@ use pyo3_polars::{PyDataFrame, PyLazyFrame};
 #[derive(Clone)]
 enum PyFeatureSetting {
     Minimal,
+    Efficient,
     Comprehensive,
 }
 
@@ -73,6 +74,7 @@ impl From<PyFeatureSetting> for FeatureSetting {
     fn from(setting: PyFeatureSetting) -> Self {
         match setting {
             PyFeatureSetting::Minimal => FeatureSetting::Minimal,
+            PyFeatureSetting::Efficient => FeatureSetting::Efficient,
             PyFeatureSetting::Comprehensive => FeatureSetting::Comprehensive,
         }
     }

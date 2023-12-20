@@ -13,7 +13,7 @@ def test_empty_df():
     df = pl.DataFrame({"id": [], "val": []}).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -23,7 +23,7 @@ def test_unit_length_df():
     df = pl.DataFrame({"id": ["a"], "val": [1.0]}).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -33,7 +33,7 @@ def test_only_nan_group_dropped():
     df = pl.DataFrame({"id": ["a", "b", "c"], "val": [1.0, 2.0, None]}).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -44,7 +44,7 @@ def test_nan_df():
     df = pl.DataFrame({"id": ["a", "b", "c", "c"], "val": [1.0, 2.0, 1.0, None]}).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -61,7 +61,7 @@ def test_has_duplicate():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -78,7 +78,7 @@ def test_length():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -95,7 +95,7 @@ def test_sum_values():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -112,7 +112,7 @@ def test_minimum():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -129,7 +129,7 @@ def test_maximum():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -146,7 +146,7 @@ def test_median():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -163,7 +163,7 @@ def test_absolute_energy():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -180,7 +180,7 @@ def test_median():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -197,7 +197,7 @@ def test_linear_trend_intercept():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -214,7 +214,7 @@ def test_linear_trend_slope():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -231,7 +231,7 @@ def test_has_duplicate_max():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -248,7 +248,7 @@ def test_has_duplicate_min():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -265,7 +265,7 @@ def test_has_duplicate():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -282,7 +282,7 @@ def test_ratio_value_number_to_time_series_length():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -299,7 +299,7 @@ def test_variation_coefficient():
     ).lazy()
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -317,7 +317,7 @@ def test_sum_of_reoccurring_values():
 
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -335,7 +335,7 @@ def test_sum_of_reoccurring_data_points():
 
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -353,7 +353,7 @@ def test_standard_deviation():
 
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -372,7 +372,7 @@ def test_variance():
 
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -391,7 +391,7 @@ def test_percentage_of_reoccurring_values_to_all_values():
 
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -408,32 +408,13 @@ def test_percentage_of_reoccurring_values_to_all_datapoints():
 
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__percentage_of_reoccurring_values_to_all_datapoints").to_list() == pytest.approx([0.25, 0.2, 0.0, 0.5])
-
-def test_agg_linear_trend_slope():
-    df = pl.DataFrame(
-        {
-            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b", "b"],
-            "val": [1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0],
-        },
-    ).lazy()
-
-    opts = ExtractionSettings(
-        grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
-        value_cols=["val"],
-    )
-    fdf = extract_features(df, opts)
-    fdf = fdf.sort("id")
-
-    assert math.isnan(fdf.get_column("val__agg_linear_trend_slope__chunk_size_5__agg_mean").to_list()[0])
-    assert fdf.get_column("val__agg_linear_trend_slope__chunk_size_5__agg_mean").to_list()[1] == pytest.approx(1.0, abs=1e-6)
 
 def test_agg_linear_trend_intercept():
     df = pl.DataFrame(
@@ -445,7 +426,7 @@ def test_agg_linear_trend_intercept():
 
     opts = ExtractionSettings(
         grouping_col="id",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
@@ -453,3 +434,59 @@ def test_agg_linear_trend_intercept():
 
     assert math.isnan(fdf.get_column("val__agg_linear_trend_intercept__chunk_size_5__agg_mean").to_list()[0])
     assert fdf.get_column("val__agg_linear_trend_intercept__chunk_size_5__agg_mean").to_list()[1] == pytest.approx(2.0, abs=1e-6)
+
+def test_agg_linear_trend_slope():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b", "b"],
+            "val": [1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert math.isnan(fdf.get_column("val__agg_linear_trend_slope__chunk_size_5__agg_mean").to_list()[0])
+    assert fdf.get_column("val__agg_linear_trend_slope__chunk_size_5__agg_mean").to_list()[1] == pytest.approx(1.0, abs=1e-6)
+
+def test_mean_n_absolute_max():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b"],
+            "val": [1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert math.isnan(fdf.get_column("val__mean_n_absolute_max__n_7").to_list()[0])
+    assert fdf.get_column("val__mean_n_absolute_max__n_7").to_list()[1] == 4.0
+
+def test_mean_change():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b"],
+            "val": [1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__mean_change").to_list() == [0.0, 1.0]

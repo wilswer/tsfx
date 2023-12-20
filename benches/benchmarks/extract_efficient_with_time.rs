@@ -14,7 +14,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             col("close"),
             col("volume"),
         ]));
-    c.bench_function("extract_comprehensive_with_time", |b| {
+    c.bench_function("extract_efficient_with_time", |b| {
         b.iter(|| {
             lazy_feature_df(
                 black_box(df.clone()),
@@ -27,7 +27,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         "close".to_string(),
                         "volume".to_string(),
                     ],
-                    feature_setting: FeatureSetting::Comprehensive,
+                    feature_setting: FeatureSetting::Efficient,
                     dynamic_settings: Some(DynamicGroupBySettings {
                         time_col: "date".to_string(),
                         every: "1y".to_string(),

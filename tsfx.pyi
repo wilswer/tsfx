@@ -6,6 +6,7 @@ import polars as pl
 
 class FeatureSetting(Enum):
     Mimimal = auto()
+    Efficient = auto()
     Comprehensive = auto()
 
 class ExtractionSettings:

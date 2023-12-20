@@ -38,7 +38,7 @@ def tsfx_efficient() -> None:
     print("Data loaded")
     opts = ExtractionSettings(
         grouping_col="Name",
-        feature_setting=FeatureSetting.Comprehensive,
+        feature_setting=FeatureSetting.Efficient,
         value_cols=["open"],
     )
     print("Starting TSFX efficient features extraction...")

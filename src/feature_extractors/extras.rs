@@ -79,6 +79,16 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
                 ));
             }
         }
+        aggregators.push(mean_n_absolute_max(col, 7));
+        for r in 0..10 {
+            aggregators.push(autocorrelation(col, r));
+        }
+        for q in ndarray::Array::range(0.1, 1.0, 0.1).into_iter() {
+            if q == 0.5 {
+                continue;
+            }
+            aggregators.push(quantile(col, q));
+        }
     }
     aggregators
 }
@@ -1251,4 +1261,92 @@ fn agg_linear_trend_slope(name: &str, chunk_size: usize, aggregator: ChunkAggreg
             "{}__agg_linear_trend_slope__chunk_size_{}__agg_{}",
             name, chunk_size, agg_clone
         ))
+}
+
+fn _mean_n_absolute_max(s: Series, n: usize) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    if s.len() < n {
+        return Ok(Some(Series::new("", &[f32::NAN])));
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr.mapv(|x| -OrderedFloat::from(x.abs()));
+    let sarr = arr.into_iter().k_smallest(n).map(|x| -f64::from(x));
+    let out = sarr.sum::<f64>() / n as f64;
+    let s = Series::new("", &[out as f32]);
+    Ok(Some(s))
+}
+
+pub fn mean_n_absolute_max(name: &str, n: usize) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _mean_n_absolute_max(s, n), o)
+        .get(0)
+        .alias(&format!("{}__mean_n_absolute_max__n_{}", name, n))
+}
+
+fn _autocorrelation(s: Series, lag: usize) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    if s.len() < lag {
+        return Ok(Some(Series::new("", &[f32::NAN])));
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let mean_opt = arr.mean();
+    let mean = match mean_opt {
+        Some(m) => m,
+        None => return Ok(None),
+    };
+    let y1 = arr.slice(s![..(arr.len() - lag)]);
+    let y2 = arr.slice(s![lag..]);
+    let sum_product = (y1.to_owned() - mean).dot(&(y2.to_owned() - mean));
+    let v = arr.var(1.0);
+    let out = sum_product / ((arr.len() - lag) as f64 * v);
+    let s = Series::new("", &[out as f32]);
+    Ok(Some(s))
+}
+
+pub fn autocorrelation(name: &str, lag: usize) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _autocorrelation(s, lag), o)
+        .get(0)
+        .alias(&format!("{}__autocorrelation__lag_{}", name, lag))
+}
+
+fn _quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let mut arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let q_res = arr.quantile_axis_skipnan_mut(Axis(0), n64(q), &Midpoint);
+    let q_val = match q_res {
+        Ok(m) => m[0],
+        Err(_) => return Ok(None),
+    };
+    let s = Series::new("", &[q_val as f32]);
+    Ok(Some(s))
+}
+
+pub fn quantile(name: &str, q: f64) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _quantile(s, q), o)
+        .get(0)
+        .alias(&format!("{}__quantile__q_{}", name, q))
 }
