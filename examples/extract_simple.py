@@ -13,12 +13,12 @@ df = pl.DataFrame(
         "value": [4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 4.0, 5.0, 6.0],
     },
 ).lazy()
-opts = ExtractionSettings(
+settings = ExtractionSettings(
     grouping_col="id",
-    feature_setting=FeatureSetting.Minimal,
+    feature_setting=FeatureSetting.Efficient,
     value_cols=["val", "value"],
 )
-gdf = extract_features(df, opts)
+gdf = extract_features(df, settings)
 print(gdf)
 
 tdf = pl.DataFrame(
@@ -40,18 +40,18 @@ tdf = pl.DataFrame(
     },
 ).lazy()
 
-dyn_opts = DynamicGroupBySettings(
+dyn_settings = DynamicGroupBySettings(
     time_col="time",
     every="3y",
     period="3y",
     offset="0",
     datetime_format="%Y-%m-%d",
 )
-opts = ExtractionSettings(
+settings = ExtractionSettings(
     grouping_col="id",
     value_cols=["val", "value"],
-    feature_setting=FeatureSetting.Minimal,
-    dynamic_settings=dyn_opts,
+    feature_setting=FeatureSetting.Efficient,
+    dynamic_settings=dyn_settings,
 )
-gdf = extract_features(tdf, opts)
+gdf = extract_features(tdf, settings)
 print(gdf)

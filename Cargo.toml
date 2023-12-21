@@ -22,6 +22,7 @@ polars = { version = "0", features = [
   "dynamic_group_by",
   "strings",
   "ndarray",
+  "streaming",
 ] }
 pyo3-polars = { version = "0", features = ["lazy"] }
 linfa = "0"

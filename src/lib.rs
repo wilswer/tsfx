@@ -113,10 +113,23 @@ impl From<PyExtractionSettings> for ExtractionSettings {
 }
 
 #[pyfunction]
-fn extract_features(df: PyLazyFrame, opts: PyExtractionSettings) -> PyResult<PyDataFrame> {
+#[pyo3(signature = (df, settings, streaming=false))]
+fn extract_features(
+    df: PyLazyFrame,
+    settings: PyExtractionSettings,
+    streaming: bool,
+) -> PyResult<PyDataFrame> {
     let df = df.into();
-    let opts = opts.into();
-    Ok(PyDataFrame(lazy_feature_df(df, opts).collect().unwrap()))
+    let settings = settings.into();
+    let df = if !streaming {
+        lazy_feature_df(df, settings).collect().unwrap()
+    } else {
+        lazy_feature_df(df, settings)
+            .with_streaming(true)
+            .collect()
+            .unwrap()
+    };
+    Ok(PyDataFrame(df))
 }
 
 /// A Python module implemented in Rust.
