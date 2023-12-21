@@ -1,6 +1,5 @@
 pub mod extract;
 pub mod feature_extractors;
-pub mod load;
 
 use crate::extract::{lazy_feature_df, DynamicGroupBySettings, ExtractionSettings, FeatureSetting};
 use pyo3::prelude::*;
