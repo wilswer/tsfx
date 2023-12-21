@@ -68,7 +68,6 @@ pub fn vessel_lazyframe() -> PolarsResult<LazyFrame> {
             )
             .with_column(imo_col.alias("IMO"));
         dfs.push(fdf);
-        break;
     }
     println!("Concatenating...");
     let cdf = concat(

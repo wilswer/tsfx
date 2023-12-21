@@ -37,4 +37,8 @@ class DynamicGroupBySettings:
         self.offset = offset
         self.datetime_format = datetime_format
 
-def extract_features(df: pl.LazyFrame, opts: ExtractionSettings) -> pl.DataFrame: ...
+def extract_features(
+    df: pl.LazyFrame,
+    settings: ExtractionSettings,
+    streaming: bool = False,
+) -> pl.DataFrame: ...
