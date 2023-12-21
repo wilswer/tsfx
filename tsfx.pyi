@@ -10,18 +10,31 @@ class FeatureSetting(Enum):
     Comprehensive = auto()
 
 class ExtractionSettings:
-    def __init__(self) -> None:
-        self.grouping_col: str
-        self.value_cols: list[str]
-        self.feature_setting: FeatureSetting
-        self.dynamic_settings: DynamicGroupBySettings | None = None
+    def __init__(
+        self,
+        grouping_col: str,
+        value_cols: list[str],
+        feature_setting: FeatureSetting,
+        dynamic_settings: DynamicGroupBySettings | None = None,
+    ) -> None:
+        self.grouping_col = grouping_col
+        self.value_cols = value_cols
+        self.feature_setting = feature_setting
+        self.dynamic_settings = dynamic_settings
 
 class DynamicGroupBySettings:
-    def __init__(self) -> None:
-        self.time_col: str
-        self.every: str
-        self.period: str
-        self.offset: str
-        self.datetime_format: str | None = None
+    def __init__(
+        self,
+        time_col: str,
+        every: str,
+        period: str,
+        offset: str,
+        datetime_format: str,
+    ) -> None:
+        self.time_col = time_col
+        self.every = every
+        self.period = period
+        self.offset = offset
+        self.datetime_format = datetime_format
 
 def extract_features(df: pl.LazyFrame, opts: ExtractionSettings) -> pl.DataFrame: ...
