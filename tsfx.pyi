@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import Enum, auto
 
 import polars as pl
@@ -13,7 +14,7 @@ class ExtractionSettings:
     def __init__(
         self,
         grouping_col: str,
-        value_cols: list[str],
+        value_cols: Sequence[str],
         feature_setting: FeatureSetting,
         dynamic_settings: DynamicGroupBySettings | None = None,
     ) -> None:
