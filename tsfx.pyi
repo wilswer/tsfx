@@ -6,7 +6,7 @@ from enum import Enum, auto
 import polars as pl
 
 class FeatureSetting(Enum):
-    Mimimal = auto()
+    Minimal = auto()
     Efficient = auto()
     Comprehensive = auto()
 
