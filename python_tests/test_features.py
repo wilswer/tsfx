@@ -52,22 +52,6 @@ def test_nan_df():
     assert fdf.get_column("id").to_list() == ["a", "b", "c"]
     assert fdf.get_column("val__mean").to_list() == [1.0, 2.0, 1.0]
 
-def test_has_duplicate():
-    df = pl.DataFrame(
-        {
-            "id": ["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d"],
-            "val": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 1.0, 1.0],
-        },
-    ).lazy()
-    opts = ExtractionSettings(
-        grouping_col="id",
-        feature_setting=FeatureSetting.Efficient,
-        value_cols=["val"],
-    )
-    fdf = extract_features(df, opts)
-    fdf = fdf.sort("id")
-
-    assert fdf.get_column("val__has_duplicate").to_list() == [0.0, 0.0, 0.0, 1.0]
 
 def test_length():
     df = pl.DataFrame(
@@ -137,22 +121,6 @@ def test_maximum():
 
     assert fdf.get_column("val__maximum").to_list() == [1.0, 2.0, 3.0, 1.0]
 
-def test_median():
-    df = pl.DataFrame(
-        {
-            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
-            "val": [1.0, 1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 1.0, -1.0, -1.0],
-        },
-    ).lazy()
-    opts = ExtractionSettings(
-        grouping_col="id",
-        feature_setting=FeatureSetting.Efficient,
-        value_cols=["val"],
-    )
-    fdf = extract_features(df, opts)
-    fdf = fdf.sort("id")
-
-    assert fdf.get_column("val__median").to_list() == [1.0, 1.5, 2.0, 0.0]
 
 def test_absolute_energy():
     df = pl.DataFrame(
@@ -171,7 +139,24 @@ def test_absolute_energy():
 
     assert fdf.get_column("val__absolute_energy").to_list() == [1.0, 5.0, 14.0, 4.0]
 
-def test_median():
+def test_median1():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "val": [1.0, 1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 1.0, -1.0, -1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__median").to_list() == [1.0, 1.5, 2.0, 0.0]
+
+def test_median2():
     df = pl.DataFrame(
         {
             "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
@@ -256,7 +241,7 @@ def test_has_duplicate_min():
 
     assert fdf.get_column("val__has_duplicate_min").to_list() == [0.0, 0.0, 0.0, 1.0]
 
-def test_has_duplicate():
+def test_has_duplicate1():
     df = pl.DataFrame(
         {
             "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
@@ -273,6 +258,22 @@ def test_has_duplicate():
 
     assert fdf.get_column("val__has_duplicate").to_list() == [0.0, 0.0, 1.0, 1.0]
 
+def test_has_duplicate2():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d"],
+            "val": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 1.0, 1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__has_duplicate").to_list() == [0.0, 0.0, 0.0, 1.0]
 def test_ratio_value_number_to_time_series_length():
     df = pl.DataFrame(
         {
@@ -490,3 +491,76 @@ def test_mean_change():
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__mean_change").to_list() == [0.0, 1.0]
+
+def test_number_crossing_m1():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b"],
+            "val": [1.0, 1.0, -1.0, 2.0, 3.0, -4.0, -5.0, -6.0, 7.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__number_crossing_m__m_0.0").to_list() == [0.0, 3.0]
+
+def test_number_crossing_m2():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b"],
+            "val": [0.0, 1.0, 0.0, 1.0, -3.0, -4.0, -5.0, 6.0, 7.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__number_crossing_m__m_1.0").to_list() == [0.0, 1.0]
+
+def test_number_crossing_m3():
+
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b"],
+            "val": [-1.0, -1.0, 1.0, 2.0, -3.0, -4.0, -5.0, 6.0, 7.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__number_crossing_m__m_-1.0").to_list() == [0.0, 2.0]
+
+def test_number_crossing_m4():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "a", "b", "b", "b", "b", "b", "b", "b"],
+            "val": [1.0, 0.0, -1.0, 1.0, 0.0, 1.0, 0.0, -1.0, 0.0, -1.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__number_crossing_m__m_0.0").to_list() == [1.0, 1.0]

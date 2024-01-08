@@ -1,6 +1,7 @@
 use core::f64;
 use std::{fmt::Display, str::FromStr};
 
+use itertools::izip;
 use itertools::Itertools;
 use linfa::prelude::*;
 use linfa_linear::LinearRegression;
@@ -89,6 +90,9 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
             }
             aggregators.push(quantile(col, q));
         }
+        aggregators.push(number_crossing_m(col, -1.0));
+        aggregators.push(number_crossing_m(col, 0.0));
+        aggregators.push(number_crossing_m(col, 1.0));
     }
     aggregators
 }
@@ -400,7 +404,7 @@ pub fn ratio_beyond_r_sigma(name: &str, r: f32) -> Expr {
         .apply(move |s| _ratio_beyond_r_sigma(s, r), o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}__ratio_beyond_r_sigma__r_{}", name, r))
+        .alias(&format!("{}__ratio_beyond_r_sigma__r_{:.1}", name, r))
 }
 
 fn _large_standard_deviation(s: Series, r: f32) -> Result<Option<Series>, PolarsError> {
@@ -425,7 +429,7 @@ pub fn large_standard_deviation(name: &str, r: f32) -> Expr {
         .apply(move |s| _large_standard_deviation(s, r), o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}__large_standard_deviation__r_{}", name, r))
+        .alias(&format!("{}__large_standard_deviation__r_{:.2}", name, r))
 }
 
 fn _symmetry_looking(s: Series, r: f32) -> Result<Option<Series>, PolarsError> {
@@ -469,7 +473,7 @@ pub fn symmetry_looking(name: &str, r: f32) -> Expr {
         .apply(move |s| _symmetry_looking(s, r), o)
         .cast(DataType::Float32)
         .get(0)
-        .alias(&format!("{}__symmetry_looking__r_{}", name, r))
+        .alias(&format!("{}__symmetry_looking__r_{:.2}", name, r))
 }
 
 fn _has_duplicate_max(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -558,7 +562,7 @@ pub fn cid_ce(name: &str, normalize: bool) -> Expr {
     col(name)
         .apply(move |s| _cid_ce(s, normalize), o)
         .get(0)
-        .alias(&format!("{}__cid_ce__normalize_{}", name, normalize))
+        .alias(&format!("{}__cid_ce__normalize_{:.1}", name, normalize))
 }
 
 fn _absolute_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -683,7 +687,7 @@ pub fn count_above(name: &str, t: f32) -> Expr {
     col(name)
         .apply(move |s| _count_above(s, t), o)
         .get(0)
-        .alias(&format!("{}__count_above__t_{}", name, t))
+        .alias(&format!("{}__count_above__t_{:.1}", name, t))
 }
 
 fn _count_below(s: Series, t: f32) -> Result<Option<Series>, PolarsError> {
@@ -704,7 +708,7 @@ pub fn count_below(name: &str, t: f32) -> Expr {
     col(name)
         .apply(move |s| _count_below(s, t), o)
         .get(0)
-        .alias(&format!("{}__count_below__t_{}", name, t))
+        .alias(&format!("{}__count_below__t_{:.1}", name, t))
 }
 
 fn _first_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -1203,7 +1207,7 @@ fn agg_linear_trend_intercept(name: &str, chunk_size: usize, aggregator: ChunkAg
         )
         .get(0)
         .alias(&format!(
-            "{}__agg_linear_trend_intercept__chunk_size_{}__agg_{}",
+            "{}__agg_linear_trend_intercept__chunk_size_{:.1}__agg_{:.1}",
             name, chunk_size, agg_clone
         ))
 }
@@ -1258,7 +1262,7 @@ fn agg_linear_trend_slope(name: &str, chunk_size: usize, aggregator: ChunkAggreg
         )
         .get(0)
         .alias(&format!(
-            "{}__agg_linear_trend_slope__chunk_size_{}__agg_{}",
+            "{}__agg_linear_trend_slope__chunk_size_{:.1}__agg_{:.1}",
             name, chunk_size, agg_clone
         ))
 }
@@ -1286,7 +1290,7 @@ pub fn mean_n_absolute_max(name: &str, n: usize) -> Expr {
     col(name)
         .apply(move |s| _mean_n_absolute_max(s, n), o)
         .get(0)
-        .alias(&format!("{}__mean_n_absolute_max__n_{}", name, n))
+        .alias(&format!("{}__mean_n_absolute_max__n_{:.1}", name, n))
 }
 
 fn _autocorrelation(s: Series, lag: usize) -> Result<Option<Series>, PolarsError> {
@@ -1323,7 +1327,7 @@ pub fn autocorrelation(name: &str, lag: usize) -> Expr {
     col(name)
         .apply(move |s| _autocorrelation(s, lag), o)
         .get(0)
-        .alias(&format!("{}__autocorrelation__lag_{}", name, lag))
+        .alias(&format!("{}__autocorrelation__lag_{:.1}", name, lag))
 }
 
 fn _quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
@@ -1348,5 +1352,35 @@ pub fn quantile(name: &str, q: f64) -> Expr {
     col(name)
         .apply(move |s| _quantile(s, q), o)
         .get(0)
-        .alias(&format!("{}__quantile__q_{}", name, q))
+        .alias(&format!("{}__quantile__q_{:.1}", name, q))
+}
+
+fn _number_crossing_m(s: Series, m: f64) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let iarr = arr.into_iter().filter(|x| x != &m).collect::<Vec<_>>();
+    let mut count = 0;
+    for (x1, x2) in izip!(iarr.iter(), iarr.iter().skip(1)) {
+        if x1.is_nan() {
+            return Ok(Some(Series::new("", &[f32::NAN])));
+        }
+        if (x1 < &m && x2 > &m) || (x1 > &m && x2 < &m) {
+            count += 1;
+        }
+    }
+    let s = Series::new("", &[count as f32]);
+    Ok(Some(s))
+}
+
+pub fn number_crossing_m(name: &str, m: f64) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _number_crossing_m(s, m), o)
+        .get(0)
+        .alias(&format!("{}__number_crossing_m__m_{:.1}", name, m))
 }
