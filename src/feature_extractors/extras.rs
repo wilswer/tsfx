@@ -96,6 +96,9 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         aggregators.push(range_count(col, -1.0, 1.0));
         aggregators.push(range_count(col, -1_000_000_000_000.0, 0.0));
         aggregators.push(range_count(col, 0.0, 1_000_000_000_000.0));
+        for q in ndarray::Array::range(0.1, 1.0, 0.1).into_iter() {
+            aggregators.push(index_mass_quantile(col, q));
+        }
     }
     aggregators
 }
@@ -1416,4 +1419,37 @@ pub fn range_count(name: &str, lower: f64, upper: f64) -> Expr {
             "{}__range_count__min_{:.1}__max_{:.1}",
             name, lower, upper,
         ))
+}
+
+fn _index_mass_quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let mut abs_arr = arr.mapv(|x| x.abs());
+    let abs_sum = abs_arr.sum();
+    if abs_sum == 0.0 {
+        return Ok(Some(Series::new("", &[f32::NAN])));
+    }
+    abs_arr.accumulate_axis_inplace(Axis(0), |&prev, curr| *curr += prev);
+    let mass_centralized = abs_arr.mapv(|x| x / abs_sum);
+    let idx_res = mass_centralized
+        .into_iter()
+        .enumerate()
+        .filter(|(_, x)| x >= &q)
+        .map(|(i, _)| i);
+    let out = (idx_res.min().unwrap_or(0) + 1) as f32 / arr.len() as f32;
+    let s = Series::new("", &[out]);
+    Ok(Some(s))
+}
+
+pub fn index_mass_quantile(name: &str, q: f64) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _index_mass_quantile(s, q), o)
+        .get(0)
+        .alias(&format!("{}__index_mass_quantile__q_{:.1}", name, q))
 }

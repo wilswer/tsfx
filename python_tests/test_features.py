@@ -582,3 +582,21 @@ def test_range_count():
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__range_count__min_-1.0__max_1.0").to_list() == [1.0, 5.0]
+
+def test_index_mass_quantile():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "a", "a", "b", "b", "b", "b", "b"],
+            "val": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__index_mass_quantile__q_0.5").to_list() == pytest.approx([0.5, 0.2], abs=1e-6)
