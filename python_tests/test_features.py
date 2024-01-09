@@ -564,3 +564,21 @@ def test_number_crossing_m4():
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__number_crossing_m__m_0.0").to_list() == [1.0, 1.0]
+
+def test_range_count():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "a", "b", "b", "b", "b", "b", "b", "b"],
+            "val": [2.0, 0.0, -2.0, 1.0, 0.0, 1.0, 0.0, -2.0, 0.0, -2.0],
+        },
+    ).lazy()
+
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__range_count__min_-1.0__max_1.0").to_list() == [1.0, 5.0]

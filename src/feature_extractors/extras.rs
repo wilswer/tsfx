@@ -93,6 +93,9 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         aggregators.push(number_crossing_m(col, -1.0));
         aggregators.push(number_crossing_m(col, 0.0));
         aggregators.push(number_crossing_m(col, 1.0));
+        aggregators.push(range_count(col, -1.0, 1.0));
+        aggregators.push(range_count(col, -1_000_000_000_000.0, 0.0));
+        aggregators.push(range_count(col, 0.0, 1_000_000_000_000.0));
     }
     aggregators
 }
@@ -1383,4 +1386,34 @@ pub fn number_crossing_m(name: &str, m: f64) -> Expr {
         .apply(move |s| _number_crossing_m(s, m), o)
         .get(0)
         .alias(&format!("{}__number_crossing_m__m_{:.1}", name, m))
+}
+
+fn _range_count(s: Series, lower: f64, upper: f64) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    if upper < lower {
+        return Ok(Some(Series::new("", &[f32::NAN])));
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let count = arr
+        .into_iter()
+        .filter(|x| x >= &lower && x <= &upper)
+        .count();
+    let s = Series::new("", &[count as f32]);
+    Ok(Some(s))
+}
+
+pub fn range_count(name: &str, lower: f64, upper: f64) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _range_count(s, lower, upper), o)
+        .get(0)
+        .alias(&format!(
+            "{}__range_count__min_{:.1}__max_{:.1}",
+            name, lower, upper,
+        ))
 }
