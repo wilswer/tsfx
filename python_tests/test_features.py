@@ -600,3 +600,75 @@ def test_index_mass_quantile():
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__index_mass_quantile__q_0.5").to_list() == pytest.approx([0.5, 0.2], abs=1e-6)
+
+def test_c3():
+    df = pl.DataFrame(
+        {
+            "id": ["a"] * 10,
+            "val": [1.0] * 10,
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+    assert fdf.get_column("val__c3__lag_1").to_list() == [1.0]
+    assert fdf.get_column("val__c3__lag_2").to_list() == [1.0]
+    assert fdf.get_column("val__c3__lag_3").to_list() == [1.0]
+
+def test_c3_2():
+    df = pl.DataFrame(
+        {
+            "id": ["a"] * 4,
+            "val": [1, 2, -3, 4],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+    assert fdf.get_column("val__c3__lag_1").to_list() == [-15.0]
+    assert fdf.get_column("val__c3__lag_2").to_list() == [0.0]
+    assert fdf.get_column("val__c3__lag_3").to_list() == [0.0]
+
+def test_time_reversal_asymmetry_statistic():
+    df = pl.DataFrame(
+        {
+            "id": ["a"] * 10,
+            "val": [1.0] * 10,
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+    assert fdf.get_column("val__time_reversal_asymmetry_statistic__lag_1").to_list() == [0.0]
+    assert fdf.get_column("val__time_reversal_asymmetry_statistic__lag_2").to_list() == [0.0]
+    assert fdf.get_column("val__time_reversal_asymmetry_statistic__lag_3").to_list() == [0.0]
+
+def test_time_reversal_asymmetry_statistic_2():
+    df = pl.DataFrame(
+        {
+            "id": ["a"] * 4,
+            "val": [1, 2, -3, 4],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+    assert fdf.get_column("val__time_reversal_asymmetry_statistic__lag_1").to_list() == [-10.0]
+    assert fdf.get_column("val__time_reversal_asymmetry_statistic__lag_2").to_list() == [0.0]
+    assert fdf.get_column("val__time_reversal_asymmetry_statistic__lag_3").to_list() == [0.0]

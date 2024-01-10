@@ -5,6 +5,7 @@ use itertools::izip;
 use itertools::Itertools;
 use linfa::prelude::*;
 use linfa_linear::LinearRegression;
+use ndarray::ArrayView1;
 use ndarray::{s, Array, Array1, Axis, Ix1};
 use ndarray_stats::{interpolate::Midpoint, QuantileExt, SummaryStatisticsExt};
 use noisy_float::types::n64;
@@ -99,6 +100,12 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         for q in ndarray::Array::range(0.1, 1.0, 0.1).into_iter() {
             aggregators.push(index_mass_quantile(col, q));
         }
+        aggregators.push(c3(col, 1));
+        aggregators.push(c3(col, 2));
+        aggregators.push(c3(col, 3));
+        aggregators.push(time_reversal_asymmetry_statistic(col, 1));
+        aggregators.push(time_reversal_asymmetry_statistic(col, 2));
+        aggregators.push(time_reversal_asymmetry_statistic(col, 3));
     }
     aggregators
 }
@@ -156,6 +163,15 @@ fn _aggregate_on_chunks(
         agg_arr.push(aggregator(chunk.to_owned()));
     }
     Array1::from_vec(agg_arr)
+}
+
+fn _roll(x: &mut [f64], shift: isize) -> &[f64] {
+    if shift > 0 {
+        x.rotate_right(shift as usize);
+    } else {
+        x.rotate_left(shift.unsigned_abs());
+    }
+    x
 }
 
 fn _absolute_energy(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -1452,4 +1468,97 @@ pub fn index_mass_quantile(name: &str, q: f64) -> Expr {
         .apply(move |s| _index_mass_quantile(s, q), o)
         .get(0)
         .alias(&format!("{}__index_mass_quantile__q_{:.1}", name, q))
+}
+
+fn _c3(s: Series, lag: usize) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let n = s.len();
+    if n <= 2 * lag {
+        return Ok(Some(Series::new("", &[0 as f32])));
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let slice = &mut arr.to_vec()[..];
+    let neg_lag = -(lag as isize);
+    let y1_slice = _roll(slice, 2 * neg_lag);
+    let y1 = ArrayView1::from(y1_slice);
+
+    let slice = &mut arr.to_vec()[..];
+    let y2_slice = _roll(slice, neg_lag);
+    let y2 = ArrayView1::from(y2_slice);
+    let y_prod = &y1 * &y2;
+    let full_prod = y_prod * arr;
+    let prod = full_prod.slice(s![..(n - 2 * lag)]);
+    let mean_opt = prod.mean();
+    let out = match mean_opt {
+        Some(m) => m,
+        None => return Ok(None),
+    };
+    let s = Series::new("", &[out as f32]);
+    Ok(Some(s))
+}
+
+pub fn c3(name: &str, lag: usize) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _c3(s, lag), o)
+        .get(0)
+        .alias(&format!("{}__c3__lag_{:.0}", name, lag))
+}
+
+fn _time_reversal_asymmetry_statistic(
+    s: Series,
+    lag: usize,
+) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    let n = s.len();
+    if n <= 2 * lag {
+        return Ok(Some(Series::new("", &[0 as f32])));
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let slice = &mut arr.to_vec()[..];
+    let neg_lag = -(lag as isize);
+    let one_lag = _roll(slice, neg_lag);
+    let one_lag = ArrayView1::from(one_lag);
+
+    let slice = &mut arr.to_vec()[..];
+    let two_lag = _roll(slice, 2 * neg_lag);
+    let two_lag = ArrayView1::from(two_lag);
+    let full_prod = &two_lag * &two_lag * one_lag - &one_lag * &arr * &arr;
+    let prod = full_prod.slice(s![..(n - 2 * lag)]);
+    let mean_opt = prod.mean();
+    let out = match mean_opt {
+        Some(m) => m,
+        None => return Ok(None),
+    };
+    let s = Series::new("", &[out as f32]);
+    Ok(Some(s))
+}
+
+pub fn time_reversal_asymmetry_statistic(name: &str, lag: usize) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _time_reversal_asymmetry_statistic(s, lag), o)
+        .get(0)
+        .alias(&format!(
+            "{}__time_reversal_asymmetry_statistic__lag_{:.0}",
+            name, lag
+        ))
 }
