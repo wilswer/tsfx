@@ -84,7 +84,6 @@ pub fn lazy_feature_df(df: LazyFrame, opts: ExtractionSettings) -> LazyFrame {
 
 #[cfg(test)]
 mod tests {
-    use std::f32::NAN;
 
     use super::{lazy_feature_df, ExtractionSettings, FeatureSetting};
     use polars::prelude::*;
@@ -110,24 +109,33 @@ mod tests {
             df!["length" => [3, 3, 3]].unwrap()
         );
         assert_eq!(
-            gdf.clone().select([col("value_sum")]).collect().unwrap(),
-            df!["value_sum" => [6.0, 6.0, 6.0]].unwrap()
+            gdf.clone()
+                .select([col("value__sum_values")])
+                .collect()
+                .unwrap(),
+            df!["value__sum_values" => [6.0, 6.0, 6.0]].unwrap()
         );
         assert_eq!(
-            gdf.clone().select([col("value_mean")]).collect().unwrap(),
-            df!["value_mean" => [2.0, 2.0, 2.0]].unwrap()
+            gdf.clone().select([col("value__mean")]).collect().unwrap(),
+            df!["value__mean" => [2.0, 2.0, 2.0]].unwrap()
         );
         assert_eq!(
-            gdf.clone().select([col("value_min")]).collect().unwrap(),
-            df!["value_min" => [1.0, 1.0, 1.0]].unwrap()
+            gdf.clone()
+                .select([col("value__minimum")])
+                .collect()
+                .unwrap(),
+            df!["value__minimum" => [1.0, 1.0, 1.0]].unwrap()
         );
         assert_eq!(
-            gdf.clone().select([col("value_max")]).collect().unwrap(),
-            df!["value_max" => [3.0, 3.0, 3.0]].unwrap()
+            gdf.clone()
+                .select([col("value__maximum")])
+                .collect()
+                .unwrap(),
+            df!["value__maximum" => [3.0, 3.0, 3.0]].unwrap()
         );
         assert_eq!(
-            gdf.select([col("value_median")]).collect().unwrap(),
-            df!["value_median" => [2.0, 2.0, 2.0]].unwrap()
+            gdf.select([col("value__median")]).collect().unwrap(),
+            df!["value__median" => [2.0, 2.0, 2.0]].unwrap()
         );
     }
     #[test]
@@ -158,10 +166,10 @@ mod tests {
                         ..Default::default()
                     }
                 )
-                .select([col("value_sum")])
+                .select([col("value__sum_values")])
                 .collect()
                 .unwrap(),
-            df!["value_sum" => [1.0, 2.0, 3.0]].unwrap()
+            df!["value__sum_values" => [1.0, 2.0, 3.0]].unwrap()
         );
         assert_eq!(
             gdf.clone()
@@ -171,10 +179,10 @@ mod tests {
                         ..Default::default()
                     }
                 )
-                .select([col("value_mean")])
+                .select([col("value__mean")])
                 .collect()
                 .unwrap(),
-            df!["value_mean" => [1.0, 2.0, 3.0]].unwrap()
+            df!["value__mean" => [1.0, 2.0, 3.0]].unwrap()
         );
         assert_eq!(
             gdf.clone()
@@ -184,10 +192,10 @@ mod tests {
                         ..Default::default()
                     }
                 )
-                .select([col("value_min")])
+                .select([col("value__minimum")])
                 .collect()
                 .unwrap(),
-            df!["value_min" => [1.0, 2.0, 3.0]].unwrap()
+            df!["value__minimum" => [1.0, 2.0, 3.0]].unwrap()
         );
         assert_eq!(
             gdf.clone()
@@ -197,23 +205,29 @@ mod tests {
                         ..Default::default()
                     }
                 )
-                .select([col("value_median")])
+                .select([col("value__median")])
                 .collect()
                 .unwrap(),
-            df!["value_median" => [1.0, 2.0, 3.0]].unwrap()
+            df!["value__median" => [1.0, 2.0, 3.0]].unwrap()
         );
-        assert_eq!(
-            gdf.clone()
-                .sort(
-                    "id",
-                    SortOptions {
-                        ..Default::default()
-                    }
-                )
-                .select([col("value_std")])
-                .collect()
-                .unwrap(),
-            df!["value_std" => [NAN, NAN, NAN]].unwrap()
-        );
+        assert!(gdf
+            .clone()
+            .sort(
+                "id",
+                SortOptions {
+                    ..Default::default()
+                }
+            )
+            .select([col("value__standard_deviation").cast(DataType::Float32)])
+            .collect()
+            .unwrap()
+            .column("value__standard_deviation")
+            .unwrap()
+            .iter()
+            .next()
+            .unwrap()
+            .try_extract::<f32>()
+            .unwrap()
+            .is_nan());
     }
 }
