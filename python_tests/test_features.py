@@ -672,3 +672,21 @@ def test_time_reversal_asymmetry_statistic_2():
     assert fdf.get_column("val__time_reversal_asymmetry_statistic__lag_1").to_list() == [-10.0]
     assert fdf.get_column("val__time_reversal_asymmetry_statistic__lag_2").to_list() == [0.0]
     assert fdf.get_column("val__time_reversal_asymmetry_statistic__lag_3").to_list() == [0.0]
+
+def test_number_peaks():
+    df = pl.DataFrame(
+        {
+            "id": ["a"] * 14,
+            "val": [0, 1, 2, 1, 0, 1, 2, 3, 4, 5, 4, 3, 2, 1],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+    assert fdf.get_column("val__number_peaks__n_1").to_list() == [2.0]
+    assert fdf.get_column("val__number_peaks__n_3").to_list() == [1.0]
+    assert fdf.get_column("val__number_peaks__n_5").to_list() == [0.0]

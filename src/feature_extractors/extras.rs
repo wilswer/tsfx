@@ -106,6 +106,11 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         aggregators.push(time_reversal_asymmetry_statistic(col, 1));
         aggregators.push(time_reversal_asymmetry_statistic(col, 2));
         aggregators.push(time_reversal_asymmetry_statistic(col, 3));
+        aggregators.push(number_peaks(col, 1));
+        aggregators.push(number_peaks(col, 3));
+        aggregators.push(number_peaks(col, 5));
+        aggregators.push(number_peaks(col, 10));
+        aggregators.push(number_peaks(col, 50));
     }
     aggregators
 }
@@ -1561,4 +1566,52 @@ pub fn time_reversal_asymmetry_statistic(name: &str, lag: usize) -> Expr {
             "{}__time_reversal_asymmetry_statistic__lag_{:.0}",
             name, lag
         ))
+}
+
+fn _number_peaks(s: Series, n: usize) -> Result<Option<Series>, PolarsError> {
+    if s.is_empty() {
+        return Ok(None);
+    }
+    if s.len() < n {
+        return Ok(Some(Series::new("", &[0 as f32])));
+    }
+    let arr = s
+        .into_frame()
+        .to_ndarray::<Float64Type>(IndexOrder::C)
+        .unwrap();
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let arr_reduced = arr.slice(s![n..arr.len() - n]);
+    let mut res: Option<Array1<bool>> = None;
+    for i in 1..n + 1 {
+        let slice = &mut arr.to_vec()[..];
+        let rolled = _roll(slice, i as isize);
+        let rolled = ArrayView1::from(rolled);
+        let rolled = rolled.slice(s![n..arr.len() - n]);
+        let result_first = (&arr_reduced - &rolled).mapv(|x| x > 0.0);
+        if res.is_none() {
+            res = Some(result_first);
+        } else {
+            res = Some(res.unwrap() & result_first);
+        }
+        let slice = &mut arr.to_vec()[..];
+        let rolled = _roll(slice, -(i as isize));
+        let rolled = ArrayView1::from(rolled);
+        let rolled = rolled.slice(s![n..arr.len() - n]);
+        let result_second = (&arr_reduced - &rolled).mapv(|x| x > 0.0);
+        res = Some(res.unwrap() & result_second);
+    }
+    let count = res.unwrap().into_iter().filter(|x| *x).count();
+    let s = Series::new("", &[count as f32]);
+    Ok(Some(s))
+}
+
+pub fn number_peaks(name: &str, n: usize) -> Expr {
+    let o = GetOutput::from_type(DataType::Float32);
+    col(name)
+        .apply(move |s| _number_peaks(s, n), o)
+        .get(0)
+        .alias(&format!("{}__number_peaks__n_{:.0}", name, n))
 }
