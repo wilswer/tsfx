@@ -7,6 +7,9 @@ _TSFX -- Time Series Feature eXtraction_
 TSFX is a Python library for extracting features from time series data.
 Inspired by the great [TSFresh](https://tsfresh.com/) library, TSFX aims to
 provide a similar feature set focused on performance on large datasets.
+In order to achieve this, TSFX is built on top of the
+[Polars](https://pola.rs/) DataFrame library, and feature extractors are
+implemented in Rust.
 
 ## Installation
 
