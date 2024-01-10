@@ -5,7 +5,127 @@ _TSFX -- Time Series Feature eXtraction_
 ## About
 
 TSFX is a Python library for extracting features from time series data.
+Inspired by the great [TSFresh](https://tsfresh.com/) library, TSFX aims to
+provide a similar feature set focused on performance on large datasets.
 
+## Installation
+
+Install from PyPI:
+```bash
+pip install tsfx
+```
+
+## Usage
+Below is a simple example of extracting features from a time series dataset:
+```python
+import polars as pl
+from tsfx import (
+    DynamicGroupBySettings,
+    ExtractionSettings,
+    FeatureSetting,
+    extract_features,
+)
+
+df = pl.DataFrame(
+    {
+        "id": ["a", "a", "a", "b", "b", "b", "c", "c", "c"],
+        "val": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+        "value": [4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 4.0, 5.0, 6.0],
+    },
+).lazy()
+settings = ExtractionSettings(
+    grouping_col="id",
+    feature_setting=FeatureSetting.Efficient,
+    value_cols=["val", "value"],
+)
+gdf = extract_features(df, settings)
+gdf = gdf.sort(by="id")
+print(gdf)
+```
+which produces the following output:
+```bash
+shape: (3, 316)
+┌─────┬────────┬─────────────┬───────────┬───┬─────────────┬─────────────┬────────────┬────────────┐
+│ id  ┆ length ┆ val__sum_va ┆ val__mean ┆ … ┆ value__numb ┆ value__numb ┆ value__num ┆ value__num │
+│ --- ┆ ---    ┆ lues        ┆ ---       ┆   ┆ er_peaks__n ┆ er_peaks__n ┆ ber_peaks_ ┆ ber_peaks_ │
+│ str ┆ u32    ┆ ---         ┆ f32       ┆   ┆ _3          ┆ _5          ┆ _n_10      ┆ _n_50      │
+│     ┆        ┆ f32         ┆           ┆   ┆ ---         ┆ ---         ┆ ---        ┆ ---        │
+│     ┆        ┆             ┆           ┆   ┆ f32         ┆ f32         ┆ f32        ┆ f32        │
+╞═════╪════════╪═════════════╪═══════════╪═══╪═════════════╪═════════════╪════════════╪════════════╡
+│ a   ┆ 3      ┆ 6.0         ┆ 2.0       ┆ … ┆ 0.0         ┆ 0.0         ┆ 0.0        ┆ 0.0        │
+│ b   ┆ 3      ┆ 6.0         ┆ 2.0       ┆ … ┆ 0.0         ┆ 0.0         ┆ 0.0        ┆ 0.0        │
+│ c   ┆ 3      ┆ 6.0         ┆ 2.0       ┆ … ┆ 0.0         ┆ 0.0         ┆ 0.0        ┆ 0.0        │
+└─────┴────────┴─────────────┴───────────┴───┴─────────────┴─────────────┴────────────┴────────────┘
+```
+### Extracting over a time window
+An additional feature of TSFX is the ability to extract features over a time window.
+Below is an example of extracting features over a 1 year window:
+```python
+import polars as pl
+from tsfx import (
+    DynamicGroupBySettings,
+    ExtractionSettings,
+    FeatureSetting,
+    extract_features,
+)
+tdf = pl.DataFrame(
+    {
+        "id": ["a", "a", "a", "b", "b", "b", "c", "c", "c"],
+        "time": [
+            "2001-01-01",
+            "2002-01-01",
+            "2003-01-01",
+            "2001-01-01",
+            "2002-01-01",
+            "2003-01-01",
+            "2001-01-01",
+            "2002-01-01",
+            "2003-01-01",
+        ],
+        "val": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+        "value": [4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 4.0, 5.0, 6.0],
+    },
+).lazy()
+
+dyn_settings = DynamicGroupBySettings(
+    time_col="time",
+    every="1y",
+    period="1y",
+    offset="0",
+    datetime_format="%Y-%m-%d",
+)
+settings = ExtractionSettings(
+    grouping_col="id",
+    value_cols=["val", "value"],
+    feature_setting=FeatureSetting.Efficient,
+    dynamic_settings=dyn_settings,
+)
+gdf = extract_features(tdf, settings)
+gdf = gdf.sort(by="id")
+print(gdf)
+```
+which produces the following output:
+```bash
+shape: (9, 317)
+┌─────┬────────────┬────────┬─────────────┬───┬─────────────┬────────────┬────────────┬────────────┐
+│ id  ┆ time       ┆ length ┆ val__sum_va ┆ … ┆ value__numb ┆ value__num ┆ value__num ┆ value__num │
+│ --- ┆ ---        ┆ ---    ┆ lues        ┆   ┆ er_peaks__n ┆ ber_peaks_ ┆ ber_peaks_ ┆ ber_peaks_ │
+│ str ┆ date       ┆ u32    ┆ ---         ┆   ┆ _3          ┆ _n_5       ┆ _n_10      ┆ _n_50      │
+│     ┆            ┆        ┆ f32         ┆   ┆ ---         ┆ ---        ┆ ---        ┆ ---        │
+│     ┆            ┆        ┆             ┆   ┆ f32         ┆ f32        ┆ f32        ┆ f32        │
+╞═════╪════════════╪════════╪═════════════╪═══╪═════════════╪════════════╪════════════╪════════════╡
+│ a   ┆ 2001-01-01 ┆ 1      ┆ 1.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+│ a   ┆ 2002-01-01 ┆ 1      ┆ 2.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+│ a   ┆ 2003-01-01 ┆ 1      ┆ 3.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+│ b   ┆ 2001-01-01 ┆ 1      ┆ 1.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+│ b   ┆ 2002-01-01 ┆ 1      ┆ 2.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+│ b   ┆ 2003-01-01 ┆ 1      ┆ 3.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+│ c   ┆ 2001-01-01 ┆ 1      ┆ 1.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+│ c   ┆ 2002-01-01 ┆ 1      ┆ 2.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+│ c   ┆ 2003-01-01 ┆ 1      ┆ 3.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+└─────┴────────────┴────────┴─────────────┴───┴─────────────┴────────────┴────────────┴────────────┘
+```
+For more examples, see the [examples](examples) directory.
 ## Feature Coverage Compared to TSFresh
 
 | Implemented | Function                                                    | Description                                                                                                                                                                                                                                                                                                          |
@@ -62,7 +182,7 @@ TSFX is a Python library for extracting features from time series data.
 | &#9745;     | `minimum(x)`                                                | Calculates the lowest value of the time series x.                                                                                                                                                                                                                                                                    |
 | &#9745;     | `number_crossing_m(x, m)`                                   | Calculates the number of crossings of x on m.                                                                                                                                                                                                                                                                        |
 | &#9744;     | `number_cwt_peaks(x, n)`                                    | Number of different peaks in x.                                                                                                                                                                                                                                                                                      |
-| &#9745;     | `number_peaks(x, n)`                                        | Calculates the number of peaks of at least support n in the time series x.                                                                                                                                                                                                                                           |
+| &#9744;     | `number_peaks(x, n)`                                        | Calculates the number of peaks of at least support n in the time series x.                                                                                                                                                                                                                                           |
 | &#9744;     | `partial_autocorrelation(x, param)`                         | Calculates the value of the partial autocorrelation function at the given lag.                                                                                                                                                                                                                                       |
 | &#9745;     | `percentage_of_reoccurring_datapoints_to_all_datapoints(x)` | Returns the percentage of non-unique data points.                                                                                                                                                                                                                                                                    |
 | &#9745;     | `percentage_of_reoccurring_values_to_all_values(x)`         | Returns the percentage of values that are present in the time series more than once.                                                                                                                                                                                                                                 |

@@ -19,6 +19,7 @@ settings = ExtractionSettings(
     value_cols=["val", "value"],
 )
 gdf = extract_features(df, settings)
+gdf = gdf.sort(by="id")
 print(gdf)
 
 tdf = pl.DataFrame(
@@ -42,8 +43,8 @@ tdf = pl.DataFrame(
 
 dyn_settings = DynamicGroupBySettings(
     time_col="time",
-    every="3y",
-    period="3y",
+    every="1y",
+    period="1y",
     offset="0",
     datetime_format="%Y-%m-%d",
 )
@@ -54,4 +55,5 @@ settings = ExtractionSettings(
     dynamic_settings=dyn_settings,
 )
 gdf = extract_features(tdf, settings)
+gdf = gdf.sort(by="id")
 print(gdf)
