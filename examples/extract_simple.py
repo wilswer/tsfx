@@ -43,8 +43,8 @@ tdf = pl.DataFrame(
 
 dyn_settings = DynamicGroupBySettings(
     time_col="time",
-    every="1y",
-    period="1y",
+    every="3y",
+    period="3y",
     offset="0",
     datetime_format="%Y-%m-%d",
 )
