@@ -1,25 +1,36 @@
+import json
 import time
 
 import pandas as pd
 import polars as pl
 import tsfresh
 import tsfx
-from tsfresh.feature_extraction.settings import EfficientFCParameters
 from tsfx import ExtractionSettings, FeatureSetting
 
 
-def tsfresh_efficient() -> None:
+def tsfresh_efficient() -> float:
     """Benchmark TSFRESH efficient features extraction."""
     print("Benchmarking TSFRESH efficient features extraction...")
     print("Loading data...")
     df = pd.read_csv("./test_data/all_stocks_5yr.csv")
     df = df.dropna(axis=0, how="any")
     print("Data loaded")
-    settings = EfficientFCParameters()
+    with open("./python_benchmarks/efficient.json") as f:
+        settings = json.load(f)
     print("Starting TSFRESH efficient features extraction...")
     start = time.time()
     fdf = tsfresh.extract_features(
-        df[["date", "open", "Name"]],
+        df[
+            [
+                "date",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "Name",
+            ]
+        ],
         column_id="Name",
         column_sort="date",
         default_fc_parameters=settings,
@@ -27,9 +38,10 @@ def tsfresh_efficient() -> None:
     end = time.time()
     print(f"TSFRESH Efficient extraction took {end - start} s")
     print(fdf.head())
+    return end - start
 
 
-def tsfx_efficient() -> None:
+def tsfx_efficient() -> float:
     """Benchmark TSFX efficient features extraction."""
     print("Benchmarking TSFX efficient features extraction...")
     print("Loading data...")
@@ -39,7 +51,13 @@ def tsfx_efficient() -> None:
     opts = ExtractionSettings(
         grouping_col="Name",
         feature_setting=FeatureSetting.Efficient,
-        value_cols=["open"],
+        value_cols=[
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+        ],
     )
     print("Starting TSFX efficient features extraction...")
     start = time.time()
@@ -47,8 +65,10 @@ def tsfx_efficient() -> None:
     end = time.time()
     print(f"TSFX Efficient extraction took {end - start} s")
     print(fdf.sort(pl.col("Name")).head())
+    return end - start
 
 
 if __name__ == "__main__":
-    tsfx_efficient()
-    tsfresh_efficient()
+    time1 = tsfx_efficient()
+    time2 = tsfresh_efficient()
+    print(f"Speed-up: {100 * time2/time1} %")
