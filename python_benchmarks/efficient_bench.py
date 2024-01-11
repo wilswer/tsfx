@@ -71,4 +71,4 @@ def tsfx_efficient() -> float:
 if __name__ == "__main__":
     time1 = tsfx_efficient()
     time2 = tsfresh_efficient()
-    print(f"Speed-up: {100 * time2/time1} %")
+    print(f"Speed-up ~ {time2/time1:.1f}x")

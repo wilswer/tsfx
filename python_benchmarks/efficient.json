@@ -128,13 +128,7 @@
     { "min": -1000000000000.0, "max": 0 },
     { "min": 0, "max": 1000000000000.0 }
   ],
-  "linear_trend": [
-    { "attr": "pvalue" },
-    { "attr": "rvalue" },
-    { "attr": "intercept" },
-    { "attr": "slope" },
-    { "attr": "stderr" }
-  ],
+  "linear_trend": [{ "attr": "intercept" }, { "attr": "slope" }],
   "agg_linear_trend": [
     { "attr": "intercept", "chunk_len": 5, "f_agg": "max" },
     { "attr": "intercept", "chunk_len": 5, "f_agg": "min" },
