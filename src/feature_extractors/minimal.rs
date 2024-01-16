@@ -30,7 +30,7 @@ fn _sum_values(s: Series) -> Result<Option<Series>, PolarsError> {
     }
     let arr = s
         .into_frame()
-        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .to_ndarray::<Float64Type>(IndexOrder::C)
         .unwrap();
     let sum = arr.sum();
     let s = Series::new("", &[sum]);
@@ -38,7 +38,7 @@ fn _sum_values(s: Series) -> Result<Option<Series>, PolarsError> {
 }
 
 pub fn sum_values(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float32);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_sum_values, o)
         .get(0)
@@ -55,15 +55,15 @@ fn _mean(s: Series) -> Result<Option<Series>, PolarsError> {
     }
     let arr = s
         .into_frame()
-        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .to_ndarray::<Float64Type>(IndexOrder::C)
         .unwrap();
-    let mean = arr.mean().unwrap_or(f32::NAN);
+    let mean = arr.mean().unwrap_or(f64::NAN);
     let s = Series::new("", &[mean]);
     Ok(Some(s))
 }
 
 pub fn mean(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float32);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_mean, o)
         .get(0)
@@ -80,15 +80,15 @@ fn _min(s: Series) -> Result<Option<Series>, PolarsError> {
     }
     let arr = s
         .into_frame()
-        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .to_ndarray::<Float64Type>(IndexOrder::C)
         .unwrap();
-    let min = arr.min().unwrap_or(&f32::NAN);
+    let min = arr.min().unwrap_or(&f64::NAN);
     let s = Series::new("", &[*min]);
     Ok(Some(s))
 }
 
 pub fn minimum(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float32);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_min, o)
         .get(0)
@@ -105,15 +105,15 @@ fn _max(s: Series) -> Result<Option<Series>, PolarsError> {
     }
     let arr = s
         .into_frame()
-        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .to_ndarray::<Float64Type>(IndexOrder::C)
         .unwrap();
-    let max = arr.max().unwrap_or(&f32::NAN);
+    let max = arr.max().unwrap_or(&f64::NAN);
     let s = Series::new("", &[*max]);
     Ok(Some(s))
 }
 
 pub fn maximum(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float32);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_max, o)
         .get(0)
@@ -130,16 +130,16 @@ fn _abs_max(s: Series) -> Result<Option<Series>, PolarsError> {
     }
     let arr = s
         .into_frame()
-        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .to_ndarray::<Float64Type>(IndexOrder::C)
         .unwrap();
-    let abs_arr: Array1<f32> = arr.iter().map(|x| x.abs()).collect::<Vec<f32>>().into();
-    let abs_max = *abs_arr.max().unwrap_or(&f32::NAN);
+    let abs_arr: Array1<f64> = arr.iter().map(|x| x.abs()).collect::<Vec<f64>>().into();
+    let abs_max = *abs_arr.max().unwrap_or(&f64::NAN);
     let s = Series::new("", &[abs_max]);
     Ok(Some(s))
 }
 
 pub fn absolute_maximum(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float32);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_abs_max, o)
         .get(0)
@@ -156,7 +156,7 @@ fn _standard_deviation(s: Series) -> Result<Option<Series>, PolarsError> {
     }
     let arr = s
         .into_frame()
-        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .to_ndarray::<Float64Type>(IndexOrder::C)
         .unwrap();
     let standard_deviation = arr.std(1.0);
     let s = Series::new("", &[standard_deviation]);
@@ -164,7 +164,7 @@ fn _standard_deviation(s: Series) -> Result<Option<Series>, PolarsError> {
 }
 
 pub fn standard_deviation(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float32);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_standard_deviation, o)
         .get(0)
@@ -183,7 +183,7 @@ fn _variance(s: Series) -> Result<Option<Series>, PolarsError> {
     }
     let arr = s
         .into_frame()
-        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .to_ndarray::<Float64Type>(IndexOrder::C)
         .unwrap();
     let variance = arr.var(1.0);
     let s = Series::new("", &[variance]);
@@ -191,7 +191,7 @@ fn _variance(s: Series) -> Result<Option<Series>, PolarsError> {
 }
 
 pub fn variance(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float32);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_variance, o)
         .get(0)
@@ -208,19 +208,19 @@ fn _rms(s: Series) -> Result<Option<Series>, PolarsError> {
     }
     let arr = s
         .into_frame()
-        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .to_ndarray::<Float64Type>(IndexOrder::C)
         .unwrap();
     let rms = arr
         .mapv(|x| x.powi(2))
         .mean()
-        .map(f32::sqrt)
-        .unwrap_or(f32::NAN);
+        .map(f64::sqrt)
+        .unwrap_or(f64::NAN);
     let s = Series::new("", &[rms]);
     Ok(Some(s))
 }
 
 pub fn root_mean_square(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float32);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_rms, o)
         .get(0)
@@ -249,15 +249,15 @@ fn _skewness(s: Series) -> Result<Option<Series>, PolarsError> {
     }
     let arr = s
         .into_frame()
-        .to_ndarray::<Float32Type>(IndexOrder::C)
+        .to_ndarray::<Float64Type>(IndexOrder::C)
         .unwrap();
-    let skewness = arr.skewness().unwrap_or(f32::NAN);
+    let skewness = arr.skewness().unwrap_or(f64::NAN);
     let s = Series::new("", &[skewness]);
     Ok(Some(s))
 }
 
 pub fn skewness(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float32);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_skewness, o)
         .get(0)
