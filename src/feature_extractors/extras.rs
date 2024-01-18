@@ -182,7 +182,7 @@ fn _roll(x: &mut [f64], shift: isize) -> &[f64] {
 fn _absolute_energy(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -221,7 +221,7 @@ pub fn test_mean(name: &str) -> Expr {
 fn _mean_absolute_change(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -254,7 +254,7 @@ pub fn expr_mean_change(name: &str) -> Expr {
 fn _ndarray_sum(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -284,7 +284,7 @@ pub fn expr_kurtosis(name: &str) -> Expr {
 fn _kurtosis(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -306,7 +306,7 @@ pub fn kurtosis(name: &str) -> Expr {
 fn _linear_trend_intercept(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -326,7 +326,7 @@ fn _linear_trend_intercept(s: Series) -> Result<Option<Series>, PolarsError> {
             let s_i = Series::new("", &[model.intercept()]);
             Ok(Some(s_i))
         }
-        Err(_) => Ok(None),
+        Err(_) => Ok(Some(Series::new_empty("", &DataType::Float64))),
     }
 }
 
@@ -341,7 +341,7 @@ pub fn linear_trend_intercept(name: &str) -> Expr {
 fn _linear_trend_slope(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -361,7 +361,7 @@ fn _linear_trend_slope(s: Series) -> Result<Option<Series>, PolarsError> {
             let s_p = Series::new("", &[model.params()[0]]);
             Ok(Some(s_p))
         }
-        Err(_) => Ok(None),
+        Err(_) => Ok(Some(Series::new_empty("", &DataType::Float64))),
     }
 }
 
@@ -412,7 +412,7 @@ pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
 fn _ratio_beyond_r_sigma(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -421,7 +421,7 @@ fn _ratio_beyond_r_sigma(s: Series, r: f64) -> Result<Option<Series>, PolarsErro
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let std = arr.std(1.0);
     let count = arr
@@ -444,7 +444,7 @@ pub fn ratio_beyond_r_sigma(name: &str, r: f64) -> Expr {
 fn _large_standard_deviation(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -470,7 +470,7 @@ pub fn large_standard_deviation(name: &str, r: f64) -> Expr {
 fn _symmetry_looking(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let mut arr = s
         .into_frame()
@@ -479,23 +479,23 @@ fn _symmetry_looking(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
     let median_res = arr.quantile_axis_skipnan_mut(Axis(0), n64(0.5), &Midpoint);
     let median = match median_res {
         Ok(m) => m[0],
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let mean_median_diff = (mean - median).abs();
     let max_res = arr.max();
     let max = match max_res {
         Ok(m) => m,
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let min_res = arr.min();
     let min = match min_res {
         Ok(m) => m,
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let max_min_diff = max - min;
     let out = mean_median_diff < r * max_min_diff;
@@ -515,7 +515,7 @@ pub fn symmetry_looking(name: &str, r: f64) -> Expr {
 fn _has_duplicate_max(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -524,7 +524,7 @@ fn _has_duplicate_max(s: Series) -> Result<Option<Series>, PolarsError> {
     let max_res = arr.max();
     let max = match max_res {
         Ok(m) => m,
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let count = arr.mapv(|x| if x == *max { 1.0 } else { 0.0 }).sum();
     let out = count > 1.0;
@@ -544,7 +544,7 @@ pub fn has_duplicate_max(name: &str) -> Expr {
 fn _has_duplicate_min(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -553,7 +553,7 @@ fn _has_duplicate_min(s: Series) -> Result<Option<Series>, PolarsError> {
     let min_res = arr.min();
     let min = match min_res {
         Ok(m) => m,
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let count = arr.mapv(|x| if x == *min { 1.0 } else { 0.0 }).sum();
     let out = count > 1.0;
@@ -573,7 +573,7 @@ pub fn has_duplicate_min(name: &str) -> Expr {
 fn _cid_ce(s: Series, normalize: bool) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -607,7 +607,7 @@ pub fn cid_ce(name: &str, normalize: bool) -> Expr {
 fn _absolute_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -617,7 +617,7 @@ fn _absolute_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
     let max_res = abs_arr.max();
     let max = match max_res {
         Ok(m) => *m,
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let s = Series::new("", &[max]);
     Ok(Some(s))
@@ -634,7 +634,7 @@ pub fn absolute_maximum(name: &str) -> Expr {
 fn _absolute_sum_of_changes(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -661,7 +661,7 @@ pub fn absolute_sum_of_changes(name: &str) -> Expr {
 fn _count_above_mean(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -670,7 +670,7 @@ fn _count_above_mean(s: Series) -> Result<Option<Series>, PolarsError> {
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let out = arr.mapv(|x| if x > mean { 1.0 } else { 0.0 }).sum();
     let s = Series::new("", &[out]);
@@ -688,7 +688,7 @@ pub fn count_above_mean(name: &str) -> Expr {
 fn _count_below_mean(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -697,7 +697,7 @@ fn _count_below_mean(s: Series) -> Result<Option<Series>, PolarsError> {
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let out = arr.mapv(|x| if x < mean { 1.0 } else { 0.0 }).sum();
     let s = Series::new("", &[out]);
@@ -715,7 +715,7 @@ pub fn count_below_mean(name: &str) -> Expr {
 fn _count_above(s: Series, t: f64) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -737,7 +737,7 @@ pub fn count_above(name: &str, t: f64) -> Expr {
 fn _count_below(s: Series, t: f64) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -759,7 +759,7 @@ pub fn count_below(name: &str, t: f64) -> Expr {
 fn _first_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -772,7 +772,7 @@ fn _first_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> 
     let max_res = arr.argmax();
     let max = match max_res {
         Ok(m) => m,
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let out = max as f64 / arr.len() as f64;
     let s = Series::new("", &[out]);
@@ -790,7 +790,7 @@ pub fn first_location_of_maximum(name: &str) -> Expr {
 fn _first_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -803,7 +803,7 @@ fn _first_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> 
     let min_res = arr.argmin();
     let min = match min_res {
         Ok(m) => m,
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let out = min as f64 / arr.len() as f64;
     let s = Series::new("", &[out]);
@@ -821,7 +821,7 @@ pub fn first_location_of_minimum(name: &str) -> Expr {
 fn _last_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -834,7 +834,7 @@ fn _last_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
     let max_res = arr.argmax();
     let max = match max_res {
         Ok(m) => m,
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let out = 1.0 - (max as f64 / arr.len() as f64);
     let s = Series::new("", &[out]);
@@ -852,7 +852,7 @@ pub fn last_location_of_maximum(name: &str) -> Expr {
 fn _last_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -865,7 +865,7 @@ fn _last_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
     let min_res = arr.argmin();
     let min = match min_res {
         Ok(m) => m,
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let out = 1.0 - (min as f64 / arr.len() as f64);
     let s = Series::new("", &[out]);
@@ -883,7 +883,7 @@ pub fn last_location_of_minimum(name: &str) -> Expr {
 fn _longest_strike_below_mean(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -896,7 +896,7 @@ fn _longest_strike_below_mean(s: Series) -> Result<Option<Series>, PolarsError> 
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let bool_arr = arr.mapv(|x| x < mean);
     let out = _get_length_sequences_where(&bool_arr)
@@ -918,7 +918,7 @@ pub fn longest_strike_below_mean(name: &str) -> Expr {
 fn _longest_strike_above_mean(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -931,7 +931,7 @@ fn _longest_strike_above_mean(s: Series) -> Result<Option<Series>, PolarsError> 
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let bool_arr = arr.mapv(|x| x > mean);
     let out = _get_length_sequences_where(&bool_arr)
@@ -953,7 +953,7 @@ pub fn longest_strike_above_mean(name: &str) -> Expr {
 fn _has_duplicate(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -991,7 +991,7 @@ pub fn has_duplicate(name: &str) -> Expr {
 fn _variation_coefficient(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -1000,7 +1000,7 @@ fn _variation_coefficient(s: Series) -> Result<Option<Series>, PolarsError> {
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let std = arr.std(1.0);
     let out = if mean == 0.0 { f64::NAN } else { std / mean };
@@ -1019,7 +1019,7 @@ pub fn variation_coefficient(name: &str) -> Expr {
 fn _mean_change(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -1049,7 +1049,7 @@ pub fn mean_change(name: &str) -> Expr {
 fn _ratio_value_number_to_time_series_length(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -1089,7 +1089,7 @@ pub fn ratio_value_number_to_time_series_length(name: &str) -> Expr {
 fn _sum_of_reoccurring_values(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -1119,7 +1119,7 @@ pub fn sum_of_reoccurring_values(name: &str) -> Expr {
 fn _sum_of_reoccurring_data_points(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -1151,7 +1151,7 @@ fn _percentage_of_reoccurring_values_to_all_values(
 ) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -1186,7 +1186,7 @@ fn _percentage_of_reoccurring_values_to_all_datapoints(
 ) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -1223,7 +1223,7 @@ fn _agg_linear_trend_intercept(
 ) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     if s.len() < chunk_size {
         return Ok(Some(Series::new("", &[f64::NAN])));
@@ -1278,7 +1278,7 @@ fn _agg_linear_trend_slope(
 ) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     if s.len() < chunk_size {
         return Ok(Some(Series::new("", &[f64::NAN])));
@@ -1329,7 +1329,7 @@ fn agg_linear_trend_slope(name: &str, chunk_size: usize, aggregator: ChunkAggreg
 fn _mean_n_absolute_max(s: Series, n: usize) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     if s.len() < n {
         return Ok(Some(Series::new("", &[f64::NAN])));
@@ -1356,7 +1356,7 @@ pub fn mean_n_absolute_max(name: &str, n: usize) -> Expr {
 fn _autocorrelation(s: Series, lag: usize) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     if s.len() < lag {
         return Ok(Some(Series::new("", &[f64::NAN])));
@@ -1372,7 +1372,7 @@ fn _autocorrelation(s: Series, lag: usize) -> Result<Option<Series>, PolarsError
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let y1 = arr.slice(s![..(arr.len() - lag)]);
     let y2 = arr.slice(s![lag..]);
@@ -1394,7 +1394,7 @@ pub fn autocorrelation(name: &str, lag: usize) -> Expr {
 fn _quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let mut arr = s
         .into_frame()
@@ -1403,7 +1403,7 @@ fn _quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
     let q_res = arr.quantile_axis_skipnan_mut(Axis(0), n64(q), &Midpoint);
     let q_val = match q_res {
         Ok(m) => m[0],
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let s = Series::new("", &[q_val as f64]);
     Ok(Some(s))
@@ -1420,7 +1420,7 @@ pub fn quantile(name: &str, q: f64) -> Expr {
 fn _number_crossing_m(s: Series, m: f64) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -1451,7 +1451,7 @@ pub fn number_crossing_m(name: &str, m: f64) -> Expr {
 fn _range_count(s: Series, lower: f64, upper: f64) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     if upper < lower {
         return Ok(Some(Series::new("", &[f64::NAN])));
@@ -1482,7 +1482,7 @@ pub fn range_count(name: &str, lower: f64, upper: f64) -> Expr {
 fn _index_mass_quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let arr = s
         .into_frame()
@@ -1516,7 +1516,7 @@ pub fn index_mass_quantile(name: &str, q: f64) -> Expr {
 fn _c3(s: Series, lag: usize) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let n = s.len();
     if n <= 2 * lag {
@@ -1544,7 +1544,7 @@ fn _c3(s: Series, lag: usize) -> Result<Option<Series>, PolarsError> {
     let mean_opt = prod.mean();
     let out = match mean_opt {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let s = Series::new("", &[out as f64]);
     Ok(Some(s))
@@ -1564,7 +1564,7 @@ fn _time_reversal_asymmetry_statistic(
 ) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     let n = s.len();
     if n <= 2 * lag {
@@ -1591,7 +1591,7 @@ fn _time_reversal_asymmetry_statistic(
     let mean_opt = prod.mean();
     let out = match mean_opt {
         Some(m) => m,
-        None => return Ok(None),
+        None => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let s = Series::new("", &[out as f64]);
     Ok(Some(s))
@@ -1611,7 +1611,7 @@ pub fn time_reversal_asymmetry_statistic(name: &str, lag: usize) -> Expr {
 fn _number_peaks(s: Series, n: usize) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
     if s.len() < n {
         return Ok(Some(Series::new("", &[0 as f64])));

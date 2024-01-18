@@ -10,13 +10,14 @@ from tsfx import (
 
 
 def test_empty_df():
-    df = pl.DataFrame({"id": [], "val": []}).lazy()
+    df = pl.DataFrame({"id": [], "val": []})
+    df = df.select([pl.col("id").cast(pl.Utf8), pl.col("val").cast(pl.Float64)])
     opts = ExtractionSettings(
         grouping_col="id",
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
-    fdf = extract_features(df, opts)
+    fdf = extract_features(df.lazy(), opts)
     assert fdf.is_empty()
 
 def test_unit_length_df():
