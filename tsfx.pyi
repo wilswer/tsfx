@@ -39,7 +39,7 @@ class DynamicGroupBySettings:
         self.datetime_format = datetime_format
 
 def extract_features(
-    df: pl.LazyFrame,
+    lf: pl.LazyFrame,
     settings: ExtractionSettings,
     streaming: bool = False,
 ) -> pl.DataFrame: ...
