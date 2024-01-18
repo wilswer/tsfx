@@ -180,6 +180,7 @@ fn _roll(x: &mut [f64], shift: isize) -> &[f64] {
 }
 
 fn _absolute_energy(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -218,6 +219,7 @@ pub fn test_mean(name: &str) -> Expr {
 }
 
 fn _mean_absolute_change(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -250,6 +252,7 @@ pub fn expr_mean_change(name: &str) -> Expr {
 }
 
 fn _ndarray_sum(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -279,6 +282,7 @@ pub fn expr_kurtosis(name: &str) -> Expr {
 }
 
 fn _kurtosis(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -300,6 +304,7 @@ pub fn kurtosis(name: &str) -> Expr {
 }
 
 fn _linear_trend_intercept(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -334,6 +339,7 @@ pub fn linear_trend_intercept(name: &str) -> Expr {
 }
 
 fn _linear_trend_slope(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -404,6 +410,7 @@ pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
 }
 
 fn _ratio_beyond_r_sigma(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -435,6 +442,7 @@ pub fn ratio_beyond_r_sigma(name: &str, r: f64) -> Expr {
 }
 
 fn _large_standard_deviation(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -460,6 +468,7 @@ pub fn large_standard_deviation(name: &str, r: f64) -> Expr {
 }
 
 fn _symmetry_looking(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -504,6 +513,7 @@ pub fn symmetry_looking(name: &str, r: f64) -> Expr {
 }
 
 fn _has_duplicate_max(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -532,6 +542,7 @@ pub fn has_duplicate_max(name: &str) -> Expr {
 }
 
 fn _has_duplicate_min(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -560,6 +571,7 @@ pub fn has_duplicate_min(name: &str) -> Expr {
 }
 
 fn _cid_ce(s: Series, normalize: bool) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -593,6 +605,7 @@ pub fn cid_ce(name: &str, normalize: bool) -> Expr {
 }
 
 fn _absolute_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -619,6 +632,7 @@ pub fn absolute_maximum(name: &str) -> Expr {
 }
 
 fn _absolute_sum_of_changes(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -645,6 +659,7 @@ pub fn absolute_sum_of_changes(name: &str) -> Expr {
 }
 
 fn _count_above_mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -671,6 +686,7 @@ pub fn count_above_mean(name: &str) -> Expr {
 }
 
 fn _count_below_mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -697,6 +713,7 @@ pub fn count_below_mean(name: &str) -> Expr {
 }
 
 fn _count_above(s: Series, t: f64) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -718,6 +735,7 @@ pub fn count_above(name: &str, t: f64) -> Expr {
 }
 
 fn _count_below(s: Series, t: f64) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -739,6 +757,7 @@ pub fn count_below(name: &str, t: f64) -> Expr {
 }
 
 fn _first_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -769,6 +788,7 @@ pub fn first_location_of_maximum(name: &str) -> Expr {
 }
 
 fn _first_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -799,6 +819,7 @@ pub fn first_location_of_minimum(name: &str) -> Expr {
 }
 
 fn _last_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -829,6 +850,7 @@ pub fn last_location_of_maximum(name: &str) -> Expr {
 }
 
 fn _last_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -859,6 +881,7 @@ pub fn last_location_of_minimum(name: &str) -> Expr {
 }
 
 fn _longest_strike_below_mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -893,6 +916,7 @@ pub fn longest_strike_below_mean(name: &str) -> Expr {
 }
 
 fn _longest_strike_above_mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -927,6 +951,7 @@ pub fn longest_strike_above_mean(name: &str) -> Expr {
 }
 
 fn _has_duplicate(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -964,6 +989,7 @@ pub fn has_duplicate(name: &str) -> Expr {
 }
 
 fn _variation_coefficient(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -991,6 +1017,7 @@ pub fn variation_coefficient(name: &str) -> Expr {
 }
 
 fn _mean_change(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1020,6 +1047,7 @@ pub fn mean_change(name: &str) -> Expr {
 }
 
 fn _ratio_value_number_to_time_series_length(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1059,6 +1087,7 @@ pub fn ratio_value_number_to_time_series_length(name: &str) -> Expr {
 }
 
 fn _sum_of_reoccurring_values(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1088,6 +1117,7 @@ pub fn sum_of_reoccurring_values(name: &str) -> Expr {
 }
 
 fn _sum_of_reoccurring_data_points(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1119,6 +1149,7 @@ pub fn sum_of_reoccurring_data_points(name: &str) -> Expr {
 fn _percentage_of_reoccurring_values_to_all_values(
     s: Series,
 ) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1153,6 +1184,7 @@ pub fn percentage_of_reoccurring_values_to_all_values(name: &str) -> Expr {
 fn _percentage_of_reoccurring_values_to_all_datapoints(
     s: Series,
 ) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1189,6 +1221,7 @@ fn _agg_linear_trend_intercept(
     chunk_size: usize,
     aggregator: ChunkAggregator,
 ) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1243,6 +1276,7 @@ fn _agg_linear_trend_slope(
     chunk_size: usize,
     aggregator: ChunkAggregator,
 ) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1293,6 +1327,7 @@ fn agg_linear_trend_slope(name: &str, chunk_size: usize, aggregator: ChunkAggreg
 }
 
 fn _mean_n_absolute_max(s: Series, n: usize) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1319,6 +1354,7 @@ pub fn mean_n_absolute_max(name: &str, n: usize) -> Expr {
 }
 
 fn _autocorrelation(s: Series, lag: usize) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1356,6 +1392,7 @@ pub fn autocorrelation(name: &str, lag: usize) -> Expr {
 }
 
 fn _quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1381,6 +1418,7 @@ pub fn quantile(name: &str, q: f64) -> Expr {
 }
 
 fn _number_crossing_m(s: Series, m: f64) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1411,6 +1449,7 @@ pub fn number_crossing_m(name: &str, m: f64) -> Expr {
 }
 
 fn _range_count(s: Series, lower: f64, upper: f64) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1441,6 +1480,7 @@ pub fn range_count(name: &str, lower: f64, upper: f64) -> Expr {
 }
 
 fn _index_mass_quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1474,6 +1514,7 @@ pub fn index_mass_quantile(name: &str, q: f64) -> Expr {
 }
 
 fn _c3(s: Series, lag: usize) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1521,6 +1562,7 @@ fn _time_reversal_asymmetry_statistic(
     s: Series,
     lag: usize,
 ) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -1567,6 +1609,7 @@ pub fn time_reversal_asymmetry_statistic(name: &str, lag: usize) -> Expr {
 }
 
 fn _number_peaks(s: Series, n: usize) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }

@@ -25,6 +25,7 @@ pub fn count(name: &str) -> Expr {
 }
 
 fn _sum_values(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -50,6 +51,7 @@ pub fn expr_sum(name: &str) -> Expr {
 }
 
 fn _mean(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -75,6 +77,7 @@ pub fn expr_mean(name: &str) -> Expr {
 }
 
 fn _min(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -100,6 +103,7 @@ pub fn expr_minimum(name: &str) -> Expr {
 }
 
 fn _max(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -125,6 +129,7 @@ pub fn expr_maximum(name: &str) -> Expr {
 }
 
 fn _abs_max(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -151,6 +156,7 @@ pub fn expr_median(name: &str) -> Expr {
 }
 
 fn _standard_deviation(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -178,6 +184,7 @@ pub fn expr_standard_deviation(name: &str) -> Expr {
 }
 
 fn _variance(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -203,6 +210,7 @@ pub fn expr_variance(name: &str) -> Expr {
 }
 
 fn _rms(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }
@@ -244,6 +252,7 @@ pub fn expr_skewness(name: &str) -> Expr {
 }
 
 fn _skewness(s: Series) -> Result<Option<Series>, PolarsError> {
+    let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(None);
     }

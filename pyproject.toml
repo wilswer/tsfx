@@ -16,7 +16,14 @@ dependencies = ["polars", "pyarrow"]
 [project.optional-dependencies]
 dev = ["maturin", "ruff", "mypy", "pre-commit", "pytest"]
 bench = ["tsfresh", "pandas"]
-examples = ["plotly", "qdrant-client", "jupyter", "notebook", "numpy"]
+examples = [
+  "plotly",
+  "qdrant-client",
+  "jupyter",
+  "notebook",
+  "numpy",
+  "scikit-learn",
+]
 all = ["tsfx[dev,bench,examples]"]
 
 [tool.maturin]

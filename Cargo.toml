@@ -9,12 +9,12 @@ name = "tsfx"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-pyo3 = "0"
-chrono = "0"
-csv = "1"
-ndarray = "0"
-ndarray-stats = "0"
-polars = { version = "0", features = [
+pyo3 = "*"
+chrono = "*"
+csv = "*"
+ndarray = "*"
+ndarray-stats = "*"
+polars = { version = "*", features = [
   "polars-io",
   "lazy",
   "csv",
@@ -24,15 +24,15 @@ polars = { version = "0", features = [
   "ndarray",
   "streaming",
 ] }
-pyo3-polars = { version = "0", features = ["lazy"] }
-linfa = "0"
-linfa-linear = "0"
-noisy_float = "0"
-itertools = "0"
-ordered-float = "4"
+pyo3-polars = { version = "*", features = ["lazy"] }
+linfa = "*"
+linfa-linear = "*"
+noisy_float = "*"
+itertools = "*"
+ordered-float = "*"
 
 [dev-dependencies]
-criterion = { version = "0", features = ["html_reports"] }
+criterion = { version = "*", features = ["html_reports"] }
 
 [[bench]]
 name = "bench_main"
