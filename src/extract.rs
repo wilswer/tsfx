@@ -48,7 +48,6 @@ pub fn lazy_feature_df(df: LazyFrame, opts: ExtractionSettings) -> LazyFrame {
     let aggregators = get_aggregators(&opts);
     let mut selected_cols = Vec::new();
     selected_cols.push(col(&opts.grouping_col));
-    let df = df.drop_nulls(None);
     for val_col in &opts.value_cols {
         selected_cols.push(col(val_col));
     }
