@@ -30,6 +30,7 @@ linfa-linear = "*"
 noisy_float = "*"
 itertools = "*"
 ordered-float = "*"
+num = "*"
 
 [dev-dependencies]
 criterion = { version = "*", features = ["html_reports"] }

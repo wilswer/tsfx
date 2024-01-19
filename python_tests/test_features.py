@@ -33,7 +33,7 @@ def test_unit_length_df():
 
 
 # def test_only_nan_group_dropped():
-#     df = pl.DataFrame({"id": ["a", "b", "c"], "val": [1.0, 2.0, None]})
+#     df = pl.DataFrame({"id": ["a", "b", "c", "c"], "val": [1.0, 2.0, None, None]})
 #     df = df.select([pl.col("id").cast(pl.Utf8), pl.col("val").cast(pl.Float64)])
 #     opts = ExtractionSettings(
 #         grouping_col="id",
@@ -43,6 +43,20 @@ def test_unit_length_df():
 #     fdf = extract_features(df.lazy(), opts)
 #     fdf = fdf.sort("id")
 #     assert fdf.get_column("id").to_list() == ["a", "b"]
+
+def test_long_constant_df():
+    N = 100_000
+    df = pl.DataFrame({"id": ["a"] * (N + 1) + ["b"] * (N + 1), "val": [0.0] * N + [1.0] + [1.0] * N + [2.0]}).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+    assert fdf.get_column("id").to_list() == ["a", "b"]
+    assert fdf.get_column("val__mean").to_list() == pytest.approx([0.0, 1.0], abs=1e-4)
+
 
 
 def test_nan_df():

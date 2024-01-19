@@ -1,4 +1,5 @@
 use core::f64;
+use std::ops::{Add, Div, Mul, Rem, Sub};
 use std::{fmt::Display, str::FromStr};
 
 use itertools::izip;
@@ -7,9 +8,13 @@ use linfa::prelude::*;
 use linfa_linear::LinearRegression;
 use ndarray::ArrayView1;
 use ndarray::{s, Array, Array1, Axis, Ix1};
+use ndarray_stats::errors::QuantileError;
+use ndarray_stats::Quantile1dExt;
 use ndarray_stats::{interpolate::Midpoint, QuantileExt, SummaryStatisticsExt};
 use noisy_float::types::n64;
+use num::FromPrimitive;
 use ordered_float::OrderedFloat;
+use polars::lazy::dsl::quantile;
 use polars::{prelude::*, series::ops::NullBehavior};
 
 pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
@@ -89,7 +94,7 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
             if q == 0.5 {
                 continue;
             }
-            aggregators.push(quantile(col, q));
+            aggregators.push(expr_quantile(col, q));
         }
         aggregators.push(number_crossing_m(col, -1.0));
         aggregators.push(number_crossing_m(col, 0.0));
@@ -145,6 +150,29 @@ impl Display for ChunkAggregator {
             ChunkAggregator::Min => write!(f, "min"),
             ChunkAggregator::Var => write!(f, "var"),
         }
+    }
+}
+
+/// Return the median. Sorts its argument in place.
+fn _median_mut<T>(xs: &mut Array1<T>) -> Result<T, QuantileError>
+where
+    T: Clone + Copy + Ord + FromPrimitive,
+    T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Div<Output = T> + Rem<Output = T>,
+{
+    if false {
+        // quantile_mut may fail with the error: fatal runtime error: stack overflow
+        // See https://github.com/rust-ndarray/ndarray-stats/issues/86
+        xs.quantile_mut(n64(0.5), &Midpoint)
+    } else {
+        if xs.is_empty() {
+            return Err(QuantileError::EmptyInput);
+        }
+        xs.as_slice_mut().unwrap().sort_unstable();
+        Ok(if xs.len() % 2 == 0 {
+            (xs[xs.len() / 2] + xs[xs.len() / 2 - 1]) / (T::from_u64(2).unwrap())
+        } else {
+            xs[xs.len() / 2]
+        })
     }
 }
 
@@ -472,29 +500,34 @@ fn _symmetry_looking(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
-    let mut arr = s
+    let arr = s
         .into_frame()
         .to_ndarray::<Float64Type>(IndexOrder::C)
         .unwrap();
-    let median_res = arr.quantile_axis_skipnan_mut(Axis(0), n64(0.5), &Midpoint);
+    let arr = arr
+        .remove_axis(Axis(1))
+        .into_dimensionality::<Ix1>()
+        .unwrap();
+    let mut arr = arr.mapv(n64);
+    let median_res = _median_mut(&mut arr);
     let median = match median_res {
-        Ok(m) => m[0],
+        Ok(m) => f64::from(m),
         Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let mean_opt = arr.mean();
     let mean = match mean_opt {
-        Some(m) => m,
+        Some(m) => f64::from(m),
         None => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let mean_median_diff = (mean - median).abs();
     let max_res = arr.max();
     let max = match max_res {
-        Ok(m) => m,
+        Ok(m) => f64::from(*m),
         Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let min_res = arr.min();
     let min = match min_res {
-        Ok(m) => m,
+        Ok(m) => f64::from(*m),
         Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
     let max_min_diff = max - min;
@@ -1396,24 +1429,30 @@ fn _quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new_empty("", &DataType::Float64)));
     }
-    let mut arr = s
+    let arr = s
         .into_frame()
         .to_ndarray::<Float64Type>(IndexOrder::C)
         .unwrap();
-    let q_res = arr.quantile_axis_skipnan_mut(Axis(0), n64(q), &Midpoint);
+    let mut arr = arr.mapv(n64);
+    let q_res = arr.quantile_axis_mut(Axis(0), n64(q), &Midpoint);
     let q_val = match q_res {
         Ok(m) => m[0],
         Err(_) => return Ok(Some(Series::new_empty("", &DataType::Float64))),
     };
-    let s = Series::new("", &[q_val as f64]);
+    let s = Series::new("", &[f64::from(q_val)]);
     Ok(Some(s))
 }
 
-pub fn quantile(name: &str, q: f64) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
-    col(name)
-        .apply(move |s| _quantile(s, q), o)
-        .get(0)
+// pub fn quantile(name: &str, q: f64) -> Expr {
+//     let o = GetOutput::from_type(DataType::Float64);
+//     col(name)
+//         .apply(move |s| _quantile(s, q), o)
+//         .get(0)
+//         .alias(&format!("{}__quantile__q_{:.1}", name, q))
+// }
+
+pub fn expr_quantile(name: &str, q: f64) -> Expr {
+    quantile(name, lit(q), QuantileInterpolOptions::Midpoint)
         .alias(&format!("{}__quantile__q_{:.1}", name, q))
 }
 
