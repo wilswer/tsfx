@@ -518,6 +518,59 @@ def test_variance():
     assert fdf.get_column("val__variance").to_list()[0] == 0
     assert math.isnan(fdf.get_column("val__variance").to_list()[-1])
 
+def test_variance_larger_than_standard_deviation():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "a", "a", "a", "b", "b", "b", "b", "b"],
+            "val": [-1.0, -1.0, 1.0, 1.0, 1.0, -1.0, -1.0, 0.1, 0.1, 0.1],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+    assert fdf.get_column("val__variance_larger_than_standard_deviation").to_list()[0] == 1.0
+    assert fdf.get_column("val__variance_larger_than_standard_deviation").to_list()[1] == 0.0
+
+
+def test_large_standard_deviation():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "a", "a"],
+            "val": [-1.0, -1.0, 1.0, 1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+    assert fdf.get_column("val__large_standard_deviation__r_0.25").to_list()[0] == 1.0
+    assert fdf.get_column("val__large_standard_deviation__r_0.30").to_list()[0] == 1.0
+    assert fdf.get_column("val__large_standard_deviation__r_0.50").to_list()[0] == 1.0
+    assert fdf.get_column("val__large_standard_deviation__r_0.70").to_list()[0] == 0.0
+
+def test_symmetry_looking():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "a", "a", "b", "b", "b", "b", "b", "c", "c", "c", "c", "c", "c", "d", "d"],
+            "val": [-1.0, -1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -2.0, -2.0, -2.0, -1.0, -1.0, -1.0, -0.9, -0.900001],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort("id")
+    assert fdf.get_column("val__symmetry_looking__r_0.75").to_list()[0] == 1.0
+    assert fdf.get_column("val__symmetry_looking__r_0.05").to_list() == [1.0, 0.0, 1.0, 1.0]
 
 def test_percentage_of_reoccurring_values_to_all_values():
     df = pl.DataFrame(

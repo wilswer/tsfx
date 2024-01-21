@@ -482,12 +482,12 @@ fn _large_standard_deviation(s: Series, r: f64) -> Result<Option<Series>, Polars
     let max = arr.max().unwrap_or(&0.0);
     let std = arr.std(1.0);
     let out = std > r * (max - min);
-    let s = Series::new("", &[out]);
+    let s = Series::new("", &[out as u8 as f64]);
     Ok(Some(s))
 }
 
 pub fn large_standard_deviation(name: &str, r: f64) -> Expr {
-    let o = GetOutput::from_type(DataType::Boolean);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(move |s| _large_standard_deviation(s, r), o)
         .cast(DataType::Float64)
@@ -532,12 +532,12 @@ fn _symmetry_looking(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
     };
     let max_min_diff = max - min;
     let out = mean_median_diff < r * max_min_diff;
-    let s = Series::new("", &[out]);
+    let s = Series::new("", &[out as u8 as f64]);
     Ok(Some(s))
 }
 
 pub fn symmetry_looking(name: &str, r: f64) -> Expr {
-    let o = GetOutput::from_type(DataType::Boolean);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(move |s| _symmetry_looking(s, r), o)
         .cast(DataType::Float64)
