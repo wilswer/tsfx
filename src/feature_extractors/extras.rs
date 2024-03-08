@@ -566,7 +566,7 @@ fn _has_duplicate_max(s: Series) -> Result<Option<Series>, PolarsError> {
 }
 
 pub fn has_duplicate_max(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Boolean);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_has_duplicate_max, o)
         .cast(DataType::Float64)
@@ -595,7 +595,7 @@ fn _has_duplicate_min(s: Series) -> Result<Option<Series>, PolarsError> {
 }
 
 pub fn has_duplicate_min(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Boolean);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_has_duplicate_min, o)
         .cast(DataType::Float64)
@@ -1013,7 +1013,7 @@ fn _has_duplicate(s: Series) -> Result<Option<Series>, PolarsError> {
 }
 
 pub fn has_duplicate(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Boolean);
+    let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_has_duplicate, o)
         .cast(DataType::Float64)
