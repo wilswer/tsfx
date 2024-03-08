@@ -6,6 +6,7 @@ from tsfx import (
     ExtractionSettings,
     FeatureSetting,
     extract_features,
+    DynamicGroupBySettings,
 )
 
 
@@ -32,17 +33,54 @@ def test_unit_length_df():
     assert fdf.shape[0] == 1
 
 
-# def test_only_nan_group_dropped():
-#     df = pl.DataFrame({"id": ["a", "b", "c", "c"], "val": [1.0, 2.0, None, None]})
-#     df = df.select([pl.col("id").cast(pl.Utf8), pl.col("val").cast(pl.Float64)])
-#     opts = ExtractionSettings(
-#         grouping_col="id",
-#         feature_setting=FeatureSetting.Efficient,
-#         value_cols=["val"],
-#     )
-#     fdf = extract_features(df.lazy(), opts)
-#     fdf = fdf.sort("id")
-#     assert fdf.get_column("id").to_list() == ["a", "b"]
+def test_only_nan_group_dropped():
+    df = pl.DataFrame({"id": ["a", "b", "c", "c"], "val": [1.0, 2.0, None, None]})
+    df = df.select([pl.col("id").cast(pl.Utf8), pl.col("val").cast(pl.Float64)])
+    opts = ExtractionSettings(
+        grouping_col="id",
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df.lazy(), opts)
+    fdf = fdf.sort("id")
+    assert fdf.get_column("id").to_list() == ["a", "b", "c"]
+
+def test_only_nan_group_dropped_with_date():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a", "a", "b", "b", "b", "c", "c", "c"],
+            "time": [
+                "2001-01-01",
+                "2002-01-01",
+                "2003-01-01",
+                "2001-01-01",
+                "2002-01-01",
+                "2003-01-01",
+                "2001-01-01",
+                "2002-01-01",
+                "2003-01-01",
+            ],
+            "val": [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, None, None, None],
+            "value": [4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 4.0, 5.0, 6.0],
+        },
+    ).lazy()
+
+    dyn_settings = DynamicGroupBySettings(
+        time_col="time",
+        every="3y",
+        period="3y",
+        offset="0",
+        datetime_format="%Y-%m-%d",
+    )
+    settings = ExtractionSettings(
+        grouping_col="id",
+        value_cols=["val", "value"],
+        feature_setting=FeatureSetting.Efficient,
+        dynamic_settings=dyn_settings,
+    )
+    fdf = extract_features(df, settings)
+    assert fdf.get_column("id").to_list() == ["a", "b", "c"]
+    assert fdf["val__mean"].fill_nan(None).to_list()[-1] == None
 
 def test_long_constant_df():
     N = 100_000
