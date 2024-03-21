@@ -1,0 +1,56 @@
+[features]
+
+[features.length]
+include = true
+
+[features.sum_values]
+include = true
+
+[features.mean]
+include = true
+
+[features.median]
+include = true
+
+[features.minimum]
+include = true
+
+[features.maximum]
+include = true
+
+[features.standard_deviation]
+include = true
+
+[features.variance]
+include = true
+
+[features.skewness]
+include = true
+
+[features.root_mean_square]
+include = true
+
+[features.absolute_maximum]
+include = true
+
+[features.kurtosis]
+include = true
+
+[features.absolute_energy]
+include = true
+
+[features.mean_absolute_change]
+include = true
+
+[features.linear_trend_intercept]
+include = true
+
+[features.linear_trend_slope]
+include = true
+
+[features.variance_larger_than_standard_deviation]
+include = true
+
+[features.ratio_beyond_r_sigma]
+include = true
+parameters = { r = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 5.0, 6.0, 7.0, 10.0] }
