@@ -70,20 +70,12 @@ pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
         let chunk_aggs: [&str; 4] = ["mean", "min", "max", "var"];
         for ca in chunk_aggs.into_iter() {
             for chunk_size in chunk_sizes.into_iter() {
-                aggregators.push(agg_linear_trend_intercept(
-                    col,
-                    chunk_size,
-                    ChunkAggregator::from_str(ca).unwrap(),
-                ));
+                aggregators.push(agg_linear_trend_intercept(col, chunk_size, ca));
             }
         }
         for ca in chunk_aggs.into_iter() {
             for chunk_size in chunk_sizes.into_iter() {
-                aggregators.push(agg_linear_trend_slope(
-                    col,
-                    chunk_size,
-                    ChunkAggregator::from_str(ca).unwrap(),
-                ));
+                aggregators.push(agg_linear_trend_slope(col, chunk_size, ca));
             }
         }
         aggregators.push(mean_n_absolute_max(col, 7));
@@ -1283,18 +1275,19 @@ fn _agg_linear_trend_intercept(
     }
 }
 
-fn agg_linear_trend_intercept(name: &str, chunk_size: usize, aggregator: ChunkAggregator) -> Expr {
+fn agg_linear_trend_intercept(name: &str, chunk_size: usize, aggregator: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
-    let agg_clone = aggregator.clone();
+    let agg_enum = ChunkAggregator::from_str(aggregator).unwrap();
+    let agg_str = aggregator.to_string();
     col(name)
         .apply(
-            move |s| _agg_linear_trend_intercept(s, chunk_size, aggregator.clone()),
+            move |s| _agg_linear_trend_intercept(s, chunk_size, agg_enum.clone()),
             o,
         )
         .get(0)
         .alias(&format!(
             "{}__agg_linear_trend_intercept__chunk_size_{:.1}__agg_{:.1}",
-            name, chunk_size, agg_clone
+            name, chunk_size, agg_str,
         ))
 }
 
@@ -1338,18 +1331,19 @@ fn _agg_linear_trend_slope(
     }
 }
 
-fn agg_linear_trend_slope(name: &str, chunk_size: usize, aggregator: ChunkAggregator) -> Expr {
+fn agg_linear_trend_slope(name: &str, chunk_size: usize, aggregator: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
-    let agg_clone = aggregator.clone();
+    let agg_enum = ChunkAggregator::from_str(aggregator).unwrap();
+    let agg_str = aggregator.to_string();
     col(name)
         .apply(
-            move |s| _agg_linear_trend_slope(s, chunk_size, aggregator.clone()),
+            move |s| _agg_linear_trend_slope(s, chunk_size, agg_enum.clone()),
             o,
         )
         .get(0)
         .alias(&format!(
             "{}__agg_linear_trend_slope__chunk_size_{:.1}__agg_{:.1}",
-            name, chunk_size, agg_clone
+            name, chunk_size, agg_str
         ))
 }
 
