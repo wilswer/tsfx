@@ -8,6 +8,9 @@ edition = "2021"
 name = "tsfx"
 crate-type = ["lib", "cdylib"]
 
+[lints.rust]
+unused = "allow" # For exploratory dev.
+
 [dependencies]
 serde = { version = "*", features = ["derive"] }
 toml = "*"
