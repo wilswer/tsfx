@@ -1275,10 +1275,14 @@ fn _agg_linear_trend_intercept(
     }
 }
 
-fn agg_linear_trend_intercept(name: &str, chunk_size: usize, aggregator: &str) -> Expr {
+fn agg_linear_trend_intercept(
+    name: &str,
+    chunk_size: usize,
+    aggregator: impl Into<String>,
+) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
-    let agg_enum = ChunkAggregator::from_str(aggregator).unwrap();
-    let agg_str = aggregator.to_string();
+    let agg_str = aggregator.into();
+    let agg_enum = ChunkAggregator::from_str(&agg_str).unwrap();
     col(name)
         .apply(
             move |s| _agg_linear_trend_intercept(s, chunk_size, agg_enum.clone()),
@@ -1331,10 +1335,10 @@ fn _agg_linear_trend_slope(
     }
 }
 
-fn agg_linear_trend_slope(name: &str, chunk_size: usize, aggregator: &str) -> Expr {
+fn agg_linear_trend_slope(name: &str, chunk_size: usize, aggregator: impl Into<String>) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
-    let agg_enum = ChunkAggregator::from_str(aggregator).unwrap();
-    let agg_str = aggregator.to_string();
+    let agg_str = aggregator.into();
+    let agg_enum = ChunkAggregator::from_str(&agg_str).unwrap();
     col(name)
         .apply(
             move |s| _agg_linear_trend_slope(s, chunk_size, agg_enum.clone()),

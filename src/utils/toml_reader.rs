@@ -40,6 +40,24 @@ pub struct Config {
     pub has_duplicate: Option<HasDuplicate>,
     pub variation_coefficient: Option<VariationCoefficient>,
     pub mean_change: Option<MeanChange>,
+    pub ratio_value_number_to_time_series_length: Option<RatioValueNumberToTimeSeriesLength>,
+    pub sum_of_reoccurring_values: Option<SumOfReoccurringValues>,
+    pub sum_of_reoccurring_data_points: Option<SumOfReoccurringDataPoints>,
+    pub percentage_of_reoccurring_values_to_all_values:
+        Option<PercentageOfReoccurringValuesToAllValues>,
+    pub percentage_of_reoccurring_values_to_all_datapoints:
+        Option<PercentageOfReoccurringValuesToAllDataPoints>,
+    pub agg_linear_trend_intercept: Option<AggLinearTrendIntercept>,
+    pub agg_linear_trend_slope: Option<AggLinearTrendSlope>,
+    pub mean_n_absolute_max: Option<MeanNAbsoluteMax>,
+    pub autocorrelation: Option<Autocorrelation>,
+    pub quantile: Option<Quantile>,
+    pub number_crossing_m: Option<NumberCrossingM>,
+    pub range_count: Option<RangeCount>,
+    pub index_mass_quantile: Option<IndexMassQuantile>,
+    pub c3: Option<C3>,
+    pub time_reversal_asymmetry_statistic: Option<TimeReversalAsymmetryStatistic>,
+    pub number_peaks: Option<NumberPeaks>,
 }
 
 impl Default for Config {
@@ -84,6 +102,28 @@ impl Default for Config {
             has_duplicate: Some(HasDuplicate::default()),
             variation_coefficient: Some(VariationCoefficient::default()),
             mean_change: Some(MeanChange::default()),
+            ratio_value_number_to_time_series_length: Some(
+                RatioValueNumberToTimeSeriesLength::default(),
+            ),
+            sum_of_reoccurring_values: Some(SumOfReoccurringValues::default()),
+            sum_of_reoccurring_data_points: Some(SumOfReoccurringDataPoints::default()),
+            percentage_of_reoccurring_values_to_all_values: Some(
+                PercentageOfReoccurringValuesToAllValues::default(),
+            ),
+            percentage_of_reoccurring_values_to_all_datapoints: Some(
+                PercentageOfReoccurringValuesToAllDataPoints::default(),
+            ),
+            agg_linear_trend_intercept: Some(AggLinearTrendIntercept::default()),
+            agg_linear_trend_slope: Some(AggLinearTrendSlope::default()),
+            mean_n_absolute_max: Some(MeanNAbsoluteMax::default()),
+            autocorrelation: Some(Autocorrelation::default()),
+            quantile: Some(Quantile::default()),
+            number_crossing_m: Some(NumberCrossingM::default()),
+            range_count: Some(RangeCount::default()),
+            index_mass_quantile: Some(IndexMassQuantile::default()),
+            c3: Some(C3::default()),
+            time_reversal_asymmetry_statistic: Some(TimeReversalAsymmetryStatistic::default()),
+            number_peaks: Some(NumberPeaks::default()),
         }
     }
 }
@@ -338,6 +378,381 @@ pub struct VariationCoefficient {}
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct MeanChange {}
 
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct RatioValueNumberToTimeSeriesLength {}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct SumOfReoccurringValues {}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct SumOfReoccurringDataPoints {}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct PercentageOfReoccurringValuesToAllValues {}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct PercentageOfReoccurringValuesToAllDataPoints {}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct AggLinearTrendIntercept {
+    parameters: Vec<AggLinearTrendInterceptParams>,
+}
+
+impl Default for AggLinearTrendIntercept {
+    fn default() -> Self {
+        AggLinearTrendIntercept {
+            parameters: vec![
+                AggLinearTrendInterceptParams {
+                    chunk_size: 5,
+                    aggregator: "mean".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 5,
+                    aggregator: "min".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 5,
+                    aggregator: "max".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 5,
+                    aggregator: "var".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 10,
+                    aggregator: "mean".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 10,
+                    aggregator: "min".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 10,
+                    aggregator: "max".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 10,
+                    aggregator: "var".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 50,
+                    aggregator: "mean".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 50,
+                    aggregator: "min".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 50,
+                    aggregator: "max".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 50,
+                    aggregator: "var".to_string(),
+                },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct AggLinearTrendInterceptParams {
+    chunk_size: usize,
+    aggregator: String,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct AggLinearTrendSlope {
+    parameters: Vec<AggLinearTrendSlopeParams>,
+}
+
+impl Default for AggLinearTrendSlope {
+    fn default() -> Self {
+        AggLinearTrendSlope {
+            parameters: vec![
+                AggLinearTrendSlopeParams {
+                    chunk_size: 5,
+                    aggregator: "mean".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 5,
+                    aggregator: "min".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 5,
+                    aggregator: "max".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 5,
+                    aggregator: "var".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 10,
+                    aggregator: "mean".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 10,
+                    aggregator: "min".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 10,
+                    aggregator: "max".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 10,
+                    aggregator: "var".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 50,
+                    aggregator: "mean".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 50,
+                    aggregator: "min".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 50,
+                    aggregator: "max".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 50,
+                    aggregator: "var".to_string(),
+                },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct AggLinearTrendSlopeParams {
+    chunk_size: usize,
+    aggregator: String,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct MeanNAbsoluteMax {
+    parameters: Vec<MeanNAbsoluteMaxParams>,
+}
+
+impl Default for MeanNAbsoluteMax {
+    fn default() -> Self {
+        MeanNAbsoluteMax {
+            parameters: vec![MeanNAbsoluteMaxParams { n: 7 }],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct MeanNAbsoluteMaxParams {
+    n: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct Autocorrelation {
+    parameters: Vec<AutocorrelationParams>,
+}
+
+impl Default for Autocorrelation {
+    fn default() -> Self {
+        Autocorrelation {
+            parameters: vec![
+                AutocorrelationParams { lag: 0 },
+                AutocorrelationParams { lag: 1 },
+                AutocorrelationParams { lag: 2 },
+                AutocorrelationParams { lag: 3 },
+                AutocorrelationParams { lag: 4 },
+                AutocorrelationParams { lag: 5 },
+                AutocorrelationParams { lag: 6 },
+                AutocorrelationParams { lag: 7 },
+                AutocorrelationParams { lag: 8 },
+                AutocorrelationParams { lag: 9 },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct AutocorrelationParams {
+    lag: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct Quantile {
+    parameters: Vec<QuantileParams>,
+}
+
+impl Default for Quantile {
+    fn default() -> Self {
+        Quantile {
+            parameters: vec![
+                QuantileParams { q: 0.1 },
+                QuantileParams { q: 0.2 },
+                QuantileParams { q: 0.3 },
+                QuantileParams { q: 0.4 },
+                QuantileParams { q: 0.6 },
+                QuantileParams { q: 0.7 },
+                QuantileParams { q: 0.8 },
+                QuantileParams { q: 0.9 },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct QuantileParams {
+    q: f64,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct NumberCrossingM {
+    parameters: Vec<NumberCrossingMParams>,
+}
+
+impl Default for NumberCrossingM {
+    fn default() -> Self {
+        NumberCrossingM {
+            parameters: vec![
+                NumberCrossingMParams { m: -1.0 },
+                NumberCrossingMParams { m: 0.0 },
+                NumberCrossingMParams { m: 1.0 },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct NumberCrossingMParams {
+    m: f64,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct RangeCount {
+    parameters: Vec<RangeCountParams>,
+}
+
+impl Default for RangeCount {
+    fn default() -> Self {
+        RangeCount {
+            parameters: vec![
+                RangeCountParams {
+                    min: -1.0,
+                    max: 1.0,
+                },
+                RangeCountParams {
+                    min: -1_000_000_000_000.0,
+                    max: 0.0,
+                },
+                RangeCountParams {
+                    min: 0.0,
+                    max: 1_000_000_000_000.0,
+                },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct RangeCountParams {
+    min: f64,
+    max: f64,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct IndexMassQuantile {
+    parameters: Vec<IndexMassQuantileParams>,
+}
+
+impl Default for IndexMassQuantile {
+    fn default() -> Self {
+        IndexMassQuantile {
+            parameters: vec![
+                IndexMassQuantileParams { q: 0.1 },
+                IndexMassQuantileParams { q: 0.2 },
+                IndexMassQuantileParams { q: 0.3 },
+                IndexMassQuantileParams { q: 0.4 },
+                IndexMassQuantileParams { q: 0.5 },
+                IndexMassQuantileParams { q: 0.6 },
+                IndexMassQuantileParams { q: 0.7 },
+                IndexMassQuantileParams { q: 0.8 },
+                IndexMassQuantileParams { q: 0.9 },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct IndexMassQuantileParams {
+    q: f64,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct C3 {
+    parameters: Vec<C3Params>,
+}
+
+impl Default for C3 {
+    fn default() -> Self {
+        C3 {
+            parameters: vec![
+                C3Params { lag: 1 },
+                C3Params { lag: 2 },
+                C3Params { lag: 3 },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct C3Params {
+    lag: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct TimeReversalAsymmetryStatistic {
+    parameters: Vec<TimeReversalAsymmetryStatisticParams>,
+}
+
+impl Default for TimeReversalAsymmetryStatistic {
+    fn default() -> Self {
+        TimeReversalAsymmetryStatistic {
+            parameters: vec![
+                TimeReversalAsymmetryStatisticParams { lag: 1 },
+                TimeReversalAsymmetryStatisticParams { lag: 2 },
+                TimeReversalAsymmetryStatisticParams { lag: 3 },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct TimeReversalAsymmetryStatisticParams {
+    lag: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct NumberPeaks {
+    parameters: Vec<NumberPeaksParams>,
+}
+
+impl Default for NumberPeaks {
+    fn default() -> Self {
+        NumberPeaks {
+            parameters: vec![
+                NumberPeaksParams { n: 1 },
+                NumberPeaksParams { n: 3 },
+                NumberPeaksParams { n: 5 },
+                NumberPeaksParams { n: 10 },
+                NumberPeaksParams { n: 50 },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct NumberPeaksParams {
+    n: usize,
+}
+
 pub fn load_config(file_path: Option<&str>) -> Config {
     let file_path = if let Some(file_path) = file_path {
         file_path
@@ -395,8 +810,8 @@ mod tests {
             10
         );
         assert_eq!(
-            &config.clone().ratio_beyond_r_sigma.unwrap().parameters[..],
-            &[
+            config.clone().ratio_beyond_r_sigma.unwrap().parameters[..],
+            [
                 RatioBeyondRSigmaParams { r: 0.5 },
                 RatioBeyondRSigmaParams { r: 1.0 },
                 RatioBeyondRSigmaParams { r: 1.5 },
@@ -420,8 +835,8 @@ mod tests {
             19
         );
         assert_eq!(
-            &config.clone().large_standard_deviation.unwrap().parameters[..],
-            &[
+            config.clone().large_standard_deviation.unwrap().parameters[..],
+            [
                 LargeStandardDeviationParams { r: 0.05 },
                 LargeStandardDeviationParams { r: 0.1 },
                 LargeStandardDeviationParams { r: 0.15 },
@@ -449,8 +864,8 @@ mod tests {
             19
         );
         assert_eq!(
-            &config.clone().symmetry_looking.unwrap().parameters[..],
-            &[
+            config.clone().symmetry_looking.unwrap().parameters[..],
+            [
                 SymmetryLookingParams { r: 0.05 },
                 SymmetryLookingParams { r: 0.1 },
                 SymmetryLookingParams { r: 0.15 },
@@ -507,5 +922,280 @@ mod tests {
         assert!(config.has_duplicate.is_some());
         assert!(config.variation_coefficient.is_some());
         assert!(config.mean_change.is_some());
+        assert!(config.ratio_value_number_to_time_series_length.is_some());
+        assert!(config.sum_of_reoccurring_values.is_some());
+        assert!(config.sum_of_reoccurring_data_points.is_some());
+        assert!(config
+            .percentage_of_reoccurring_values_to_all_values
+            .is_some());
+        assert!(config
+            .percentage_of_reoccurring_values_to_all_datapoints
+            .is_some());
+        assert!(config.agg_linear_trend_intercept.is_some());
+        assert_eq!(
+            config
+                .clone()
+                .agg_linear_trend_intercept
+                .unwrap()
+                .parameters
+                .len(),
+            12
+        );
+        assert_eq!(
+            config
+                .clone()
+                .agg_linear_trend_intercept
+                .unwrap()
+                .parameters[..],
+            [
+                AggLinearTrendInterceptParams {
+                    chunk_size: 5,
+                    aggregator: "mean".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 5,
+                    aggregator: "min".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 5,
+                    aggregator: "max".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 5,
+                    aggregator: "var".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 10,
+                    aggregator: "mean".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 10,
+                    aggregator: "min".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 10,
+                    aggregator: "max".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 10,
+                    aggregator: "var".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 50,
+                    aggregator: "mean".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 50,
+                    aggregator: "min".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 50,
+                    aggregator: "max".to_string(),
+                },
+                AggLinearTrendInterceptParams {
+                    chunk_size: 50,
+                    aggregator: "var".to_string(),
+                },
+            ]
+        );
+        assert!(config.agg_linear_trend_slope.is_some());
+        assert_eq!(
+            config
+                .clone()
+                .agg_linear_trend_slope
+                .unwrap()
+                .parameters
+                .len(),
+            12
+        );
+        assert_eq!(
+            config.clone().agg_linear_trend_slope.unwrap().parameters[..],
+            [
+                AggLinearTrendSlopeParams {
+                    chunk_size: 5,
+                    aggregator: "mean".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 5,
+                    aggregator: "min".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 5,
+                    aggregator: "max".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 5,
+                    aggregator: "var".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 10,
+                    aggregator: "mean".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 10,
+                    aggregator: "min".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 10,
+                    aggregator: "max".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 10,
+                    aggregator: "var".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 50,
+                    aggregator: "mean".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 50,
+                    aggregator: "min".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 50,
+                    aggregator: "max".to_string(),
+                },
+                AggLinearTrendSlopeParams {
+                    chunk_size: 50,
+                    aggregator: "var".to_string(),
+                },
+            ]
+        );
+        assert!(config.mean_n_absolute_max.is_some());
+        assert_eq!(
+            config.clone().mean_n_absolute_max.unwrap().parameters.len(),
+            1
+        );
+        assert_eq!(
+            config.clone().mean_n_absolute_max.unwrap().parameters[..],
+            [MeanNAbsoluteMaxParams { n: 7 }]
+        );
+        assert!(config.autocorrelation.is_some());
+        assert_eq!(config.clone().autocorrelation.unwrap().parameters.len(), 10);
+        assert_eq!(
+            config.clone().autocorrelation.unwrap().parameters[..],
+            [
+                AutocorrelationParams { lag: 0 },
+                AutocorrelationParams { lag: 1 },
+                AutocorrelationParams { lag: 2 },
+                AutocorrelationParams { lag: 3 },
+                AutocorrelationParams { lag: 4 },
+                AutocorrelationParams { lag: 5 },
+                AutocorrelationParams { lag: 6 },
+                AutocorrelationParams { lag: 7 },
+                AutocorrelationParams { lag: 8 },
+                AutocorrelationParams { lag: 9 },
+            ]
+        );
+        assert!(config.quantile.is_some());
+        assert_eq!(config.clone().quantile.unwrap().parameters.len(), 8);
+        assert_eq!(
+            config.clone().quantile.unwrap().parameters[..],
+            [
+                QuantileParams { q: 0.1 },
+                QuantileParams { q: 0.2 },
+                QuantileParams { q: 0.3 },
+                QuantileParams { q: 0.4 },
+                QuantileParams { q: 0.6 },
+                QuantileParams { q: 0.7 },
+                QuantileParams { q: 0.8 },
+                QuantileParams { q: 0.9 },
+            ]
+        );
+        assert!(config.number_crossing_m.is_some());
+        assert_eq!(
+            config.clone().number_crossing_m.unwrap().parameters.len(),
+            3
+        );
+        assert_eq!(
+            config.clone().number_crossing_m.unwrap().parameters[..],
+            [
+                NumberCrossingMParams { m: -1.0 },
+                NumberCrossingMParams { m: 0.0 },
+                NumberCrossingMParams { m: 1.0 },
+            ]
+        );
+        assert!(config.range_count.is_some());
+        assert_eq!(config.clone().range_count.unwrap().parameters.len(), 3);
+        assert_eq!(
+            config.clone().range_count.unwrap().parameters[..],
+            [
+                RangeCountParams {
+                    min: -1.0,
+                    max: 1.0
+                },
+                RangeCountParams {
+                    min: -1_000_000_000_000.0,
+                    max: 0.0
+                },
+                RangeCountParams {
+                    min: 0.0,
+                    max: 1_000_000_000_000.0
+                }
+            ]
+        );
+        assert!(config.index_mass_quantile.is_some());
+        assert_eq!(
+            config.clone().index_mass_quantile.unwrap().parameters.len(),
+            9
+        );
+        assert_eq!(
+            config.clone().index_mass_quantile.unwrap().parameters[..],
+            [
+                IndexMassQuantileParams { q: 0.1 },
+                IndexMassQuantileParams { q: 0.2 },
+                IndexMassQuantileParams { q: 0.3 },
+                IndexMassQuantileParams { q: 0.4 },
+                IndexMassQuantileParams { q: 0.5 },
+                IndexMassQuantileParams { q: 0.6 },
+                IndexMassQuantileParams { q: 0.7 },
+                IndexMassQuantileParams { q: 0.8 },
+                IndexMassQuantileParams { q: 0.9 },
+            ]
+        );
+        assert!(config.c3.is_some());
+        assert_eq!(config.clone().c3.unwrap().parameters.len(), 3);
+        assert_eq!(
+            config.clone().c3.unwrap().parameters[..],
+            [
+                C3Params { lag: 1 },
+                C3Params { lag: 2 },
+                C3Params { lag: 3 }
+            ]
+        );
+        assert!(config.time_reversal_asymmetry_statistic.is_some());
+        assert_eq!(
+            config
+                .clone()
+                .time_reversal_asymmetry_statistic
+                .unwrap()
+                .parameters
+                .len(),
+            3
+        );
+        assert_eq!(
+            config
+                .clone()
+                .time_reversal_asymmetry_statistic
+                .unwrap()
+                .parameters[..],
+            [
+                TimeReversalAsymmetryStatisticParams { lag: 1 },
+                TimeReversalAsymmetryStatisticParams { lag: 2 },
+                TimeReversalAsymmetryStatisticParams { lag: 3 }
+            ]
+        );
+        assert!(config.number_peaks.is_some());
+        assert_eq!(config.clone().number_peaks.unwrap().parameters.len(), 5);
+        assert_eq!(
+            config.clone().number_peaks.unwrap().parameters[..],
+            [
+                NumberPeaksParams { n: 1 },
+                NumberPeaksParams { n: 3 },
+                NumberPeaksParams { n: 5 },
+                NumberPeaksParams { n: 10 },
+                NumberPeaksParams { n: 50 }
+            ]
+        );
     }
 }
