@@ -178,7 +178,7 @@ pub struct VarianceLargerThanStandardDeviation {}
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct RatioBeyondRSigma {
-    parameters: Vec<RatioBeyondRSigmaParams>,
+    pub parameters: Vec<RatioBeyondRSigmaParams>,
 }
 impl Default for RatioBeyondRSigma {
     fn default() -> Self {
@@ -201,12 +201,12 @@ impl Default for RatioBeyondRSigma {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct RatioBeyondRSigmaParams {
-    r: f64,
+    pub r: f64,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct LargeStandardDeviation {
-    parameters: Vec<LargeStandardDeviationParams>,
+    pub parameters: Vec<LargeStandardDeviationParams>,
 }
 impl Default for LargeStandardDeviation {
     fn default() -> Self {
@@ -238,12 +238,12 @@ impl Default for LargeStandardDeviation {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct LargeStandardDeviationParams {
-    r: f64,
+    pub r: f64,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct SymmetryLooking {
-    parameters: Vec<SymmetryLookingParams>,
+    pub parameters: Vec<SymmetryLookingParams>,
 }
 impl Default for SymmetryLooking {
     fn default() -> Self {
@@ -274,7 +274,7 @@ impl Default for SymmetryLooking {
 }
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct SymmetryLookingParams {
-    r: f64,
+    pub r: f64,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -285,7 +285,7 @@ pub struct HasDuplicateMin {}
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct CidCe {
-    parameters: Vec<CidCeParams>,
+    pub parameters: Vec<CidCeParams>,
 }
 impl Default for CidCe {
     fn default() -> Self {
@@ -300,7 +300,7 @@ impl Default for CidCe {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct CidCeParams {
-    normalize: bool,
+    pub normalize: bool,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -395,7 +395,7 @@ pub struct PercentageOfReoccurringValuesToAllDataPoints {}
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct AggLinearTrendIntercept {
-    parameters: Vec<AggLinearTrendInterceptParams>,
+    pub parameters: Vec<AggLinearTrendInterceptParams>,
 }
 
 impl Default for AggLinearTrendIntercept {
@@ -457,13 +457,13 @@ impl Default for AggLinearTrendIntercept {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct AggLinearTrendInterceptParams {
-    chunk_size: usize,
-    aggregator: String,
+    pub chunk_size: usize,
+    pub aggregator: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct AggLinearTrendSlope {
-    parameters: Vec<AggLinearTrendSlopeParams>,
+    pub parameters: Vec<AggLinearTrendSlopeParams>,
 }
 
 impl Default for AggLinearTrendSlope {
@@ -525,13 +525,13 @@ impl Default for AggLinearTrendSlope {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct AggLinearTrendSlopeParams {
-    chunk_size: usize,
-    aggregator: String,
+    pub chunk_size: usize,
+    pub aggregator: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct MeanNAbsoluteMax {
-    parameters: Vec<MeanNAbsoluteMaxParams>,
+    pub parameters: Vec<MeanNAbsoluteMaxParams>,
 }
 
 impl Default for MeanNAbsoluteMax {
@@ -544,12 +544,12 @@ impl Default for MeanNAbsoluteMax {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct MeanNAbsoluteMaxParams {
-    n: usize,
+    pub n: usize,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Autocorrelation {
-    parameters: Vec<AutocorrelationParams>,
+    pub parameters: Vec<AutocorrelationParams>,
 }
 
 impl Default for Autocorrelation {
@@ -573,12 +573,12 @@ impl Default for Autocorrelation {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct AutocorrelationParams {
-    lag: usize,
+    pub lag: usize,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Quantile {
-    parameters: Vec<QuantileParams>,
+    pub parameters: Vec<QuantileParams>,
 }
 
 impl Default for Quantile {
@@ -600,12 +600,12 @@ impl Default for Quantile {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct QuantileParams {
-    q: f64,
+    pub q: f64,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct NumberCrossingM {
-    parameters: Vec<NumberCrossingMParams>,
+    pub parameters: Vec<NumberCrossingMParams>,
 }
 
 impl Default for NumberCrossingM {
@@ -622,12 +622,12 @@ impl Default for NumberCrossingM {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct NumberCrossingMParams {
-    m: f64,
+    pub m: f64,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct RangeCount {
-    parameters: Vec<RangeCountParams>,
+    pub parameters: Vec<RangeCountParams>,
 }
 
 impl Default for RangeCount {
@@ -653,13 +653,13 @@ impl Default for RangeCount {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct RangeCountParams {
-    min: f64,
-    max: f64,
+    pub min: f64,
+    pub max: f64,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct IndexMassQuantile {
-    parameters: Vec<IndexMassQuantileParams>,
+    pub parameters: Vec<IndexMassQuantileParams>,
 }
 
 impl Default for IndexMassQuantile {
@@ -682,12 +682,12 @@ impl Default for IndexMassQuantile {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct IndexMassQuantileParams {
-    q: f64,
+    pub q: f64,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct C3 {
-    parameters: Vec<C3Params>,
+    pub parameters: Vec<C3Params>,
 }
 
 impl Default for C3 {
@@ -704,12 +704,12 @@ impl Default for C3 {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct C3Params {
-    lag: usize,
+    pub lag: usize,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct TimeReversalAsymmetryStatistic {
-    parameters: Vec<TimeReversalAsymmetryStatisticParams>,
+    pub parameters: Vec<TimeReversalAsymmetryStatisticParams>,
 }
 
 impl Default for TimeReversalAsymmetryStatistic {
@@ -726,12 +726,12 @@ impl Default for TimeReversalAsymmetryStatistic {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct TimeReversalAsymmetryStatisticParams {
-    lag: usize,
+    pub lag: usize,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct NumberPeaks {
-    parameters: Vec<NumberPeaksParams>,
+    pub parameters: Vec<NumberPeaksParams>,
 }
 
 impl Default for NumberPeaks {
@@ -750,7 +750,7 @@ impl Default for NumberPeaks {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct NumberPeaksParams {
-    n: usize,
+    pub n: usize,
 }
 
 pub fn load_config(file_path: Option<&str>) -> Config {

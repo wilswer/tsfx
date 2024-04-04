@@ -20,6 +20,7 @@ struct PyExtractionSettings {
     grouping_col: String,
     value_cols: Vec<String>,
     feature_setting: PyFeatureSetting,
+    config_path: Option<String>,
     dynamic_settings: Option<PyDynamicGroupBySettings>,
 }
 
@@ -40,12 +41,14 @@ impl PyExtractionSettings {
         grouping_col: String,
         value_cols: Vec<String>,
         feature_setting: PyFeatureSetting,
+        config_path: Option<String>,
         dynamic_settings: Option<PyDynamicGroupBySettings>,
     ) -> Self {
         PyExtractionSettings {
             grouping_col,
             value_cols,
             feature_setting,
+            config_path,
             dynamic_settings,
         }
     }
@@ -100,6 +103,7 @@ impl From<PyExtractionSettings> for ExtractionSettings {
                 grouping_col: opts.grouping_col,
                 value_cols: opts.value_cols,
                 feature_setting: opts.feature_setting.into(),
+                config_path: opts.config_path,
                 dynamic_settings: None,
             }
         } else {
@@ -107,6 +111,7 @@ impl From<PyExtractionSettings> for ExtractionSettings {
                 grouping_col: opts.grouping_col,
                 value_cols: opts.value_cols,
                 feature_setting: opts.feature_setting.into(),
+                config_path: opts.config_path,
                 dynamic_settings: Some(opts.dynamic_settings.unwrap().into()),
             }
         }

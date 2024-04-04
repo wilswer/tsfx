@@ -1,19 +1,45 @@
 use ndarray_stats::{QuantileExt, SummaryStatisticsExt};
 use polars::prelude::*;
 
-pub fn minimal_aggregators(value_cols: &[String]) -> Vec<Expr> {
+use crate::{extract::ExtractionSettings, utils::toml_reader::load_config};
+
+pub fn minimal_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
+    let config = match &opts.config_path {
+        Some(file) => load_config(Some(file.as_str())),
+        None => load_config(None),
+    };
     let mut aggregators = Vec::new();
-    aggregators.push(count(&value_cols[0]));
-    for col in value_cols {
-        aggregators.push(sum_values(col));
-        aggregators.push(mean(col));
-        aggregators.push(expr_median(col));
-        aggregators.push(minimum(col));
-        aggregators.push(maximum(col));
-        aggregators.push(standard_deviation(col));
-        aggregators.push(variance(col));
-        aggregators.push(skewness(col));
-        aggregators.push(root_mean_square(col));
+    if config.length.is_some() {
+        aggregators.push(count(&opts.value_cols[0]));
+    }
+    for col in &opts.value_cols {
+        if config.sum_values.is_some() {
+            aggregators.push(sum_values(col));
+        }
+        if config.mean.is_some() {
+            aggregators.push(mean(col));
+        }
+        if config.median.is_some() {
+            aggregators.push(expr_median(col));
+        }
+        if config.minimum.is_some() {
+            aggregators.push(minimum(col));
+        }
+        if config.maximum.is_some() {
+            aggregators.push(maximum(col));
+        }
+        if config.standard_deviation.is_some() {
+            aggregators.push(standard_deviation(col));
+        }
+        if config.variance.is_some() {
+            aggregators.push(variance(col));
+        }
+        if config.skewness.is_some() {
+            aggregators.push(skewness(col));
+        }
+        if config.root_mean_square.is_some() {
+            aggregators.push(root_mean_square(col));
+        }
     }
     aggregators
 }

@@ -25,19 +25,20 @@ pub struct ExtractionSettings {
     pub grouping_col: String,
     pub value_cols: Vec<String>,
     pub feature_setting: FeatureSetting,
+    pub config_path: Option<String>,
     pub dynamic_settings: Option<DynamicGroupBySettings>,
 }
 
 fn get_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
-    let mut aggregators = minimal_aggregators(&opts.value_cols);
+    let mut aggregators = minimal_aggregators(opts);
     match opts.feature_setting {
         FeatureSetting::Minimal => aggregators,
         FeatureSetting::Efficient => {
-            aggregators.append(&mut extra_aggregators(&opts.value_cols));
+            aggregators.append(&mut extra_aggregators(opts));
             aggregators
         }
         FeatureSetting::Comprehensive => {
-            aggregators.append(&mut extra_aggregators(&opts.value_cols));
+            aggregators.append(&mut extra_aggregators(opts));
             aggregators.append(&mut high_comp_cost_aggregators(&opts.value_cols));
             aggregators
         }
@@ -99,6 +100,7 @@ mod tests {
             grouping_col: "id".to_string(),
             value_cols: vec!["value".to_string()],
             feature_setting: FeatureSetting::Minimal,
+            config_path: None,
             dynamic_settings: None,
         };
         let gdf = lazy_feature_df(df, opts);
@@ -149,6 +151,7 @@ mod tests {
             grouping_col: "id".to_string(),
             value_cols: vec!["value".to_string()],
             feature_setting: FeatureSetting::Minimal,
+            config_path: None,
             dynamic_settings: None,
         };
         let gdf = lazy_feature_df(df, opts);
