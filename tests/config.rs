@@ -1,0 +1,63 @@
+use tsfx::utils::toml_reader::load_config;
+
+#[test]
+fn test_read_config_from_empty_file() {
+    let config = load_config(Some("./tests/data/.tsfx-config-empty.toml"));
+    assert!(config.length.is_none());
+    assert!(config.sum_values.is_none());
+    assert!(config.mean.is_none());
+    assert!(config.median.is_none());
+    assert!(config.minimum.is_none());
+    assert!(config.maximum.is_none());
+    assert!(config.standard_deviation.is_none());
+    assert!(config.variance.is_none());
+    assert!(config.skewness.is_none());
+    assert!(config.root_mean_square.is_none());
+    assert!(config.kurtosis.is_none());
+    assert!(config.absolute_energy.is_none());
+    assert!(config.mean_absolute_change.is_none());
+    assert!(config.linear_trend_intercept.is_none());
+    assert!(config.linear_trend_slope.is_none());
+    assert!(config.variance_larger_than_standard_deviation.is_none());
+    assert!(config.ratio_beyond_r_sigma.is_none());
+    assert!(config.large_standard_deviation.is_none());
+    assert!(config.symmetry_looking.is_none());
+    assert!(config.has_duplicate_max.is_none());
+    assert!(config.has_duplicate_min.is_none());
+    assert!(config.cid_ce.is_none());
+    assert!(config.absolute_maximum.is_none());
+    assert!(config.absolute_sum_of_changes.is_none());
+    assert!(config.count_above_mean.is_none());
+    assert!(config.count_below_mean.is_none());
+    assert!(config.count_above.is_none());
+    assert!(config.count_below.is_none());
+    assert!(config.first_location_of_maximum.is_none());
+    assert!(config.first_location_of_minimum.is_none());
+    assert!(config.last_location_of_maximum.is_none());
+    assert!(config.last_location_of_minimum.is_none());
+    assert!(config.longest_strike_above_mean.is_none());
+    assert!(config.longest_strike_below_mean.is_none());
+    assert!(config.has_duplicate.is_none());
+    assert!(config.variation_coefficient.is_none());
+    assert!(config.mean_change.is_none());
+    assert!(config.ratio_value_number_to_time_series_length.is_none());
+    assert!(config.sum_of_reoccurring_values.is_none());
+    assert!(config.sum_of_reoccurring_data_points.is_none());
+    assert!(config
+        .percentage_of_reoccurring_values_to_all_values
+        .is_none());
+    assert!(config
+        .percentage_of_reoccurring_values_to_all_datapoints
+        .is_none());
+    assert!(config.agg_linear_trend_intercept.is_none());
+    assert!(config.agg_linear_trend_slope.is_none());
+    assert!(config.mean_n_absolute_max.is_none());
+    assert!(config.autocorrelation.is_none());
+    assert!(config.quantile.is_none());
+    assert!(config.number_crossing_m.is_none());
+    assert!(config.range_count.is_none());
+    assert!(config.index_mass_quantile.is_none());
+    assert!(config.c3.is_none());
+    assert!(config.time_reversal_asymmetry_statistic.is_none());
+    assert!(config.number_peaks.is_none());
+}

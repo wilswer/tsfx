@@ -28,6 +28,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         "volume".to_string(),
                     ],
                     feature_setting: FeatureSetting::Efficient,
+                    config_path: None,
                     dynamic_settings: Some(DynamicGroupBySettings {
                         time_col: "date".to_string(),
                         every: "1y".to_string(),

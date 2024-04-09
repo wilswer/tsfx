@@ -17,105 +17,196 @@ use ordered_float::OrderedFloat;
 use polars::lazy::dsl::quantile;
 use polars::{prelude::*, series::ops::NullBehavior};
 
-pub fn extra_aggregators(value_cols: &[String]) -> Vec<Expr> {
+use crate::extract::ExtractionSettings;
+use crate::utils::toml_reader::{load_config, RatioBeyondRSigmaParams};
+
+pub fn extra_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
+    let config = match &opts.config_path {
+        Some(file) => load_config(Some(file.as_str())),
+        None => load_config(None),
+    };
     let mut aggregators = Vec::new();
-    for col in value_cols {
-        aggregators.push(kurtosis(col));
-        aggregators.push(absolute_energy(col));
-        aggregators.push(mean_absolute_change(col));
-        aggregators.push(linear_trend_intercept(col));
-        aggregators.push(linear_trend_slope(col));
-        aggregators.push(variance_larger_than_standard_deviation(col));
-        aggregators.push(ratio_beyond_r_sigma(col, 0.5));
-        aggregators.push(ratio_beyond_r_sigma(col, 1.0));
-        aggregators.push(ratio_beyond_r_sigma(col, 1.5));
-        aggregators.push(ratio_beyond_r_sigma(col, 2.0));
-        aggregators.push(ratio_beyond_r_sigma(col, 2.5));
-        aggregators.push(ratio_beyond_r_sigma(col, 3.0));
-        aggregators.push(ratio_beyond_r_sigma(col, 5.0));
-        aggregators.push(ratio_beyond_r_sigma(col, 6.0));
-        aggregators.push(ratio_beyond_r_sigma(col, 7.0));
-        aggregators.push(ratio_beyond_r_sigma(col, 10.0));
-        for r in ndarray::Array::range(0.05, 1.0, 0.05).iter() {
-            aggregators.push(large_standard_deviation(col, *r));
+    for col in &opts.value_cols {
+        if config.kurtosis.is_some() {
+            aggregators.push(kurtosis(col));
         }
-        for r in ndarray::Array::range(0.05, 1.0, 0.05).iter() {
-            aggregators.push(symmetry_looking(col, *r));
+        if config.absolute_energy.is_some() {
+            aggregators.push(absolute_energy(col));
         }
-        aggregators.push(has_duplicate_max(col));
-        aggregators.push(has_duplicate_min(col));
-        aggregators.push(cid_ce(col, true));
-        aggregators.push(cid_ce(col, false));
-        aggregators.push(absolute_maximum(col));
-        aggregators.push(absolute_sum_of_changes(col));
-        aggregators.push(count_above_mean(col));
-        aggregators.push(count_below_mean(col));
-        aggregators.push(count_above(col, 0.0));
-        aggregators.push(count_below(col, 0.0));
-        aggregators.push(first_location_of_maximum(col));
-        aggregators.push(first_location_of_minimum(col));
-        aggregators.push(last_location_of_maximum(col));
-        aggregators.push(last_location_of_minimum(col));
-        aggregators.push(longest_strike_below_mean(col));
-        aggregators.push(longest_strike_above_mean(col));
-        aggregators.push(has_duplicate(col));
-        aggregators.push(variation_coefficient(col));
-        aggregators.push(mean_change(col));
-        aggregators.push(ratio_value_number_to_time_series_length(col));
-        aggregators.push(sum_of_reoccurring_values(col));
-        aggregators.push(sum_of_reoccurring_data_points(col));
-        aggregators.push(percentage_of_reoccurring_values_to_all_values(col));
-        aggregators.push(percentage_of_reoccurring_values_to_all_datapoints(col));
-        let chunk_sizes: [usize; 3] = [5, 10, 50];
-        let chunk_aggs: [&str; 4] = ["mean", "min", "max", "var"];
-        for ca in chunk_aggs.into_iter() {
-            for chunk_size in chunk_sizes.into_iter() {
-                aggregators.push(agg_linear_trend_intercept(
-                    col,
-                    chunk_size,
-                    ChunkAggregator::from_str(ca).unwrap(),
-                ));
+        if config.mean_absolute_change.is_some() {
+            aggregators.push(mean_absolute_change(col));
+        }
+        if config.linear_trend_intercept.is_some() {
+            aggregators.push(linear_trend_intercept(col));
+        }
+        if config.linear_trend_slope.is_some() {
+            aggregators.push(linear_trend_slope(col));
+        }
+        if config.variance_larger_than_standard_deviation.is_some() {
+            aggregators.push(variance_larger_than_standard_deviation(col));
+        }
+        if let Some(feature) = &config.ratio_beyond_r_sigma {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(ratio_beyond_r_sigma(col, p.r));
             }
         }
-        for ca in chunk_aggs.into_iter() {
-            for chunk_size in chunk_sizes.into_iter() {
-                aggregators.push(agg_linear_trend_slope(
-                    col,
-                    chunk_size,
-                    ChunkAggregator::from_str(ca).unwrap(),
-                ));
+        if let Some(feature) = &config.large_standard_deviation {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(large_standard_deviation(col, p.r));
             }
         }
-        aggregators.push(mean_n_absolute_max(col, 7));
-        for r in 0..10 {
-            aggregators.push(autocorrelation(col, r));
-        }
-        for q in ndarray::Array::range(0.1, 1.0, 0.1).into_iter() {
-            if q == 0.5 {
-                continue;
+        if let Some(feature) = &config.symmetry_looking {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(symmetry_looking(col, p.r));
             }
-            aggregators.push(expr_quantile(col, q));
         }
-        aggregators.push(number_crossing_m(col, -1.0));
-        aggregators.push(number_crossing_m(col, 0.0));
-        aggregators.push(number_crossing_m(col, 1.0));
-        aggregators.push(range_count(col, -1.0, 1.0));
-        aggregators.push(range_count(col, -1_000_000_000_000.0, 0.0));
-        aggregators.push(range_count(col, 0.0, 1_000_000_000_000.0));
-        for q in ndarray::Array::range(0.1, 1.0, 0.1).into_iter() {
-            aggregators.push(index_mass_quantile(col, q));
+        if config.has_duplicate_max.is_some() {
+            aggregators.push(has_duplicate_max(col));
         }
-        aggregators.push(c3(col, 1));
-        aggregators.push(c3(col, 2));
-        aggregators.push(c3(col, 3));
-        aggregators.push(time_reversal_asymmetry_statistic(col, 1));
-        aggregators.push(time_reversal_asymmetry_statistic(col, 2));
-        aggregators.push(time_reversal_asymmetry_statistic(col, 3));
-        aggregators.push(number_peaks(col, 1));
-        aggregators.push(number_peaks(col, 3));
-        aggregators.push(number_peaks(col, 5));
-        aggregators.push(number_peaks(col, 10));
-        aggregators.push(number_peaks(col, 50));
+        if config.has_duplicate_min.is_some() {
+            aggregators.push(has_duplicate_min(col));
+        }
+        if let Some(feature) = &config.cid_ce {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(cid_ce(col, p.normalize));
+            }
+        }
+        if config.absolute_maximum.is_some() {
+            aggregators.push(absolute_maximum(col));
+        }
+        if config.absolute_sum_of_changes.is_some() {
+            aggregators.push(absolute_sum_of_changes(col));
+        }
+        if config.count_above_mean.is_some() {
+            aggregators.push(count_above_mean(col));
+        }
+        if config.count_below_mean.is_some() {
+            aggregators.push(count_below_mean(col));
+        }
+        if config.count_above.is_some() {
+            aggregators.push(count_above(col, 0.0));
+        }
+        if config.count_below.is_some() {
+            aggregators.push(count_below(col, 0.0));
+        }
+        if config.first_location_of_maximum.is_some() {
+            aggregators.push(first_location_of_maximum(col));
+        }
+        if config.first_location_of_minimum.is_some() {
+            aggregators.push(first_location_of_minimum(col));
+        }
+        if config.last_location_of_maximum.is_some() {
+            aggregators.push(last_location_of_maximum(col));
+        }
+        if config.last_location_of_minimum.is_some() {
+            aggregators.push(last_location_of_minimum(col));
+        }
+        if config.longest_strike_above_mean.is_some() {
+            aggregators.push(longest_strike_above_mean(col));
+        }
+        if config.longest_strike_below_mean.is_some() {
+            aggregators.push(longest_strike_below_mean(col));
+        }
+        if config.has_duplicate.is_some() {
+            aggregators.push(has_duplicate(col));
+        }
+        if config.variation_coefficient.is_some() {
+            aggregators.push(variation_coefficient(col));
+        }
+        if config.mean_change.is_some() {
+            aggregators.push(mean_change(col));
+        }
+        if config.ratio_value_number_to_time_series_length.is_some() {
+            aggregators.push(ratio_value_number_to_time_series_length(col));
+        }
+        if config.sum_of_reoccurring_values.is_some() {
+            aggregators.push(sum_of_reoccurring_values(col));
+        }
+        if config.sum_of_reoccurring_data_points.is_some() {
+            aggregators.push(sum_of_reoccurring_data_points(col));
+        }
+        if config
+            .percentage_of_reoccurring_values_to_all_values
+            .is_some()
+        {
+            aggregators.push(percentage_of_reoccurring_values_to_all_values(col));
+        }
+        if config
+            .percentage_of_reoccurring_values_to_all_datapoints
+            .is_some()
+        {
+            aggregators.push(percentage_of_reoccurring_values_to_all_datapoints(col));
+        }
+        if let Some(feature) = &config.agg_linear_trend_intercept {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(agg_linear_trend_intercept(col, p.chunk_size, &p.aggregator));
+            }
+        }
+        if let Some(feature) = &config.agg_linear_trend_slope {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(agg_linear_trend_slope(col, p.chunk_size, &p.aggregator));
+            }
+        }
+        if let Some(feature) = &config.mean_n_absolute_max {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(mean_n_absolute_max(col, p.n));
+            }
+        }
+        if let Some(feature) = &config.autocorrelation {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(autocorrelation(col, p.lag));
+            }
+        }
+        if let Some(feature) = &config.quantile {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(expr_quantile(col, p.q));
+            }
+        }
+        if let Some(feature) = &config.number_crossing_m {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(number_crossing_m(col, p.m));
+            }
+        }
+        if let Some(feature) = &config.range_count {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(range_count(col, p.min, p.max));
+            }
+        }
+        if let Some(feature) = &config.index_mass_quantile {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(index_mass_quantile(col, p.q));
+            }
+        }
+        if let Some(feature) = &config.c3 {
+            let parameters = &feature.parameters;
+            for p in parameters {
+                aggregators.push(c3(col, p.lag));
+            }
+        }
+        if let Some(feature) = &config.time_reversal_asymmetry_statistic {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(time_reversal_asymmetry_statistic(col, p.lag));
+            }
+        }
+        if let Some(feature) = &config.number_peaks {
+            let params = &feature.parameters;
+            for p in params {
+                aggregators.push(number_peaks(col, p.n));
+            }
+        }
     }
     aggregators
 }
@@ -1283,18 +1374,23 @@ fn _agg_linear_trend_intercept(
     }
 }
 
-fn agg_linear_trend_intercept(name: &str, chunk_size: usize, aggregator: ChunkAggregator) -> Expr {
+fn agg_linear_trend_intercept(
+    name: &str,
+    chunk_size: usize,
+    aggregator: impl Into<String>,
+) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
-    let agg_clone = aggregator.clone();
+    let agg_str = aggregator.into();
+    let agg_enum = ChunkAggregator::from_str(&agg_str).unwrap();
     col(name)
         .apply(
-            move |s| _agg_linear_trend_intercept(s, chunk_size, aggregator.clone()),
+            move |s| _agg_linear_trend_intercept(s, chunk_size, agg_enum.clone()),
             o,
         )
         .get(0)
         .alias(&format!(
-            "{}__agg_linear_trend_intercept__chunk_size_{:.1}__agg_{:.1}",
-            name, chunk_size, agg_clone
+            "{}__agg_linear_trend_intercept__chunk_size_{:.1}__agg_{}",
+            name, chunk_size, agg_str,
         ))
 }
 
@@ -1338,18 +1434,19 @@ fn _agg_linear_trend_slope(
     }
 }
 
-fn agg_linear_trend_slope(name: &str, chunk_size: usize, aggregator: ChunkAggregator) -> Expr {
+fn agg_linear_trend_slope(name: &str, chunk_size: usize, aggregator: impl Into<String>) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
-    let agg_clone = aggregator.clone();
+    let agg_str = aggregator.into();
+    let agg_enum = ChunkAggregator::from_str(&agg_str).unwrap();
     col(name)
         .apply(
-            move |s| _agg_linear_trend_slope(s, chunk_size, aggregator.clone()),
+            move |s| _agg_linear_trend_slope(s, chunk_size, agg_enum.clone()),
             o,
         )
         .get(0)
         .alias(&format!(
-            "{}__agg_linear_trend_slope__chunk_size_{:.1}__agg_{:.1}",
-            name, chunk_size, agg_clone
+            "{}__agg_linear_trend_slope__chunk_size_{:.1}__agg_{}",
+            name, chunk_size, agg_str
         ))
 }
 

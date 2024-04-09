@@ -16,6 +16,7 @@ class ExtractionSettings:
         grouping_col: str,
         value_cols: Sequence[str],
         feature_setting: FeatureSetting,
+        config_path: str | None = None,
         dynamic_settings: DynamicGroupBySettings | None = None,
     ) -> None:
         self.grouping_col = grouping_col

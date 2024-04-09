@@ -1,0 +1,195 @@
+[length]
+
+[sum_values]
+
+[mean]
+
+[median]
+
+[minimum]
+
+[maximum]
+
+[standard_deviation]
+
+[variance]
+
+[skewness]
+
+[root_mean_square]
+
+[kurtosis]
+
+[absolute_energy]
+
+[mean_absolute_change]
+
+[linear_trend_intercept]
+
+[linear_trend_slope]
+
+[variance_larger_than_standard_deviation]
+
+[ratio_beyond_r_sigma]
+parameters = [
+    { r = 0.5 },
+    { r = 1.0 },
+    { r = 1.5 },
+    { r = 2.0 },
+    { r = 2.5 },
+    { r = 3.0 },
+    { r = 5.0 },
+    { r = 6.0 },
+    { r = 7.0 },
+    { r = 10.0 },
+]
+
+[large_standard_deviation]
+parameters = [
+    { r = 0.05 },
+    { r = 0.1 },
+    { r = 0.15 },
+    { r = 0.2 },
+    { r = 0.25 },
+    { r = 0.3 },
+    { r = 0.35 },
+    { r = 0.4 },
+    { r = 0.45 },
+    { r = 0.5 },
+    { r = 0.55 },
+    { r = 0.6 },
+    { r = 0.65 },
+    { r = 0.7 },
+    { r = 0.75 },
+    { r = 0.8 },
+    { r = 0.85 },
+    { r = 0.9 },
+    { r = 0.95 },
+]
+#
+# [symmetry_looking]
+# parameters = { r = [
+#     0.05,
+#     0.1,
+#     0.15,
+#     0.2,
+#     0.25,
+#     0.3,
+#     0.35,
+#     0.4,
+#     0.45,
+#     0.5,
+#     0.55,
+#     0.6,
+#     0.65,
+#     0.7,
+#     0.75,
+#     0.8,
+#     0.85,
+#     0.9,
+#     0.95,
+# ] }
+#
+# [has_duplicate_max]
+#
+# [has_duplicate_min]
+#
+# [cid_ce]
+# parameters = { normalize = [true, false] }
+#
+# [absolute_maximum]
+#
+# [absolute_sum_of_changes]
+#
+# [count_above_mean]
+#
+# [count_below_mean]
+#
+# [count_above_zero]
+# parameters = { t = 0.0 }
+#
+# [count_below_zero]
+# parameters = { t = 0.0 }
+#
+# [first_location_of_maximum]
+#
+# [first_location_of_minimum]
+#
+# [last_location_of_maximum]
+#
+# [last_location_of_minimum]
+#
+# [longest_strike_below_mean]
+#
+# [longest_strike_above_mean]
+#
+# [has_duplicate]
+#
+# [variation_coefficient]
+#
+# [mean_change]
+#
+# [ratio_value_number_to_time_series_length]
+#
+# [sum_of_reoccurring_values]
+#
+# [sum_of_reoccurring_data_points]
+#
+# [percentage_of_reoccurring_values_to_all_values]
+#
+# [percentage_of_reoccurring_values_to_all_datapoints]
+#
+# [agg_linear_trend_intercept]
+# parameters = { chunk_size = [
+#     5,
+#     10,
+#     50,
+# ], aggregator = [
+#     "mean",
+#     "min",
+#     "max",
+#     "var",
+# ] }
+#
+# [agg_linear_trend_slope]
+# parameters = { chunk_size = [
+#     5,
+#     10,
+#     50,
+# ], aggregator = [
+#     "mean",
+#     "min",
+#     "max",
+#     "var",
+# ] }
+#
+# [mean_n_absolute_max]
+# parameters = { n = 7 }
+#
+# [autocorrelation]
+# parameters = { lag = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] }
+#
+# [expr_quantile]
+# parameters = { q = [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9] }
+#
+# [number_crossing_m]
+# parameters = { m = [-1.0, 0.0, 1.0] }
+#
+# [range_count]
+# parameters = [
+#     { min = -1.0, max = 1.0 },
+#     { min = -1_000_000_000_000.0, max = 0.0 },
+#     { min = 0.0, max = 1_000_000_000_000.0 },
+# ]
+# [index_mass_quantile]
+# parameters = { q = [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9] }
+#
+# [c3]
+# parameters = { lag = [1, 2, 3] }
+#
+# [time_reversal_asymmetry_statistic]
+# parameters = { lag = [1, 2, 3] }
+#
+# [number_peaks]
+# parameters = { n = [1, 3, 5, 10, 50] }
+#

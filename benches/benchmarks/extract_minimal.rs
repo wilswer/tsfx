@@ -19,6 +19,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     grouping_col: "id".to_string(),
                     value_cols: vec!["value".to_string()],
                     feature_setting: FeatureSetting::Minimal,
+                    config_path: None,
                     dynamic_settings: None,
                 },
             )

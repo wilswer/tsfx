@@ -8,21 +8,26 @@ edition = "2021"
 name = "tsfx"
 crate-type = ["lib", "cdylib"]
 
+[lints.rust]
+unused = "allow" # For exploratory dev.
+
 [dependencies]
+serde = { version = "*", features = ["derive"] }
+toml = "*"
 pyo3 = "*"
 chrono = "*"
 csv = "*"
 ndarray = "*"
 ndarray-stats = "*"
 polars = { version = "*", features = [
-  "polars-io",
-  "lazy",
-  "csv",
-  "diff",
-  "dynamic_group_by",
-  "strings",
-  "ndarray",
-  "streaming",
+    "polars-io",
+    "lazy",
+    "csv",
+    "diff",
+    "dynamic_group_by",
+    "strings",
+    "ndarray",
+    "streaming",
 ] }
 pyo3-polars = { version = "*", features = ["lazy"] }
 linfa = "*"
