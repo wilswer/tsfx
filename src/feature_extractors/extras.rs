@@ -18,7 +18,7 @@ use polars::lazy::dsl::quantile;
 use polars::{prelude::*, series::ops::NullBehavior};
 
 use crate::extract::ExtractionSettings;
-use crate::utils::toml_reader::{load_config, RatioBeyondRSigmaParams};
+use crate::utils::toml_reader::load_config;
 
 pub fn extra_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
     let config = match &opts.config_path {
@@ -36,11 +36,8 @@ pub fn extra_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
         if config.mean_absolute_change.is_some() {
             aggregators.push(mean_absolute_change(col));
         }
-        if config.linear_trend_intercept.is_some() {
-            aggregators.push(linear_trend_intercept(col));
-        }
-        if config.linear_trend_slope.is_some() {
-            aggregators.push(linear_trend_slope(col));
+        if config.linear_trend.is_some() {
+            aggregators.push(linear_trend(col));
         }
         if config.variance_larger_than_standard_deviation.is_some() {
             aggregators.push(variance_larger_than_standard_deviation(col));
@@ -141,16 +138,10 @@ pub fn extra_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
         {
             aggregators.push(percentage_of_reoccurring_values_to_all_datapoints(col));
         }
-        if let Some(feature) = &config.agg_linear_trend_intercept {
+        if let Some(feature) = &config.agg_linear_trend {
             let params = &feature.parameters;
             for p in params {
-                aggregators.push(agg_linear_trend_intercept(col, p.chunk_size, &p.aggregator));
-            }
-        }
-        if let Some(feature) = &config.agg_linear_trend_slope {
-            let params = &feature.parameters;
-            for p in params {
-                aggregators.push(agg_linear_trend_slope(col, p.chunk_size, &p.aggregator));
+                aggregators.push(agg_linear_trend(col, p.chunk_size, &p.aggregator));
             }
         }
         if let Some(feature) = &config.mean_n_absolute_max {
@@ -303,10 +294,7 @@ fn _absolute_energy(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let abs_energy = arr.mapv(|x| x.powi(2)).sum();
     let s = Series::new("", &[abs_energy]);
     Ok(Some(s))
@@ -342,14 +330,11 @@ fn _mean_absolute_change(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
     let mean_abs_change = diffs.mapv(|x| x.abs()).mean().unwrap_or(f64::NAN);
     let s = Series::new("", &[mean_abs_change]);
@@ -375,10 +360,7 @@ fn _ndarray_sum(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let sum: f64 = arr.sum();
     let s = Series::new("", &[sum]);
     Ok(Some(s))
@@ -405,10 +387,7 @@ fn _kurtosis(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let kurtosis = arr.kurtosis().unwrap_or(f64::NAN);
     let s = Series::new("", &[kurtosis]);
     Ok(Some(s))
@@ -422,19 +401,13 @@ pub fn kurtosis(name: &str) -> Expr {
         .alias(&format!("{}__kurtosis", name))
 }
 
-fn _linear_trend_intercept(s: Series) -> Result<Option<Series>, PolarsError> {
+fn _linear_trend(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Some(Series::new("", &[f64::NAN])));
-    }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let x = ndarray::Array::range(0., arr.len() as f64, 1.);
     let x = x.insert_axis(Axis(1));
     let dataset = Dataset::new(x, arr);
@@ -442,82 +415,36 @@ fn _linear_trend_intercept(s: Series) -> Result<Option<Series>, PolarsError> {
     let model = lin_reg.fit(&dataset);
     match model {
         Ok(model) => {
-            let s_i = Series::new("", &[model.intercept()]);
-            Ok(Some(s_i))
+            let s_i = model.intercept();
+            let s_s = model.params()[0];
+            let s = DataFrame::new(vec![
+                Series::new("intercept", &[s_i]),
+                Series::new("slope", &[s_s]),
+            ])?
+            .into_struct("linear_trend")
+            .into_series();
+            Ok(Some(s))
         }
         Err(_) => Ok(Some(Series::new("", &[f64::NAN]))),
     }
 }
 
-pub fn linear_trend_intercept(name: &str) -> Expr {
+pub fn linear_trend(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
-    col(name)
-        .apply(_linear_trend_intercept, o)
+    let name = name.to_string();
+    col(&name)
+        .apply(_linear_trend, o)
+        .struct_()
+        .rename_fields(
+            [
+                format!("{}__linear_trend_intercept", name),
+                format!("{}__linear_trend_slope", name),
+            ]
+            .to_vec(),
+        )
         .get(0)
-        .alias(&format!("{}__linear_trend_intercept", name))
+        .alias(&format!("{}__linear_trend", name))
 }
-
-fn _linear_trend_slope(s: Series) -> Result<Option<Series>, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Some(Series::new("", &[f64::NAN])));
-    }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .unwrap();
-    let x = ndarray::Array::range(0., arr.len() as f64, 1.);
-    let x = x.insert_axis(Axis(1));
-    let dataset = Dataset::new(x, arr);
-    let lin_reg = LinearRegression::new();
-    let model = lin_reg.fit(&dataset);
-    match model {
-        Ok(model) => {
-            let s_p = Series::new("", &[model.params()[0]]);
-            Ok(Some(s_p))
-        }
-        Err(_) => Ok(Some(Series::new("", &[f64::NAN]))),
-    }
-}
-
-pub fn linear_trend_slope(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
-    col(name)
-        .apply(_linear_trend_slope, o)
-        .get(0)
-        .alias(&format!("{}__linear_trend_slope", name))
-}
-
-// fn _linear_trend(s: Series) -> Result<DataFrame, PolarsError> {
-//     let arr = s
-//         .into_frame()
-//         .to_ndarray::<Float64Type>(IndexOrder::C)
-//         .unwrap();
-//     let arr = arr
-//         .remove_axis(Axis(1))
-//         .into_dimensionality::<Ix1>()
-//         .unwrap();
-//     let x = ndarray::Array::range(0., arr.len() as f64, 1.);
-//     let x = x.insert_axis(Axis(1));
-//     let dataset = Dataset::new(x, arr);
-//     let lin_reg = LinearRegression::new();
-//     let model = lin_reg.fit(&dataset).unwrap();
-//     let s_i = Series::new("intercept", &[model.intercept()]);
-//     let s_p = Series::new("slope", &[model.params()[0]]);
-//     DataFrame::new(vec![s_i, s_p])
-// }
-//
-// pub fn linear_trend(name: &str) -> Expr {
-//     col(name)
-//         .apply(_linear_trend, None)
-//         .cast(DataType::Float64)
-//         .get(0)
-//         .alias(&format!("{}__linear_trend", name))
-// }
 
 pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
     let std = col(name).std(1);
@@ -533,10 +460,7 @@ fn _ratio_beyond_r_sigma(s: Series, r: f64) -> Result<Option<Series>, PolarsErro
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
@@ -564,10 +488,7 @@ fn _large_standard_deviation(s: Series, r: f64) -> Result<Option<Series>, Polars
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let min = arr.min().unwrap_or(&0.0);
     let max = arr.max().unwrap_or(&0.0);
     let std = arr.std(1.0);
@@ -589,14 +510,11 @@ fn _symmetry_looking(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let mut arr = arr.mapv(n64);
     let median_res = _median_mut(&mut arr);
     let median = match median_res {
@@ -638,10 +556,7 @@ fn _has_duplicate_max(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let max_res = arr.max();
     let max = match max_res {
         Ok(m) => m,
@@ -666,10 +581,7 @@ fn _has_duplicate_min(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let min_res = arr.min();
     let min = match min_res {
         Ok(m) => m,
@@ -694,14 +606,11 @@ fn _cid_ce(s: Series, normalize: bool) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let arr = if normalize {
         let mean = arr.mean().unwrap_or(f64::NAN);
         let std = arr.std(1.0);
@@ -728,10 +637,7 @@ fn _absolute_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let abs_arr = arr.mapv(|x| x.abs());
     let max_res = abs_arr.max();
     let max = match max_res {
@@ -755,14 +661,11 @@ fn _absolute_sum_of_changes(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
     let out = diffs.mapv(|x| x.abs()).sum();
     let s = Series::new("", &[out]);
@@ -782,10 +685,7 @@ fn _count_above_mean(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
@@ -809,10 +709,7 @@ fn _count_below_mean(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
@@ -836,10 +733,7 @@ fn _count_above(s: Series, t: f64) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let out = arr.mapv(|x| if x > t { 1.0 } else { 0.0 }).sum();
     let s = Series::new("", &[out]);
     Ok(Some(s))
@@ -858,10 +752,7 @@ fn _count_below(s: Series, t: f64) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let out = arr.mapv(|x| if x > t { 1.0 } else { 0.0 }).sum();
     let s = Series::new("", &[out]);
     Ok(Some(s))
@@ -880,14 +771,11 @@ fn _first_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> 
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let max_res = arr.argmax();
     let max = match max_res {
         Ok(m) => m,
@@ -911,14 +799,11 @@ fn _first_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> 
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let min_res = arr.argmin();
     let min = match min_res {
         Ok(m) => m,
@@ -942,14 +827,11 @@ fn _last_location_of_maximum(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let max_res = arr.argmax();
     let max = match max_res {
         Ok(m) => m,
@@ -973,14 +855,11 @@ fn _last_location_of_minimum(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let min_res = arr.argmin();
     let min = match min_res {
         Ok(m) => m,
@@ -1004,14 +883,11 @@ fn _longest_strike_below_mean(s: Series) -> Result<Option<Series>, PolarsError> 
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
@@ -1039,14 +915,11 @@ fn _longest_strike_above_mean(s: Series) -> Result<Option<Series>, PolarsError> 
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
@@ -1074,14 +947,11 @@ fn _has_duplicate(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let sarr = arr
         .as_slice()
         .unwrap()
@@ -1111,10 +981,7 @@ fn _variation_coefficient(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
@@ -1139,14 +1006,11 @@ fn _mean_change(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let out = if arr.len() < 2 {
         f64::NAN
     } else {
@@ -1169,14 +1033,11 @@ fn _ratio_value_number_to_time_series_length(s: Series) -> Result<Option<Series>
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let sarr = arr
         .as_slice()
         .unwrap()
@@ -1209,10 +1070,7 @@ fn _sum_of_reoccurring_values(s: Series) -> Result<Option<Series>, PolarsError> 
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr.mapv(OrderedFloat);
     let counts = arr.into_iter().counts();
     let mut sum: f64 = 0.0;
@@ -1239,10 +1097,7 @@ fn _sum_of_reoccurring_data_points(s: Series) -> Result<Option<Series>, PolarsEr
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr.mapv(OrderedFloat);
     let counts = arr.into_iter().counts();
     let mut sum: f64 = 0.0;
@@ -1271,10 +1126,7 @@ fn _percentage_of_reoccurring_values_to_all_values(
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr.mapv(OrderedFloat);
     let counts = arr.into_iter().counts();
     let mut more_than_once = 0;
@@ -1306,10 +1158,7 @@ fn _percentage_of_reoccurring_values_to_all_datapoints(
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr.mapv(OrderedFloat);
     let counts = arr.iter().counts();
     let mut more_than_once = 0;
@@ -1334,26 +1183,39 @@ pub fn percentage_of_reoccurring_values_to_all_datapoints(name: &str) -> Expr {
         ))
 }
 
-fn _agg_linear_trend_intercept(
+fn _agg_linear_trend(
     s: Series,
     chunk_size: usize,
     aggregator: ChunkAggregator,
 ) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Series::new("", &[f64::NAN])));
+        let s_i = f64::NAN;
+        let s_s = f64::NAN;
+        let s = DataFrame::new(vec![
+            Series::new("agg_intercept", &[s_i]),
+            Series::new("agg_slope", &[s_s]),
+        ])?
+        .into_struct("agg_linear_trend")
+        .into_series();
+        return Ok(Some(s));
     }
     if s.len() < chunk_size {
-        return Ok(Some(Series::new("", &[f64::NAN])));
+        let s_i = f64::NAN;
+        let s_s = f64::NAN;
+        let s = DataFrame::new(vec![
+            Series::new("agg_intercept", &[s_i]),
+            Series::new("agg_slope", &[s_s]),
+        ])?
+        .into_struct("agg_linear_trend")
+        .into_series();
+        return Ok(Some(s));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let agg_arr = match aggregator {
         ChunkAggregator::Mean => _aggregate_on_chunks(arr, chunk_size, |x| x.mean().unwrap()),
         ChunkAggregator::Max => _aggregate_on_chunks(arr, chunk_size, |x| *x.max().unwrap()),
@@ -1367,85 +1229,61 @@ fn _agg_linear_trend_intercept(
     let model = linreg.fit(&dataset);
     match model {
         Ok(model) => {
-            let s_i = Series::new("", &[model.intercept()]);
-            Ok(Some(s_i))
+            let s_i = model.intercept();
+            let s_s = model.params()[0];
+            let s = DataFrame::new(vec![
+                Series::new("agg_intercept", &[s_i]),
+                Series::new("agg_slope", &[s_s]),
+            ])?
+            .into_struct("agg_linear_trend")
+            .into_series();
+            Ok(Some(s))
         }
-        Err(_) => Ok(Some(Series::new("", &[f64::NAN]))),
+        Err(_) => {
+            let s_i = f64::NAN;
+            let s_s = f64::NAN;
+            let s = DataFrame::new(vec![
+                Series::new("agg_intercept", &[s_i]),
+                Series::new("agg_slope", &[s_s]),
+            ])?
+            .into_struct("agg_linear_trend")
+            .into_series();
+            Ok(Some(s))
+        }
     }
 }
 
-fn agg_linear_trend_intercept(
-    name: &str,
-    chunk_size: usize,
-    aggregator: impl Into<String>,
-) -> Expr {
+fn agg_linear_trend(name: &str, chunk_size: usize, aggregator: impl Into<String>) -> Expr {
+    // let o = GetOutput::from_type(DataType::Struct(vec![
+    //     Field::new("agg_intercept", DataType::Float64),
+    //     Field::new("agg_slope", DataType::Float64),
+    // ]));
     let o = GetOutput::from_type(DataType::Float64);
     let agg_str = aggregator.into();
     let agg_enum = ChunkAggregator::from_str(&agg_str).unwrap();
-    col(name)
+    let name = name.to_string();
+    col(&name)
         .apply(
-            move |s| _agg_linear_trend_intercept(s, chunk_size, agg_enum.clone()),
+            move |s| _agg_linear_trend(s, chunk_size, agg_enum.clone()),
             o,
+        )
+        .struct_()
+        .rename_fields(
+            [
+                format!(
+                    "{}__agg_linear_trend_intercept__chunk_size_{:.1}__agg_{}",
+                    name, chunk_size, agg_str
+                ),
+                format!(
+                    "{}__agg_linear_trend_slope__chunk_size_{:.1}__agg_{}",
+                    name, chunk_size, agg_str
+                ),
+            ]
+            .to_vec(),
         )
         .get(0)
         .alias(&format!(
-            "{}__agg_linear_trend_intercept__chunk_size_{:.1}__agg_{}",
-            name, chunk_size, agg_str,
-        ))
-}
-
-fn _agg_linear_trend_slope(
-    s: Series,
-    chunk_size: usize,
-    aggregator: ChunkAggregator,
-) -> Result<Option<Series>, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Some(Series::new("", &[f64::NAN])));
-    }
-    if s.len() < chunk_size {
-        return Ok(Some(Series::new("", &[f64::NAN])));
-    }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .unwrap();
-    let agg_arr = match aggregator {
-        ChunkAggregator::Mean => _aggregate_on_chunks(arr, chunk_size, |x| x.mean().unwrap()),
-        ChunkAggregator::Max => _aggregate_on_chunks(arr, chunk_size, |x| *x.max().unwrap()),
-        ChunkAggregator::Min => _aggregate_on_chunks(arr, chunk_size, |x| *x.min().unwrap()),
-        ChunkAggregator::Var => _aggregate_on_chunks(arr, chunk_size, |x| x.var(1.0)),
-    };
-    let x = Array::range(0., agg_arr.len() as f64, 1.);
-    let x = x.insert_axis(Axis(1));
-    let dataset = Dataset::new(x, agg_arr);
-    let linreg = LinearRegression::new();
-    let model = linreg.fit(&dataset);
-    match model {
-        Ok(model) => {
-            let s_i = Series::new("", &[model.params()[0]]);
-            Ok(Some(s_i))
-        }
-        Err(_) => Ok(Some(Series::new("", &[f64::NAN]))),
-    }
-}
-
-fn agg_linear_trend_slope(name: &str, chunk_size: usize, aggregator: impl Into<String>) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
-    let agg_str = aggregator.into();
-    let agg_enum = ChunkAggregator::from_str(&agg_str).unwrap();
-    col(name)
-        .apply(
-            move |s| _agg_linear_trend_slope(s, chunk_size, agg_enum.clone()),
-            o,
-        )
-        .get(0)
-        .alias(&format!(
-            "{}__agg_linear_trend_slope__chunk_size_{:.1}__agg_{}",
+            "{}__agg_linear_trend__chunk_size_{:.1}__agg_{}",
             name, chunk_size, agg_str
         ))
 }
@@ -1458,10 +1296,7 @@ fn _mean_n_absolute_max(s: Series, n: usize) -> Result<Option<Series>, PolarsErr
     if s.len() < n {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr.mapv(|x| -OrderedFloat::from(x.abs()));
     let sarr = arr.into_iter().k_smallest(n).map(|x| -f64::from(x));
     let out = sarr.sum::<f64>() / n as f64;
@@ -1485,14 +1320,11 @@ fn _autocorrelation(s: Series, lag: usize) -> Result<Option<Series>, PolarsError
     if s.len() < lag {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
@@ -1520,10 +1352,7 @@ fn _quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mut arr = arr.mapv(n64);
     let q_res = arr.quantile_axis_mut(Axis(0), n64(q), &Midpoint);
     let q_val = match q_res {
@@ -1553,10 +1382,7 @@ fn _number_crossing_m(s: Series, m: f64) -> Result<Option<Series>, PolarsError> 
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let iarr = arr.into_iter().filter(|x| x != &m).collect::<Vec<_>>();
     let mut count = 0;
     for (x1, x2) in izip!(iarr.iter(), iarr.iter().skip(1)) {
@@ -1587,10 +1413,7 @@ fn _range_count(s: Series, lower: f64, upper: f64) -> Result<Option<Series>, Pol
     if upper < lower {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let count = arr
         .into_iter()
         .filter(|x| x >= &lower && x <= &upper)
@@ -1615,10 +1438,7 @@ fn _index_mass_quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mut abs_arr = arr.mapv(|x| x.abs());
     let abs_sum = abs_arr.sum();
     if abs_sum == 0.0 {
@@ -1653,14 +1473,11 @@ fn _c3(s: Series, lag: usize) -> Result<Option<Series>, PolarsError> {
     if n <= 2 * lag {
         return Ok(Some(Series::new("", &[0 as f64])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let slice = &mut arr.to_vec()[..];
     let neg_lag = -(lag as isize);
     let y1_slice = _roll(slice, 2 * neg_lag);
@@ -1701,14 +1518,11 @@ fn _time_reversal_asymmetry_statistic(
     if n <= 2 * lag {
         return Ok(Some(Series::new("", &[0 as f64])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let slice = &mut arr.to_vec()[..];
     let neg_lag = -(lag as isize);
     let one_lag = _roll(slice, neg_lag);
@@ -1747,14 +1561,11 @@ fn _number_peaks(s: Series, n: usize) -> Result<Option<Series>, PolarsError> {
     if s.len() < n {
         return Ok(Some(Series::new("", &[0 as f64])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
-        .unwrap();
+        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let arr_reduced = arr.slice(s![n..arr.len() - n]);
     let mut res: Option<Array1<bool>> = None;
     for i in 1..n + 1 {

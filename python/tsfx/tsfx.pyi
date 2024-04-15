@@ -3,8 +3,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import Enum, auto
 
-import polars as pl
-
 class FeatureSetting(Enum):
     Minimal = auto()
     Efficient = auto()
@@ -38,9 +36,3 @@ class DynamicGroupBySettings:
         self.period = period
         self.offset = offset
         self.datetime_format = datetime_format
-
-def extract_features(
-    lf: pl.LazyFrame,
-    settings: ExtractionSettings,
-    streaming: bool = False,
-) -> pl.DataFrame: ...

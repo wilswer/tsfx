@@ -28,6 +28,8 @@ all = ["tsfx[dev,bench,examples]"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+python-source = "python"
+
 
 [tool.mypy]
 python_version = "3.11"

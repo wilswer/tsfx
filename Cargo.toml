@@ -9,7 +9,7 @@ name = "tsfx"
 crate-type = ["lib", "cdylib"]
 
 [lints.rust]
-unused = "allow" # For exploratory dev.
+# unused = "allow" # For exploratory dev.
 
 [dependencies]
 serde = { version = "*", features = ["derive"] }
@@ -20,14 +20,15 @@ csv = "*"
 ndarray = "*"
 ndarray-stats = "*"
 polars = { version = "*", features = [
-    "polars-io",
-    "lazy",
-    "csv",
-    "diff",
-    "dynamic_group_by",
-    "strings",
-    "ndarray",
-    "streaming",
+  "polars-io",
+  "lazy",
+  "csv",
+  "diff",
+  "dynamic_group_by",
+  "strings",
+  "ndarray",
+  "streaming",
+  "dtype-struct",
 ] }
 pyo3-polars = { version = "*", features = ["lazy"] }
 linfa = "*"

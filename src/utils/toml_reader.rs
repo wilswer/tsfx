@@ -16,8 +16,7 @@ pub struct Config {
     pub kurtosis: Option<Kurtosis>,
     pub absolute_energy: Option<AbsoluteEnergy>,
     pub mean_absolute_change: Option<MeanAbsoluteChange>,
-    pub linear_trend_intercept: Option<LinearTrendIntercept>,
-    pub linear_trend_slope: Option<LinearTrendSlope>,
+    pub linear_trend: Option<LinearTrend>,
     pub variance_larger_than_standard_deviation: Option<VarianceLargerThanStandardDeviation>,
     pub ratio_beyond_r_sigma: Option<RatioBeyondRSigma>,
     pub large_standard_deviation: Option<LargeStandardDeviation>,
@@ -47,8 +46,7 @@ pub struct Config {
         Option<PercentageOfReoccurringValuesToAllValues>,
     pub percentage_of_reoccurring_values_to_all_datapoints:
         Option<PercentageOfReoccurringValuesToAllDataPoints>,
-    pub agg_linear_trend_intercept: Option<AggLinearTrendIntercept>,
-    pub agg_linear_trend_slope: Option<AggLinearTrendSlope>,
+    pub agg_linear_trend: Option<AggLinearTrend>,
     pub mean_n_absolute_max: Option<MeanNAbsoluteMax>,
     pub autocorrelation: Option<Autocorrelation>,
     pub quantile: Option<Quantile>,
@@ -76,8 +74,7 @@ impl Default for Config {
             kurtosis: Some(Kurtosis::default()),
             absolute_energy: Some(AbsoluteEnergy::default()),
             mean_absolute_change: Some(MeanAbsoluteChange::default()),
-            linear_trend_intercept: Some(LinearTrendIntercept::default()),
-            linear_trend_slope: Some(LinearTrendSlope::default()),
+            linear_trend: Some(LinearTrend::default()),
             variance_larger_than_standard_deviation: Some(
                 VarianceLargerThanStandardDeviation::default(),
             ),
@@ -113,8 +110,7 @@ impl Default for Config {
             percentage_of_reoccurring_values_to_all_datapoints: Some(
                 PercentageOfReoccurringValuesToAllDataPoints::default(),
             ),
-            agg_linear_trend_intercept: Some(AggLinearTrendIntercept::default()),
-            agg_linear_trend_slope: Some(AggLinearTrendSlope::default()),
+            agg_linear_trend: Some(AggLinearTrend::default()),
             mean_n_absolute_max: Some(MeanNAbsoluteMax::default()),
             autocorrelation: Some(Autocorrelation::default()),
             quantile: Some(Quantile::default()),
@@ -168,10 +164,7 @@ pub struct AbsoluteEnergy {}
 pub struct MeanAbsoluteChange {}
 
 #[derive(Deserialize, Clone, Debug, Default)]
-pub struct LinearTrendIntercept {}
-
-#[derive(Deserialize, Clone, Debug, Default)]
-pub struct LinearTrendSlope {}
+pub struct LinearTrend {}
 
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct VarianceLargerThanStandardDeviation {}
@@ -317,7 +310,7 @@ pub struct CountBelowMean {}
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct CountAbove {
-    parameters: Vec<CountAboveParams>,
+    pub parameters: Vec<CountAboveParams>,
 }
 
 impl Default for CountAbove {
@@ -335,7 +328,7 @@ pub struct CountAboveParams {
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct CountBelow {
-    parameters: Vec<CountBelowParams>,
+    pub parameters: Vec<CountBelowParams>,
 }
 
 impl Default for CountBelow {
@@ -394,59 +387,59 @@ pub struct PercentageOfReoccurringValuesToAllValues {}
 pub struct PercentageOfReoccurringValuesToAllDataPoints {}
 
 #[derive(Deserialize, Clone, Debug)]
-pub struct AggLinearTrendIntercept {
-    pub parameters: Vec<AggLinearTrendInterceptParams>,
+pub struct AggLinearTrend {
+    pub parameters: Vec<AggLinearTrendParams>,
 }
 
-impl Default for AggLinearTrendIntercept {
+impl Default for AggLinearTrend {
     fn default() -> Self {
-        AggLinearTrendIntercept {
+        AggLinearTrend {
             parameters: vec![
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 5,
                     aggregator: "mean".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 5,
                     aggregator: "min".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 5,
                     aggregator: "max".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 5,
                     aggregator: "var".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 10,
                     aggregator: "mean".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 10,
                     aggregator: "min".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 10,
                     aggregator: "max".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 10,
                     aggregator: "var".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 50,
                     aggregator: "mean".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 50,
                     aggregator: "min".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 50,
                     aggregator: "max".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 50,
                     aggregator: "var".to_string(),
                 },
@@ -456,75 +449,7 @@ impl Default for AggLinearTrendIntercept {
 }
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
-pub struct AggLinearTrendInterceptParams {
-    pub chunk_size: usize,
-    pub aggregator: String,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct AggLinearTrendSlope {
-    pub parameters: Vec<AggLinearTrendSlopeParams>,
-}
-
-impl Default for AggLinearTrendSlope {
-    fn default() -> Self {
-        AggLinearTrendSlope {
-            parameters: vec![
-                AggLinearTrendSlopeParams {
-                    chunk_size: 5,
-                    aggregator: "mean".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 5,
-                    aggregator: "min".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 5,
-                    aggregator: "max".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 5,
-                    aggregator: "var".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 10,
-                    aggregator: "mean".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 10,
-                    aggregator: "min".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 10,
-                    aggregator: "max".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 10,
-                    aggregator: "var".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 50,
-                    aggregator: "mean".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 50,
-                    aggregator: "min".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 50,
-                    aggregator: "max".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 50,
-                    aggregator: "var".to_string(),
-                },
-            ],
-        }
-    }
-}
-
-#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
-pub struct AggLinearTrendSlopeParams {
+pub struct AggLinearTrendParams {
     pub chunk_size: usize,
     pub aggregator: String,
 }
@@ -796,8 +721,7 @@ mod tests {
         assert!(config.kurtosis.is_some());
         assert!(config.absolute_energy.is_some());
         assert!(config.mean_absolute_change.is_some());
-        assert!(config.linear_trend_intercept.is_some());
-        assert!(config.linear_trend_slope.is_some());
+        assert!(config.linear_trend.is_some());
         assert!(config.variance_larger_than_standard_deviation.is_some());
         assert!(config.ratio_beyond_r_sigma.is_some());
         assert_eq!(
@@ -931,131 +855,59 @@ mod tests {
         assert!(config
             .percentage_of_reoccurring_values_to_all_datapoints
             .is_some());
-        assert!(config.agg_linear_trend_intercept.is_some());
+        assert!(config.agg_linear_trend.is_some());
         assert_eq!(
-            config
-                .clone()
-                .agg_linear_trend_intercept
-                .unwrap()
-                .parameters
-                .len(),
+            config.clone().agg_linear_trend.unwrap().parameters.len(),
             12
         );
         assert_eq!(
-            config
-                .clone()
-                .agg_linear_trend_intercept
-                .unwrap()
-                .parameters[..],
+            config.clone().agg_linear_trend.unwrap().parameters[..],
             [
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 5,
                     aggregator: "mean".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 5,
                     aggregator: "min".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 5,
                     aggregator: "max".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 5,
                     aggregator: "var".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 10,
                     aggregator: "mean".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 10,
                     aggregator: "min".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 10,
                     aggregator: "max".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 10,
                     aggregator: "var".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 50,
                     aggregator: "mean".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 50,
                     aggregator: "min".to_string(),
                 },
-                AggLinearTrendInterceptParams {
+                AggLinearTrendParams {
                     chunk_size: 50,
                     aggregator: "max".to_string(),
                 },
-                AggLinearTrendInterceptParams {
-                    chunk_size: 50,
-                    aggregator: "var".to_string(),
-                },
-            ]
-        );
-        assert!(config.agg_linear_trend_slope.is_some());
-        assert_eq!(
-            config
-                .clone()
-                .agg_linear_trend_slope
-                .unwrap()
-                .parameters
-                .len(),
-            12
-        );
-        assert_eq!(
-            config.clone().agg_linear_trend_slope.unwrap().parameters[..],
-            [
-                AggLinearTrendSlopeParams {
-                    chunk_size: 5,
-                    aggregator: "mean".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 5,
-                    aggregator: "min".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 5,
-                    aggregator: "max".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 5,
-                    aggregator: "var".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 10,
-                    aggregator: "mean".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 10,
-                    aggregator: "min".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 10,
-                    aggregator: "max".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 10,
-                    aggregator: "var".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 50,
-                    aggregator: "mean".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 50,
-                    aggregator: "min".to_string(),
-                },
-                AggLinearTrendSlopeParams {
-                    chunk_size: 50,
-                    aggregator: "max".to_string(),
-                },
-                AggLinearTrendSlopeParams {
+                AggLinearTrendParams {
                     chunk_size: 50,
                     aggregator: "var".to_string(),
                 },

@@ -79,7 +79,8 @@ pub fn lazy_feature_df(df: LazyFrame, opts: ExtractionSettings) -> LazyFrame {
         df.select(&selected_cols)
             .group_by([col(&opts.grouping_col)])
     };
-    gdf.agg(aggregators)
+    let fdf = gdf.agg(aggregators).collect().unwrap();
+    fdf.lazy()
 }
 
 #[cfg(test)]

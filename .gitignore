@@ -177,3 +177,4 @@ extra
 tolkai_stuff
 *.bak
 pyrightconfig.json
+.zed/

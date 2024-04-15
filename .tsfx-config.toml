@@ -24,9 +24,7 @@
 
 [mean_absolute_change]
 
-[linear_trend_intercept]
-
-[linear_trend_slope]
+[linear_trend]
 
 [variance_larger_than_standard_deviation]
 
@@ -139,7 +137,7 @@ parameters = [{ t = 0.0 }]
 
 [percentage_of_reoccurring_values_to_all_datapoints]
 
-[agg_linear_trend_intercept]
+[agg_linear_trend]
 parameters = [
   { chunk_size = 5, aggregator = "mean" },
   { chunk_size = 5, aggregator = "min" },
@@ -155,21 +153,6 @@ parameters = [
   { chunk_size = 50, aggregator = "var" },
 ]
 
-[agg_linear_trend_slope]
-parameters = [
-  { chunk_size = 5, aggregator = "mean" },
-  { chunk_size = 5, aggregator = "min" },
-  { chunk_size = 5, aggregator = "max" },
-  { chunk_size = 5, aggregator = "var" },
-  { chunk_size = 10, aggregator = "mean" },
-  { chunk_size = 10, aggregator = "min" },
-  { chunk_size = 10, aggregator = "max" },
-  { chunk_size = 10, aggregator = "var" },
-  { chunk_size = 50, aggregator = "mean" },
-  { chunk_size = 50, aggregator = "min" },
-  { chunk_size = 50, aggregator = "max" },
-  { chunk_size = 50, aggregator = "var" },
-]
 
 [mean_n_absolute_max]
 parameters = [{ n = 7 }]
