@@ -16,8 +16,7 @@ fn test_read_config_from_empty_file() {
     assert!(config.kurtosis.is_none());
     assert!(config.absolute_energy.is_none());
     assert!(config.mean_absolute_change.is_none());
-    assert!(config.linear_trend_intercept.is_none());
-    assert!(config.linear_trend_slope.is_none());
+    assert!(config.linear_trend.is_none());
     assert!(config.variance_larger_than_standard_deviation.is_none());
     assert!(config.ratio_beyond_r_sigma.is_none());
     assert!(config.large_standard_deviation.is_none());
@@ -49,8 +48,7 @@ fn test_read_config_from_empty_file() {
     assert!(config
         .percentage_of_reoccurring_values_to_all_datapoints
         .is_none());
-    assert!(config.agg_linear_trend_intercept.is_none());
-    assert!(config.agg_linear_trend_slope.is_none());
+    assert!(config.agg_linear_trend.is_none());
     assert!(config.mean_n_absolute_max.is_none());
     assert!(config.autocorrelation.is_none());
     assert!(config.quantile.is_none());

@@ -44,6 +44,7 @@ pub fn minimal_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
     aggregators
 }
 
+/// The length of the time series
 pub fn count(name: &str) -> Expr {
     col(name).count().alias("length")
 }
@@ -53,15 +54,13 @@ fn _sum_values(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let sum = arr.sum();
     let s = Series::new("", &[sum]);
     Ok(Some(s))
 }
 
+/// The sum of all values in the time series
 pub fn sum_values(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
     col(name)
@@ -70,6 +69,7 @@ pub fn sum_values(name: &str) -> Expr {
         .alias(&format!("{}__sum_values", name))
 }
 
+/// The sum of all values of the time series, using the native Polars API
 pub fn expr_sum(name: &str) -> Expr {
     col(name).sum().alias(&format!("{}__sum", name))
 }
@@ -79,15 +79,15 @@ fn _mean(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mean = arr.mean().unwrap_or(f64::NAN);
     let s = Series::new("", &[mean]);
     Ok(Some(s))
 }
 
+/// The mean of all values in the time series, where mean $\mu$ is
+/// $$ \mu = \frac{1}{n} \sum_{i=1}^{n} x_i, $$
+/// where $n$ is the number of values in the time series
 pub fn mean(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
     col(name)
@@ -96,6 +96,7 @@ pub fn mean(name: &str) -> Expr {
         .alias(&format!("{}__mean", name))
 }
 
+/// The mean of all values of the time series, using the native Polars API
 pub fn expr_mean(name: &str) -> Expr {
     col(name).mean().alias(&format!("{}__mean", name))
 }
@@ -105,15 +106,13 @@ fn _min(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let min = arr.min().unwrap_or(&f64::NAN);
     let s = Series::new("", &[*min]);
     Ok(Some(s))
 }
 
+/// The minimum value in the time series
 pub fn minimum(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
     col(name)
@@ -122,6 +121,7 @@ pub fn minimum(name: &str) -> Expr {
         .alias(&format!("{}__minimum", name))
 }
 
+/// The minimum value of the time series, using the native Polars API
 pub fn expr_minimum(name: &str) -> Expr {
     col(name).min().alias(&format!("{}__minimum", name))
 }
@@ -131,15 +131,13 @@ fn _max(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let max = arr.max().unwrap_or(&f64::NAN);
     let s = Series::new("", &[*max]);
     Ok(Some(s))
 }
 
+/// The maximum value in the time series
 pub fn maximum(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
     col(name)
@@ -148,10 +146,12 @@ pub fn maximum(name: &str) -> Expr {
         .alias(&format!("{}__maximum", name))
 }
 
+/// The maximum value of the time series, using the native Polars API
 pub fn expr_maximum(name: &str) -> Expr {
     col(name).max().alias(&format!("{}__maximum", name))
 }
 
+/// The median of all values in the time series, using the native Polars API
 pub fn expr_median(name: &str) -> Expr {
     col(name)
         .median()
@@ -164,15 +164,15 @@ fn _standard_deviation(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let standard_deviation = arr.std(1.0);
     let s = Series::new("", &[standard_deviation]);
     Ok(Some(s))
 }
 
+/// The standard deviation of all values in the time series, where the standard deviation $\sigma$ is
+/// $$ \sigma = \sqrt{\frac{1}{n - 1} \sum_{i=1}^{n} (x_i - \mu)^2}, $$
+/// where $n$ is the number of values in the time series and $\mu$ is the mean of the time series
 pub fn standard_deviation(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
     col(name)
@@ -181,6 +181,7 @@ pub fn standard_deviation(name: &str) -> Expr {
         .alias(&format!("{}__standard_deviation", name))
 }
 
+/// The standard deviation of all values of the time series, using the native Polars API
 pub fn expr_standard_deviation(name: &str) -> Expr {
     col(name)
         .std(1)
@@ -192,15 +193,15 @@ fn _variance(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let variance = arr.var(1.0);
     let s = Series::new("", &[variance]);
     Ok(Some(s))
 }
 
+/// The variance of all values in the time series, where the variance $\sigma^2$ is
+/// $$ \sigma^2 = \frac{1}{n - 1} \sum_{i=1}^{n} (x_i - \mu)^2, $$
+/// where $n$ is the number of values in the time series and $\mu$ is the mean of the time series
 pub fn variance(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
     col(name)
@@ -209,6 +210,7 @@ pub fn variance(name: &str) -> Expr {
         .alias(&format!("{}__variance", name))
 }
 
+/// The variance of all values of the time series, using the native Polars API
 pub fn expr_variance(name: &str) -> Expr {
     col(name).var(1).alias(&format!("{}__variance", name))
 }
@@ -218,10 +220,7 @@ fn _rms(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let rms = arr
         .mapv(|x| x.powi(2))
         .mean()
@@ -231,6 +230,9 @@ fn _rms(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// The root mean square of all values in the time series, where the root mean square (RMS) is
+/// $$ \text{RMS} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} x_i^2}, $$
+/// where $n$ is the number of values in the time series
 pub fn root_mean_square(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
     col(name)
@@ -239,6 +241,7 @@ pub fn root_mean_square(name: &str) -> Expr {
         .alias(&format!("{}__root_mean_sqaure", name))
 }
 
+/// The root mean square of all values of the time series, using the native Polars API
 pub fn expr_root_mean_square(name: &str) -> Expr {
     col(name)
         .pow(2.0)
@@ -247,6 +250,7 @@ pub fn expr_root_mean_square(name: &str) -> Expr {
         .alias(&format!("{}__rms", name))
 }
 
+/// The skewness of all values in the time series, using the native Polars API
 pub fn expr_skewness(name: &str) -> Expr {
     let n = col(name).count();
     let mean = col(name).mean();
@@ -260,15 +264,16 @@ fn _skewness(s: Series) -> Result<Option<Series>, PolarsError> {
     if s.is_empty() {
         return Ok(Some(Series::new("", &[f64::NAN])));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let skewness = arr.skewness().unwrap_or(f64::NAN);
     let s = Series::new("", &[skewness]);
     Ok(Some(s))
 }
 
+/// The skewness of all values in the time series, where the skewness is the third standardized moment:
+/// $$ \text{skewness} = \frac{1}{(n-1) \sigma^3} \sum_{i=1}^{n} (x_i - \mu)^3, $$
+/// where $n$ is the number of values in the time series, $\mu$ is the mean of the time series,
+/// and $\sigma$ is the standard deviation of the time series
 pub fn skewness(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
     col(name)
