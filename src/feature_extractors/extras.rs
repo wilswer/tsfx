@@ -1363,14 +1363,6 @@ fn _quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
-// pub fn quantile(name: &str, q: f64) -> Expr {
-//     let o = GetOutput::from_type(DataType::Float64);
-//     col(name)
-//         .apply(move |s| _quantile(s, q), o)
-//         .get(0)
-//         .alias(&format!("{}__quantile__q_{:.1}", name, q))
-// }
-
 pub fn expr_quantile(name: &str, q: f64) -> Expr {
     quantile(name, lit(q), QuantileInterpolOptions::Midpoint)
         .cast(DataType::Float64)

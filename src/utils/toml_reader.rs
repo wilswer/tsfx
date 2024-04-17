@@ -685,7 +685,7 @@ pub fn load_config(file_path: Option<&str>) -> Config {
         ".tsfx-config.toml"
     };
     if !std::path::Path::new(file_path).exists() {
-        println!("Config file not found. Using default config.");
+        println!("tsfx: No config file detected. Using default config.");
         return Config::default();
     }
     let config_str = std::fs::read_to_string(file_path);

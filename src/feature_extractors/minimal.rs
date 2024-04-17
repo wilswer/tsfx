@@ -238,7 +238,7 @@ pub fn root_mean_square(name: &str) -> Expr {
     col(name)
         .apply(_rms, o)
         .get(0)
-        .alias(&format!("{}__root_mean_sqaure", name))
+        .alias(&format!("{}__root_mean_square", name))
 }
 
 /// The root mean square of all values of the time series, using the native Polars API
