@@ -187,9 +187,11 @@ pub fn extra_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
         }
         if let Some(feature) = &config.index_mass_quantile {
             let params = &feature.parameters;
+            let mut qs = Vec::new();
             for p in params {
-                aggregators.push(index_mass_quantile(col, p.q));
+                qs.push(p.q);
             }
+            aggregators.push(index_mass_quantile(col, qs));
         }
         if let Some(feature) = &config.c3 {
             let parameters = &feature.parameters;
@@ -1548,10 +1550,10 @@ pub fn range_count(name: &str, lower: f64, upper: f64) -> Expr {
         ))
 }
 
-fn _index_mass_quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
+fn _index_mass_quantile(s: Series, qs: &[f64]) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Series::new("", &[f64::NAN])));
+        return _make_nan_struct_series("index_mass_quantile", "q", qs);
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mut abs_arr = arr.mapv(|x| x.abs());
@@ -1561,22 +1563,37 @@ fn _index_mass_quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError
     }
     abs_arr.accumulate_axis_inplace(Axis(0), |&prev, curr| *curr += prev);
     let mass_centralized = abs_arr.mapv(|x| x / abs_sum);
-    let idx_res = mass_centralized
-        .into_iter()
-        .enumerate()
-        .filter(|(_, x)| x >= &q)
-        .map(|(i, _)| i);
-    let out = (idx_res.min().unwrap_or(0) + 1) as f64 / arr.len() as f64;
-    let s = Series::new("", &[out]);
+    let mut ss: Vec<Series> = Vec::with_capacity(qs.len());
+    for q in qs {
+        let idx_res = mass_centralized
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| x >= &q)
+            .map(|(i, _)| i);
+        let out = (idx_res.min().unwrap_or(0) + 1) as f64 / arr.len() as f64;
+        ss.push(Series::new(
+            &format!("index_mass_quantile__q_{}", q),
+            &[out],
+        ));
+    }
+    let s = DataFrame::new(ss)?
+        .into_struct("index_mass_quantile")
+        .into_series();
     Ok(Some(s))
 }
 
-pub fn index_mass_quantile(name: &str, q: f64) -> Expr {
+pub fn index_mass_quantile(name: &str, qs: Vec<f64>) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
+    let mut new_field_names = Vec::with_capacity(qs.len());
+    for n in qs.iter() {
+        new_field_names.push(format!("{}__index_mass_quantile__q_{}", name, n));
+    }
     col(name)
-        .apply(move |s| _index_mass_quantile(s, q), o)
+        .apply(move |s| _index_mass_quantile(s, &qs), o)
+        .struct_()
+        .rename_fields(new_field_names)
         .get(0)
-        .alias(&format!("{}__index_mass_quantile__q_{:.1}", name, q))
+        .alias(&format!("{}__index_mass_quantile", name))
 }
 
 fn _c3(s: Series, lag: usize) -> Result<Option<Series>, PolarsError> {
