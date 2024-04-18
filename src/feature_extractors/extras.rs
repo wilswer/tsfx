@@ -61,9 +61,11 @@ pub fn extra_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
         }
         if let Some(feature) = &config.symmetry_looking {
             let params = &feature.parameters;
+            let mut rs = Vec::new();
             for p in params {
-                aggregators.push(symmetry_looking(col, p.r));
+                rs.push(p.r);
             }
+            aggregators.push(symmetry_looking(col, rs));
         }
         if config.has_duplicate_max.is_some() {
             aggregators.push(has_duplicate_max(col));
@@ -151,15 +153,19 @@ pub fn extra_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
         }
         if let Some(feature) = &config.mean_n_absolute_max {
             let params = &feature.parameters;
+            let mut ns = Vec::new();
             for p in params {
-                aggregators.push(mean_n_absolute_max(col, p.n));
+                ns.push(p.n);
             }
+            aggregators.push(mean_n_absolute_max(col, ns));
         }
         if let Some(feature) = &config.autocorrelation {
             let params = &feature.parameters;
+            let mut lags = Vec::new();
             for p in params {
-                aggregators.push(autocorrelation(col, p.lag));
+                lags.push(p.lag);
             }
+            aggregators.push(autocorrelation(col, lags));
         }
         if let Some(feature) = &config.quantile {
             let params = &feature.parameters;
@@ -261,6 +267,22 @@ where
             xs[xs.len() / 2]
         })
     }
+}
+
+fn _make_nan_struct_series(
+    name: &str,
+    parameter_name: &str,
+    rs: &[f64],
+) -> Result<Option<Series>, PolarsError> {
+    let mut ss: Vec<Series> = Vec::with_capacity(rs.len());
+    for r in rs.iter() {
+        ss.push(Series::new(
+            &format!("{}__{}_{}", name, parameter_name, r),
+            &[f64::NAN],
+        ))
+    }
+    let s = DataFrame::new(ss)?.into_struct(name).into_series();
+    Ok(Some(s))
 }
 
 fn _get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize> {
@@ -462,23 +484,13 @@ pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
 fn _ratio_beyond_r_sigma(s: Series, rs: &[f64]) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        let mut ss: Vec<Series> = Vec::with_capacity(rs.len());
-        for r in rs.iter() {
-            ss.push(Series::new(
-                &format!("ratio_beyond_r_sigma__{}", r),
-                &[f64::NAN],
-            ))
-        }
-        let s = DataFrame::new(ss)?
-            .into_struct("ratio_beyond_r_sigma")
-            .into_series();
-        return Ok(Some(s));
+        return _make_nan_struct_series("ratio_beyond_r_sigma", "r", rs);
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(Some(Series::new("", &[f64::NAN]))),
+        None => return _make_nan_struct_series("ratio_beyond_r_sigma", "r", rs),
     };
     let std = arr.std(1.0);
     let mut ss: Vec<Series> = Vec::with_capacity(rs.len());
@@ -488,7 +500,7 @@ fn _ratio_beyond_r_sigma(s: Series, rs: &[f64]) -> Result<Option<Series>, Polars
             .sum();
         let ratio = count / arr.len() as f64;
         ss.push(Series::new(
-            &format!("ratio_beyond_r_sigma__{}", r),
+            &format!("ratio_beyond_r_sigma__r_{}", r),
             &[ratio],
         ));
     }
@@ -503,7 +515,7 @@ pub fn ratio_beyond_r_sigma(name: &str, rs: Vec<f64>) -> Expr {
     let name = name.to_string();
     let mut new_field_names = Vec::with_capacity(rs.len());
     for r in rs.iter() {
-        new_field_names.push(format!("{}__ratio_beyond_r_sigma__r_{:.1}", name, r))
+        new_field_names.push(format!("{}__ratio_beyond_r_sigma__r_{:.2}", name, r))
     }
     col(&name)
         .apply(move |s| _ratio_beyond_r_sigma(s, &rs), o)
@@ -516,17 +528,7 @@ pub fn ratio_beyond_r_sigma(name: &str, rs: Vec<f64>) -> Expr {
 fn _large_standard_deviation(s: Series, rs: &[f64]) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        let mut ss: Vec<Series> = Vec::with_capacity(rs.len());
-        for r in rs.iter() {
-            ss.push(Series::new(
-                &format!("large_standard_deviation__r_{:.2}", r),
-                &[f64::NAN],
-            ))
-        }
-        let s = DataFrame::new(ss)?
-            .into_struct("large_standard_deviation")
-            .into_series();
-        return Ok(Some(s));
+        return _make_nan_struct_series("large_standard_deviation", "r", rs);
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let min = arr.min().unwrap_or(&0.0);
@@ -536,7 +538,7 @@ fn _large_standard_deviation(s: Series, rs: &[f64]) -> Result<Option<Series>, Po
     for r in rs {
         let out = std > r * (max - min);
         ss.push(Series::new(
-            &format!("large_standard_deviation__r_{:.2}", r),
+            &format!("large_standard_deviation__r_{}", r),
             &[out as u8 as f64],
         ));
     }
@@ -560,10 +562,10 @@ pub fn large_standard_deviation(name: &str, rs: Vec<f64>) -> Expr {
         .alias(&format!("{}__large_standard_deviation", name))
 }
 
-fn _symmetry_looking(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
+fn _symmetry_looking(s: Series, rs: &[f64]) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Series::new("", &[f64::NAN])));
+        return _make_nan_struct_series("symmetry_looking", "r", rs);
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -579,31 +581,46 @@ fn _symmetry_looking(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => f64::from(m),
-        None => return Ok(Some(Series::new("", &[f64::NAN]))),
+        None => return _make_nan_struct_series("symmetry_looking", "r", rs),
     };
     let mean_median_diff = (mean - median).abs();
     let max_res = arr.max();
     let max = match max_res {
         Ok(m) => f64::from(*m),
-        Err(_) => return Ok(Some(Series::new("", &[f64::NAN]))),
+        Err(_) => return _make_nan_struct_series("symmetry_looking", "r", rs),
     };
     let min_res = arr.min();
     let min = match min_res {
         Ok(m) => f64::from(*m),
-        Err(_) => return Ok(Some(Series::new("", &[f64::NAN]))),
+        Err(_) => return _make_nan_struct_series("symmetry_looking", "r", rs),
     };
     let max_min_diff = max - min;
-    let out = mean_median_diff < r * max_min_diff;
-    let s = Series::new("", &[out as u8 as f64]);
+    let mut ss: Vec<Series> = Vec::with_capacity(rs.len());
+    for r in rs {
+        let out = mean_median_diff < r * max_min_diff;
+        ss.push(Series::new(
+            &format!("symmetry_looking__r_{}", r),
+            &[out as u8 as f64],
+        ));
+    }
+    let s = DataFrame::new(ss)?
+        .into_struct("symmetry_looking")
+        .into_series();
     Ok(Some(s))
 }
 
-pub fn symmetry_looking(name: &str, r: f64) -> Expr {
+pub fn symmetry_looking(name: &str, rs: Vec<f64>) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
+    let mut new_field_names = Vec::with_capacity(rs.len());
+    for r in rs.iter() {
+        new_field_names.push(format!("{}__symmetry_looking__r_{:.2}", name, r));
+    }
     col(name)
-        .apply(move |s| _symmetry_looking(s, r), o)
+        .apply(move |s| _symmetry_looking(s, &rs), o)
+        .struct_()
+        .rename_fields(new_field_names)
         .get(0)
-        .alias(&format!("{}__symmetry_looking__r_{:.2}", name, r))
+        .alias(&format!("{}__symmetry_looking__r_", name))
 }
 
 fn _has_duplicate_max(s: Series) -> Result<Option<Series>, PolarsError> {
@@ -1343,37 +1360,69 @@ fn agg_linear_trend(name: &str, chunk_size: usize, aggregator: impl Into<String>
         ))
 }
 
-fn _mean_n_absolute_max(s: Series, n: usize) -> Result<Option<Series>, PolarsError> {
+fn _mean_n_absolute_max(s: Series, ns: &[usize]) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Series::new("", &[f64::NAN])));
-    }
-    if s.len() < n {
-        return Ok(Some(Series::new("", &[f64::NAN])));
+        return _make_nan_struct_series(
+            "mean_n_absolute_max",
+            "n",
+            &ns.iter().map(|x| *x as f64).collect::<Vec<f64>>(),
+        );
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr.mapv(|x| -OrderedFloat::from(x.abs()));
-    let sarr = arr.into_iter().k_smallest(n).map(|x| -f64::from(x));
-    let out = sarr.sum::<f64>() / n as f64;
-    let s = Series::new("", &[out]);
+
+    let mut ss: Vec<Series> = Vec::with_capacity(ns.len());
+    let sarr = arr
+        .iter()
+        .k_smallest(
+            *ns.iter()
+                .max()
+                .expect("mean_n_absolute_max parameters didn't have a maximum value..."),
+        )
+        .map(|x| -f64::from(*x))
+        .collect::<Vec<f64>>();
+    for n in ns {
+        let out = if arr.len() < *n {
+            f64::NAN
+        } else {
+            let _sarr = sarr.iter().take(*n);
+            let sum_sarr = _sarr.sum::<f64>();
+            sum_sarr / *n as f64
+        };
+        ss.push(Series::new(
+            &format!("mean_n_absolute_max__n_{}", n),
+            &[out],
+        ));
+    }
+    let s = DataFrame::new(ss)?
+        .into_struct("mean_n_absolute_max")
+        .into_series();
     Ok(Some(s))
 }
 
-pub fn mean_n_absolute_max(name: &str, n: usize) -> Expr {
+pub fn mean_n_absolute_max(name: &str, ns: Vec<usize>) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
+    let mut new_field_names = Vec::with_capacity(ns.len());
+    for n in ns.iter() {
+        new_field_names.push(format!("{}__mean_n_absolute_max__n_{}", name, n));
+    }
     col(name)
-        .apply(move |s| _mean_n_absolute_max(s, n), o)
+        .apply(move |s| _mean_n_absolute_max(s, &ns), o)
+        .struct_()
+        .rename_fields(new_field_names)
         .get(0)
-        .alias(&format!("{}__mean_n_absolute_max__n_{:.1}", name, n))
+        .alias(&format!("{}__mean_n_absolute_max", name))
 }
 
-fn _autocorrelation(s: Series, lag: usize) -> Result<Option<Series>, PolarsError> {
+fn _autocorrelation(s: Series, lags: &[usize]) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Series::new("", &[f64::NAN])));
-    }
-    if s.len() < lag {
-        return Ok(Some(Series::new("", &[f64::NAN])));
+        return _make_nan_struct_series(
+            "autocorrelation",
+            "lag",
+            &lags.iter().map(|x| *x as f64).collect::<Vec<f64>>(),
+        );
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -1385,21 +1434,40 @@ fn _autocorrelation(s: Series, lag: usize) -> Result<Option<Series>, PolarsError
         Some(m) => m,
         None => return Ok(Some(Series::new("", &[f64::NAN]))),
     };
-    let y1 = arr.slice(s![..(arr.len() - lag)]);
-    let y2 = arr.slice(s![lag..]);
-    let sum_product = (y1.to_owned() - mean).dot(&(y2.to_owned() - mean));
     let v = arr.var(1.0);
-    let out = sum_product / ((arr.len() - lag) as f64 * v);
-    let s = Series::new("", &[out]);
+    let mut ss: Vec<Series> = Vec::with_capacity(lags.len());
+    for lag in lags {
+        let out = if arr.len() < *lag {
+            f64::NAN
+        } else {
+            let y1 = arr.slice(s![..(arr.len() - lag)]);
+            let y2 = arr.slice(s![*lag..]);
+            let sum_product = (y1.to_owned() - mean).dot(&(y2.to_owned() - mean));
+            sum_product / ((arr.len() - lag) as f64 * v)
+        };
+        ss.push(Series::new(
+            &format!("autocorrelation__lag_{}", lag),
+            &[out],
+        ));
+    }
+    let s = DataFrame::new(ss)?
+        .into_struct("autocorrelation")
+        .into_series();
     Ok(Some(s))
 }
 
-pub fn autocorrelation(name: &str, lag: usize) -> Expr {
+pub fn autocorrelation(name: &str, lags: Vec<usize>) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
+    let mut new_field_names = Vec::with_capacity(lags.len());
+    for lag in lags.iter() {
+        new_field_names.push(format!("{}__autocorrelation__lag_{}", name, lag));
+    }
     col(name)
-        .apply(move |s| _autocorrelation(s, lag), o)
+        .apply(move |s| _autocorrelation(s, &lags), o)
+        .struct_()
+        .rename_fields(new_field_names)
         .get(0)
-        .alias(&format!("{}__autocorrelation__lag_{:.1}", name, lag))
+        .alias(&format!("{}__autocorrelation", name))
 }
 
 fn _quantile(s: Series, q: f64) -> Result<Option<Series>, PolarsError> {
