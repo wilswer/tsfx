@@ -29,6 +29,7 @@ polars = { version = "*", features = [
   "ndarray",
   "streaming",
   "dtype-struct",
+  "nightly",
 ] }
 pyo3-polars = { version = "*", features = ["lazy"] }
 linfa = "*"
