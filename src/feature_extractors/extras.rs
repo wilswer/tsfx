@@ -44,15 +44,20 @@ pub fn extra_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
         }
         if let Some(feature) = &config.ratio_beyond_r_sigma {
             let params = &feature.parameters;
+            let mut rs = Vec::new();
             for p in params {
-                aggregators.push(ratio_beyond_r_sigma(col, p.r));
+                rs.push(p.r);
             }
+            aggregators.push(ratio_beyond_r_sigma(col, rs));
         }
+
         if let Some(feature) = &config.large_standard_deviation {
             let params = &feature.parameters;
+            let mut rs = Vec::new();
             for p in params {
-                aggregators.push(large_standard_deviation(col, p.r));
+                rs.push(p.r);
             }
+            aggregators.push(large_standard_deviation(col, rs));
         }
         if let Some(feature) = &config.symmetry_looking {
             let params = &feature.parameters;
@@ -454,11 +459,20 @@ pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
         name
     ))
 }
-
-fn _ratio_beyond_r_sigma(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
+fn _ratio_beyond_r_sigma(s: Series, rs: &[f64]) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Series::new("", &[f64::NAN])));
+        let mut ss: Vec<Series> = Vec::with_capacity(rs.len());
+        for r in rs.iter() {
+            ss.push(Series::new(
+                &format!("ratio_beyond_r_sigma__{}", r),
+                &[f64::NAN],
+            ))
+        }
+        let s = DataFrame::new(ss)?
+            .into_struct("ratio_beyond_r_sigma")
+            .into_series();
+        return Ok(Some(s));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mean_opt = arr.mean();
@@ -467,42 +481,83 @@ fn _ratio_beyond_r_sigma(s: Series, r: f64) -> Result<Option<Series>, PolarsErro
         None => return Ok(Some(Series::new("", &[f64::NAN]))),
     };
     let std = arr.std(1.0);
-    let count = arr
-        .mapv(|x| if (x - mean).abs() > r * std { 1.0 } else { 0.0 })
-        .sum();
-    let ratio = count / arr.len() as f64;
-    let s = Series::new("", &[ratio]);
+    let mut ss: Vec<Series> = Vec::with_capacity(rs.len());
+    for r in rs {
+        let count = arr
+            .mapv(|x| if (x - mean).abs() > r * std { 1.0 } else { 0.0 })
+            .sum();
+        let ratio = count / arr.len() as f64;
+        ss.push(Series::new(
+            &format!("ratio_beyond_r_sigma__{}", r),
+            &[ratio],
+        ));
+    }
+    let s = DataFrame::new(ss)?
+        .into_struct("ratio_beyond_r_sigma")
+        .into_series();
     Ok(Some(s))
 }
 
-pub fn ratio_beyond_r_sigma(name: &str, r: f64) -> Expr {
+pub fn ratio_beyond_r_sigma(name: &str, rs: Vec<f64>) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
-    col(name)
-        .apply(move |s| _ratio_beyond_r_sigma(s, r), o)
+    let name = name.to_string();
+    let mut new_field_names = Vec::with_capacity(rs.len());
+    for r in rs.iter() {
+        new_field_names.push(format!("{}__ratio_beyond_r_sigma__r_{:.1}", name, r))
+    }
+    col(&name)
+        .apply(move |s| _ratio_beyond_r_sigma(s, &rs), o)
+        .struct_()
+        .rename_fields(new_field_names)
         .get(0)
-        .alias(&format!("{}__ratio_beyond_r_sigma__r_{:.1}", name, r))
+        .alias(&format!("{}__ratio_beyond_r_sigma", name))
 }
 
-fn _large_standard_deviation(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
+fn _large_standard_deviation(s: Series, rs: &[f64]) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Series::new("", &[f64::NAN])));
+        let mut ss: Vec<Series> = Vec::with_capacity(rs.len());
+        for r in rs.iter() {
+            ss.push(Series::new(
+                &format!("large_standard_deviation__r_{:.2}", r),
+                &[f64::NAN],
+            ))
+        }
+        let s = DataFrame::new(ss)?
+            .into_struct("large_standard_deviation")
+            .into_series();
+        return Ok(Some(s));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let min = arr.min().unwrap_or(&0.0);
     let max = arr.max().unwrap_or(&0.0);
     let std = arr.std(1.0);
-    let out = std > r * (max - min);
-    let s = Series::new("", &[out as u8 as f64]);
+    let mut ss: Vec<Series> = Vec::with_capacity(rs.len());
+    for r in rs {
+        let out = std > r * (max - min);
+        ss.push(Series::new(
+            &format!("large_standard_deviation__r_{:.2}", r),
+            &[out as u8 as f64],
+        ));
+    }
+    let s = DataFrame::new(ss)?
+        .into_struct("large_standard_deviation")
+        .into_series();
     Ok(Some(s))
 }
 
-pub fn large_standard_deviation(name: &str, r: f64) -> Expr {
+pub fn large_standard_deviation(name: &str, rs: Vec<f64>) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
+    let mut new_field_names = Vec::with_capacity(rs.len());
+    for r in rs.iter() {
+        new_field_names.push(format!("{}__large_standard_deviation__r_{:.2}", name, r));
+    }
     col(name)
-        .apply(move |s| _large_standard_deviation(s, r), o)
+        .apply(move |s| _large_standard_deviation(s, &rs), o)
+        .struct_()
+        .rename_fields(new_field_names)
         .get(0)
-        .alias(&format!("{}__large_standard_deviation__r_{:.2}", name, r))
+        .alias(&format!("{}__large_standard_deviation", name))
 }
 
 fn _symmetry_looking(s: Series, r: f64) -> Result<Option<Series>, PolarsError> {
