@@ -43,7 +43,7 @@ num = "*"
 criterion = { version = "*", features = ["html_reports"] }
 
 [package.metadata.docs.rs]
-rustdoc-args = [ "--html-in-header", "./src/html/docs-header.html" ]
+rustdoc-args = ["--html-in-header", "./src/html/docs-header.html"]
 
 [[bench]]
 name = "bench_main"
