@@ -1,8 +1,10 @@
+pub mod error;
 pub mod extract;
 pub mod feature_extractors;
 pub mod utils;
 
-use crate::extract::{lazy_feature_df, DynamicGroupBySettings, ExtractionSettings, FeatureSetting};
+use error::ExtractionError;
+use extract::{lazy_feature_df, DynamicGroupBySettings, ExtractionSettings, FeatureSetting};
 use pyo3::prelude::*;
 use pyo3_polars::{PyDataFrame, PyLazyFrame};
 
@@ -98,22 +100,14 @@ impl From<PyDynamicGroupBySettings> for DynamicGroupBySettings {
 
 impl From<PyExtractionSettings> for ExtractionSettings {
     fn from(opts: PyExtractionSettings) -> Self {
-        if opts.dynamic_settings.is_none() {
-            ExtractionSettings {
-                grouping_col: opts.grouping_col,
-                value_cols: opts.value_cols,
-                feature_setting: opts.feature_setting.into(),
-                config_path: opts.config_path,
-                dynamic_settings: None,
-            }
-        } else {
-            ExtractionSettings {
-                grouping_col: opts.grouping_col,
-                value_cols: opts.value_cols,
-                feature_setting: opts.feature_setting.into(),
-                config_path: opts.config_path,
-                dynamic_settings: Some(opts.dynamic_settings.unwrap().into()),
-            }
+        ExtractionSettings {
+            grouping_col: opts.grouping_col,
+            value_cols: opts.value_cols,
+            feature_setting: opts.feature_setting.into(),
+            config_path: opts.config_path,
+            dynamic_settings: opts
+                .dynamic_settings
+                .map(|dyn_settings| dyn_settings.into()),
         }
     }
 }
@@ -128,19 +122,21 @@ fn extract_features(
     let lf = lf.into();
     let settings = settings.into();
     let lf = if !streaming {
-        lazy_feature_df(lf, settings).collect().unwrap()
+        lazy_feature_df(lf, settings)?
+            .collect()
+            .map_err(ExtractionError::PolarsError)?
     } else {
-        lazy_feature_df(lf, settings)
+        lazy_feature_df(lf, settings)?
             .with_streaming(true)
             .collect()
-            .unwrap()
+            .map_err(ExtractionError::PolarsError)?
     };
     Ok(PyDataFrame(lf))
 }
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn tsfx(_py: Python, m: &PyModule) -> PyResult<()> {
+fn tsfx(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyFeatureSetting>()?;
     m.add_class::<PyExtractionSettings>()?;
     m.add_class::<PyDynamicGroupBySettings>()?;

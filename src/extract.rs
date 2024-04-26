@@ -1,5 +1,6 @@
 use polars::prelude::*;
 
+use crate::error::ExtractionError;
 use crate::feature_extractors::extras::extra_aggregators;
 use crate::feature_extractors::high_comp_cost::high_comp_cost_aggregators;
 use crate::feature_extractors::minimal::minimal_aggregators;
@@ -45,17 +46,19 @@ fn get_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
     }
 }
 
-pub fn lazy_feature_df(df: LazyFrame, opts: ExtractionSettings) -> LazyFrame {
+pub fn lazy_feature_df(
+    df: LazyFrame,
+    opts: ExtractionSettings,
+) -> Result<LazyFrame, ExtractionError> {
     let aggregators = get_aggregators(&opts);
     let mut selected_cols = Vec::new();
     selected_cols.push(col(&opts.grouping_col));
     for val_col in &opts.value_cols {
         selected_cols.push(col(val_col));
     }
-    let gdf = if opts.dynamic_settings.is_some() {
-        let dynamic_settings = opts.clone().dynamic_settings.unwrap();
-        let datetime_format = if dynamic_settings.datetime_format.is_some() {
-            dynamic_settings.clone().datetime_format.unwrap()
+    let gdf = if let Some(dynamic_settings) = opts.dynamic_settings {
+        let datetime_format = if let Some(dt_fmt) = dynamic_settings.datetime_format {
+            dt_fmt
         } else {
             "%Y-%m-%d %H:%S:%M".to_string()
         };
@@ -79,8 +82,7 @@ pub fn lazy_feature_df(df: LazyFrame, opts: ExtractionSettings) -> LazyFrame {
         df.select(&selected_cols)
             .group_by([col(&opts.grouping_col)])
     };
-    let fdf = gdf.agg(aggregators).collect().unwrap();
-    fdf.lazy()
+    Ok(gdf.agg(aggregators).collect()?.lazy())
 }
 
 #[cfg(test)]

@@ -20,16 +20,16 @@ csv = "*"
 ndarray = "*"
 ndarray-stats = "*"
 polars = { version = "*", features = [
-  "polars-io",
-  "lazy",
-  "csv",
-  "diff",
-  "dynamic_group_by",
-  "strings",
-  "ndarray",
-  "streaming",
-  "dtype-struct",
-  "nightly",
+    "polars-io",
+    "lazy",
+    "csv",
+    "diff",
+    "dynamic_group_by",
+    "strings",
+    "ndarray",
+    "streaming",
+    "dtype-struct",
+    "nightly",
 ] }
 pyo3-polars = { version = "*", features = ["lazy"] }
 linfa = "*"
@@ -38,6 +38,7 @@ noisy_float = "*"
 itertools = "*"
 ordered-float = "*"
 num = "*"
+thiserror = "1"
 
 [dev-dependencies]
 criterion = { version = "*", features = ["html_reports"] }
