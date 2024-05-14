@@ -329,6 +329,10 @@ fn _absolute_energy(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// The absolute energy of the time series,
+/// defined as the sum of the squared values of the time series:
+/// $$ \text{absolute energy} = \sum_{i=1}^{n}x_i^2,$$
+/// where $n$ is the number of values in the time series.
 pub fn absolute_energy(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
     col(name)
@@ -337,6 +341,8 @@ pub fn absolute_energy(name: &str) -> Expr {
         .alias(&format!("{}__absolute_energy", name))
 }
 
+/// The absolute energy of the time series cf. [`absolute_energy`],
+/// calculated using the native Polars API.
 pub fn expr_abs_energy(name: &str) -> Expr {
     col(name)
         .pow(2)
@@ -370,6 +376,9 @@ fn _mean_absolute_change(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// The mean absolute change of a time series is defined as:
+/// $$ \text{mean abs. change} = \frac{1}{n-1}\sum_{i=1}^{n-1} \|x_{i + 1} - x_{i}\|.$$
+/// It is the average of the absolute value of differences in the time series.
 pub fn mean_absolute_change(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
     col(name)
@@ -378,6 +387,8 @@ pub fn mean_absolute_change(name: &str) -> Expr {
         .alias(&format!("{}__mean_absolute_change", name))
 }
 
+/// Mean change implemented using the native Polars API.
+/// See [`mean_change`].
 pub fn expr_mean_change(name: &str) -> Expr {
     let diffs = col(name).diff(1, NullBehavior::Drop);
     let n = col(name).count() - lit(1);
@@ -1094,6 +1105,8 @@ fn _mean_change(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// The mean change of a time series is defined as
+/// $$ \text{mean change} = \frac{1}{n-1} \sum_{i=1}^{n-1} x_{i + 1} - x_{i} = \frac{x_{n} - x_1}{n-1} $$.
 pub fn mean_change(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
     col(name)
