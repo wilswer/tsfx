@@ -19,7 +19,7 @@ chrono = "*"
 csv = "*"
 ndarray = "*"
 ndarray-stats = "*"
-polars = { version = "*", features = [
+polars = { version = "0.40.0", features = [
     "polars-io",
     "lazy",
     "csv",
@@ -30,8 +30,9 @@ polars = { version = "*", features = [
     "streaming",
     "dtype-struct",
     "nightly",
+    "regex",
 ] }
-pyo3-polars = { version = "*", features = ["lazy"] }
+pyo3-polars = { version = "0.14.0", features = ["lazy"] }
 linfa = "*"
 linfa-linear = "*"
 noisy_float = "*"
