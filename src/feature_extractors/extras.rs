@@ -2,6 +2,7 @@ use core::f64;
 use std::ops::{Add, Div, Mul, Rem, Sub};
 use std::{fmt::Display, str::FromStr};
 
+use anyhow::Result;
 use itertools::izip;
 use itertools::Itertools;
 use linfa::prelude::*;

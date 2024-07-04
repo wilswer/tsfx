@@ -23,6 +23,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     dynamic_settings: None,
                 },
             )
+            .unwrap()
             .collect()
             .unwrap()
         })
