@@ -1,3 +1,4 @@
+use anyhow::Result;
 use polars::prelude::*;
 
 use crate::error::ExtractionError;
@@ -87,7 +88,6 @@ pub fn lazy_feature_df(
 
 #[cfg(test)]
 mod tests {
-
     use super::{lazy_feature_df, ExtractionSettings, FeatureSetting};
     use polars::prelude::*;
 
@@ -106,7 +106,7 @@ mod tests {
             config_path: None,
             dynamic_settings: None,
         };
-        let gdf = lazy_feature_df(df, opts);
+        let gdf = lazy_feature_df(df, opts).unwrap();
 
         assert_eq!(
             gdf.clone().select([col("length")]).collect().unwrap(),
@@ -142,6 +142,7 @@ mod tests {
             df!["value__median" => [2.0, 2.0, 2.0]].unwrap()
         );
     }
+
     #[test]
     fn test_extract_short_series() {
         let df = df![
@@ -157,7 +158,7 @@ mod tests {
             config_path: None,
             dynamic_settings: None,
         };
-        let gdf = lazy_feature_df(df, opts);
+        let gdf = lazy_feature_df(df, opts).unwrap();
         println!("{}", gdf.clone().collect().unwrap());
         assert_eq!(
             gdf.clone().select([col("length")]).collect().unwrap(),
@@ -166,8 +167,8 @@ mod tests {
         assert_eq!(
             gdf.clone()
                 .sort(
-                    "id",
-                    SortOptions {
+                    ["id"],
+                    SortMultipleOptions {
                         ..Default::default()
                     }
                 )
@@ -179,8 +180,8 @@ mod tests {
         assert_eq!(
             gdf.clone()
                 .sort(
-                    "id",
-                    SortOptions {
+                    ["id"],
+                    SortMultipleOptions {
                         ..Default::default()
                     }
                 )
@@ -192,8 +193,8 @@ mod tests {
         assert_eq!(
             gdf.clone()
                 .sort(
-                    "id",
-                    SortOptions {
+                    ["id"],
+                    SortMultipleOptions {
                         ..Default::default()
                     }
                 )
@@ -205,8 +206,8 @@ mod tests {
         assert_eq!(
             gdf.clone()
                 .sort(
-                    "id",
-                    SortOptions {
+                    ["id"],
+                    SortMultipleOptions {
                         ..Default::default()
                     }
                 )
@@ -218,8 +219,8 @@ mod tests {
         assert!(gdf
             .clone()
             .sort(
-                "id",
-                SortOptions {
+                ["id"],
+                SortMultipleOptions {
                     ..Default::default()
                 }
             )

@@ -6,23 +6,23 @@ build-backend = "maturin"
 name = "tsfx"
 requires-python = ">=3.8"
 classifiers = [
-    "Programming Language :: Rust",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
-dependencies = ["polars==0.20.31", "pyarrow"]
+dependencies = ["polars==1.1.0", "pyarrow"]
 
 [project.optional-dependencies]
 dev = ["maturin", "ruff", "mypy", "pre-commit", "pytest"]
 bench = ["tsfresh", "pandas"]
 examples = [
-    "plotly",
-    "qdrant-client",
-    "jupyter",
-    "notebook",
-    "numpy",
-    "scikit-learn",
+  "plotly",
+  "qdrant-client",
+  "jupyter",
+  "notebook",
+  "numpy",
+  "scikit-learn",
 ]
 all = ["tsfx[dev,bench,examples]"]
 
@@ -48,56 +48,56 @@ line-length = 88
 
 # Enable Pyflakes `E` and `F` codes by default.
 ignore = [
-    "N806",
-    "ANN101",
-    "D203",
-    "D107",
-    "D105",
-    "D100",
-    "D213",
-    "D104",
-    "PD901",
+  "N806",
+  "ANN101",
+  "D203",
+  "D107",
+  "D105",
+  "D100",
+  "D213",
+  "D104",
+  "PD901",
 ]
 select = [
-    "E",
-    "W",
-    "F",
-    "I",
-    "UP",
-    "B",
-    "ANN",
-    "S",
-    "N",
-    "SIM",
-    "A",
-    "ERA",
-    "PD",
-    "D",
+  "E",
+  "W",
+  "F",
+  "I",
+  "UP",
+  "B",
+  "ANN",
+  "S",
+  "N",
+  "SIM",
+  "A",
+  "ERA",
+  "PD",
+  "D",
 ]
 unfixable = ["F401", "F841"]
 
 # Exclude a variety of commonly ignored directories.
 exclude = [
-    ".bzr",
-    ".direnv",
-    ".eggs",
-    ".git",
-    ".hg",
-    ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    "__pypackages__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "node_modules",
-    "venv",
-    "python_tests",
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".hg",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  "__pypackages__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "venv",
+  "python_tests",
 ]
 
 # Allow unused variables when underscore-prefixed.

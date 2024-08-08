@@ -2,6 +2,7 @@ use core::f64;
 use std::ops::{Add, Div, Mul, Rem, Sub};
 use std::{fmt::Display, str::FromStr};
 
+use anyhow::Result;
 use itertools::izip;
 use itertools::Itertools;
 use linfa::prelude::*;
@@ -9,13 +10,13 @@ use linfa_linear::LinearRegression;
 use ndarray::ArrayView1;
 use ndarray::{s, Array, Array1, Axis, Ix1};
 use ndarray_stats::errors::QuantileError;
-use ndarray_stats::Quantile1dExt;
 use ndarray_stats::{interpolate::Midpoint, QuantileExt, SummaryStatisticsExt};
 use noisy_float::types::n64;
 use num::FromPrimitive;
 use ordered_float::OrderedFloat;
-use polars::lazy::dsl::quantile;
-use polars::{prelude::*, series::ops::NullBehavior};
+use polars::lazy::dsl::*;
+use polars::prelude::*;
+use polars::series::ops::NullBehavior;
 
 use crate::extract::ExtractionSettings;
 use crate::utils::toml_reader::load_config;
@@ -254,21 +255,15 @@ where
     T: Clone + Copy + Ord + FromPrimitive,
     T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Div<Output = T> + Rem<Output = T>,
 {
-    if false {
-        // quantile_mut may fail with the error: fatal runtime error: stack overflow
-        // See https://github.com/rust-ndarray/ndarray-stats/issues/86
-        xs.quantile_mut(n64(0.5), &Midpoint)
-    } else {
-        if xs.is_empty() {
-            return Err(QuantileError::EmptyInput);
-        }
-        xs.as_slice_mut().unwrap().sort_unstable();
-        Ok(if xs.len() % 2 == 0 {
-            (xs[xs.len() / 2] + xs[xs.len() / 2 - 1]) / (T::from_u64(2).unwrap())
-        } else {
-            xs[xs.len() / 2]
-        })
+    if xs.is_empty() {
+        return Err(QuantileError::EmptyInput);
     }
+    xs.as_slice_mut().unwrap().sort_unstable();
+    Ok(if xs.len() % 2 == 0 {
+        (xs[xs.len() / 2] + xs[xs.len() / 2 - 1]) / (T::from_u64(2).unwrap())
+    } else {
+        xs[xs.len() / 2]
+    })
 }
 
 fn _make_nan_struct_series(
@@ -289,7 +284,7 @@ fn _make_nan_struct_series(
 
 fn _get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize> {
     let mut group_lengths = Vec::new();
-    for (key, group) in &x.into_iter().group_by(|elt| *elt) {
+    for (key, group) in &x.into_iter().chunk_by(|elt| *elt) {
         if *key {
             group_lengths.push(group.count());
         }
@@ -350,16 +345,6 @@ pub fn expr_abs_energy(name: &str) -> Expr {
         .alias(&format!("{}__absolute_energy", name))
 }
 
-pub fn test_sum(name: &str) -> Expr {
-    col(name).sum().alias(&format!("{}__test_sum", name))
-}
-
-pub fn test_mean(name: &str) -> Expr {
-    let n = col(name).count();
-    let s = col(name).sum();
-    (s / n).alias(&format!("{}__test_mean", name))
-}
-
 fn _mean_absolute_change(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
@@ -395,33 +380,6 @@ pub fn expr_mean_change(name: &str) -> Expr {
     (diffs.sum() / n).alias(&format!("{}__mean_change", name))
 }
 
-fn _ndarray_sum(s: Series) -> Result<Option<Series>, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Some(Series::new("", &[f64::NAN])));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let sum: f64 = arr.sum();
-    let s = Series::new("", &[sum]);
-    Ok(Some(s))
-}
-
-pub fn ndarray_sum(name: &str, out_type: DataType) -> Expr {
-    let o = GetOutput::from_type(out_type);
-    col(name)
-        .apply(_ndarray_sum, o)
-        .get(0)
-        .alias(&format!("{}__ndarray_sum", name))
-}
-
-pub fn expr_kurtosis(name: &str) -> Expr {
-    let n = col(name).count();
-    let mean = col(name).mean();
-    let std = col(name).std(1);
-    let skewness = ((col(name) - mean).pow(4)).sum() / ((n - lit(1.0)) * std.pow(4));
-    skewness.alias(&format!("{}__expr_kurtosis", name))
-}
-
 fn _kurtosis(s: Series) -> Result<Option<Series>, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
@@ -433,12 +391,26 @@ fn _kurtosis(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// The kurtosis of all values in the time series, where the kurtosis is the fourth standardized moment:
+/// $$ \text{kurtosis} = \frac{1}{(n-1) \sigma^4} \sum_{i=1}^{n} (x_i - \mu)^4, $$
+/// where $n$ is the number of values in the time series, $\mu$ is the mean of the time series,
+/// and $\sigma$ is the standard deviation of the time series
 pub fn kurtosis(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
     col(name)
         .apply(_kurtosis, o)
         .get(0)
         .alias(&format!("{}__kurtosis", name))
+}
+
+/// Kurtosis implemented using the native Polars API.
+/// See [`kurtosis`].
+pub fn expr_kurtosis(name: &str) -> Expr {
+    let n = col(name).count();
+    let mean = col(name).mean();
+    let std = col(name).std(1);
+    let skewness = ((col(name) - mean).pow(4)).sum() / ((n - lit(1.0)) * std.pow(4));
+    skewness.alias(&format!("{}__expr_kurtosis", name))
 }
 
 fn _linear_trend(s: Series) -> Result<Option<Series>, PolarsError> {

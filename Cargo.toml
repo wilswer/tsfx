@@ -17,22 +17,22 @@ toml = "*"
 pyo3 = "*"
 chrono = "*"
 csv = "*"
-ndarray = "*"
+ndarray = "=0.15.6"
 ndarray-stats = "*"
-polars = { version = "0.40.0", features = [
-    "polars-io",
-    "lazy",
-    "csv",
-    "diff",
-    "dynamic_group_by",
-    "strings",
-    "ndarray",
-    "streaming",
-    "dtype-struct",
-    "nightly",
-    "regex",
+polars = { version = "=0.41.3", features = [
+  "polars-io",
+  "lazy",
+  "csv",
+  "diff",
+  "dynamic_group_by",
+  "strings",
+  "ndarray",
+  "streaming",
+  "dtype-struct",
+  "nightly",
+  "regex",
 ] }
-pyo3-polars = { version = "0.14.0", features = ["lazy"] }
+pyo3-polars = { version = "=0.15.0", features = ["lazy"] }
 linfa = "*"
 linfa-linear = "*"
 noisy_float = "*"
@@ -40,6 +40,7 @@ itertools = "*"
 ordered-float = "*"
 num = "*"
 thiserror = "1"
+anyhow = "1"
 
 [dev-dependencies]
 criterion = { version = "*", features = ["html_reports"] }
