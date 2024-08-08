@@ -679,11 +679,7 @@ pub struct NumberPeaksParams {
 }
 
 pub fn load_config(file_path: Option<&str>) -> Config {
-    let file_path = if let Some(file_path) = file_path {
-        file_path
-    } else {
-        ".tsfx-config.toml"
-    };
+    let file_path = file_path.unwrap_or(".tsfx-config.toml");
     if !std::path::Path::new(file_path).exists() {
         println!("tsfx: No config file detected. Using default config.");
         return Config::default();

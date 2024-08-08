@@ -142,6 +142,7 @@ mod tests {
             df!["value__median" => [2.0, 2.0, 2.0]].unwrap()
         );
     }
+
     #[test]
     fn test_extract_short_series() {
         let df = df![

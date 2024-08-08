@@ -17,9 +17,9 @@ toml = "*"
 pyo3 = "*"
 chrono = "*"
 csv = "*"
-ndarray = "*"
+ndarray = "=0.15.6"
 ndarray-stats = "*"
-polars = { version = "0.40.0", features = [
+polars = { version = "=0.41.3", features = [
   "polars-io",
   "lazy",
   "csv",
@@ -32,7 +32,7 @@ polars = { version = "0.40.0", features = [
   "nightly",
   "regex",
 ] }
-pyo3-polars = { version = "0.14.0", features = ["lazy"] }
+pyo3-polars = { version = "=0.15.0", features = ["lazy"] }
 linfa = "*"
 linfa-linear = "*"
 noisy_float = "*"
