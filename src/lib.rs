@@ -8,8 +8,8 @@ use extract::{lazy_feature_df, DynamicGroupBySettings, ExtractionSettings, Featu
 use pyo3::prelude::*;
 use pyo3_polars::{PyDataFrame, PyLazyFrame};
 
-#[pyclass(name = "FeatureSetting")]
-#[derive(Clone)]
+#[pyclass(name = "FeatureSetting", eq, eq_int)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum PyFeatureSetting {
     Minimal,
     Efficient,
@@ -39,6 +39,7 @@ struct PyDynamicGroupBySettings {
 #[pymethods]
 impl PyExtractionSettings {
     #[new]
+    #[pyo3(signature = (grouping_col, value_cols, feature_setting, config_path=None, dynamic_settings=None))]
     fn new(
         grouping_col: String,
         value_cols: Vec<String>,
@@ -59,6 +60,7 @@ impl PyExtractionSettings {
 #[pymethods]
 impl PyDynamicGroupBySettings {
     #[new]
+    #[pyo3(signature = (time_col, every, period, offset, datetime_format=None))]
     fn new(
         time_col: String,
         every: String,

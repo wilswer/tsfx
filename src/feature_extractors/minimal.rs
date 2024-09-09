@@ -44,6 +44,8 @@ pub fn minimal_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
     aggregators
 }
 
+/// Length feature.
+///
 /// The length of the time series
 pub fn count(name: &str) -> Expr {
     col(name).count().alias("length")
@@ -60,6 +62,8 @@ fn _sum_values(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// Sum of values feature.
+///
 /// The sum of all values in the time series
 pub fn sum_values(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
@@ -85,6 +89,8 @@ fn _mean(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// Mean feature.
+///
 /// The mean of all values in the time series, where mean $\mu$ is
 /// $$ \mu = \frac{1}{n} \sum_{i=1}^{n} x_i, $$
 /// where $n$ is the number of values in the time series
@@ -112,6 +118,8 @@ fn _min(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// Minimum feature.
+///
 /// The minimum value in the time series
 pub fn minimum(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
@@ -137,6 +145,8 @@ fn _max(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// Maximum feature.
+///
 /// The maximum value in the time series
 pub fn maximum(name: &str) -> Expr {
     let o = GetOutput::from_type(DataType::Float64);
@@ -151,6 +161,8 @@ pub fn expr_maximum(name: &str) -> Expr {
     col(name).max().alias(&format!("{}__maximum", name))
 }
 
+/// Median feature.
+///
 /// The median of all values in the time series, using the native Polars API
 pub fn expr_median(name: &str) -> Expr {
     col(name)
@@ -170,6 +182,8 @@ fn _standard_deviation(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// Standard deviation feature.
+///
 /// The standard deviation of all values in the time series, where the standard deviation $\sigma$ is
 /// $$ \sigma = \sqrt{\frac{1}{n - 1} \sum_{i=1}^{n} (x_i - \mu)^2}, $$
 /// where $n$ is the number of values in the time series and $\mu$ is the mean of the time series
@@ -199,6 +213,8 @@ fn _variance(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// Variance feature.
+///
 /// The variance of all values in the time series, where the variance $\sigma^2$ is
 /// $$ \sigma^2 = \frac{1}{n - 1} \sum_{i=1}^{n} (x_i - \mu)^2, $$
 /// where $n$ is the number of values in the time series and $\mu$ is the mean of the time series
@@ -230,6 +246,8 @@ fn _rms(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// Root mean square feature.
+///
 /// The root mean square of all values in the time series, where the root mean square (RMS) is
 /// $$ \text{RMS} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} x_i^2}, $$
 /// where $n$ is the number of values in the time series
@@ -270,6 +288,8 @@ fn _skewness(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// Skewness feature.
+///
 /// The skewness of all values in the time series, where the skewness is the third standardized moment:
 /// $$ \text{skewness} = \frac{1}{(n-1) \sigma^3} \sum_{i=1}^{n} (x_i - \mu)^3, $$
 /// where $n$ is the number of values in the time series, $\mu$ is the mean of the time series,

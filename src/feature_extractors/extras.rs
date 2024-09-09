@@ -324,6 +324,8 @@ fn _absolute_energy(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// Abolute energy feature.
+///
 /// The absolute energy of the time series,
 /// defined as the sum of the squared values of the time series:
 /// $$ \text{absolute energy} = \sum_{i=1}^{n}x_i^2,$$
@@ -361,6 +363,8 @@ fn _mean_absolute_change(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// Mean absolute change feature.
+///
 /// The mean absolute change of a time series is defined as:
 /// $$ \text{mean abs. change} = \frac{1}{n-1}\sum_{i=1}^{n-1} \|x_{i + 1} - x_{i}\|.$$
 /// It is the average of the absolute value of differences in the time series.
@@ -391,6 +395,8 @@ fn _kurtosis(s: Series) -> Result<Option<Series>, PolarsError> {
     Ok(Some(s))
 }
 
+/// Kurtosis feature.
+///
 /// The kurtosis of all values in the time series, where the kurtosis is the fourth standardized moment:
 /// $$ \text{kurtosis} = \frac{1}{(n-1) \sigma^4} \sum_{i=1}^{n} (x_i - \mu)^4, $$
 /// where $n$ is the number of values in the time series, $\mu$ is the mean of the time series,
