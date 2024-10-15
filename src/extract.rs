@@ -64,7 +64,7 @@ pub fn lazy_feature_df(
             "%Y-%m-%d %H:%S:%M".to_string()
         };
         let time_options = StrptimeOptions {
-            format: Some(datetime_format),
+            format: Some(datetime_format.into()),
             ..Default::default()
         };
         selected_cols.push(col(&dynamic_settings.time_col));
