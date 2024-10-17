@@ -215,3 +215,9 @@ For more examples, see the [examples](examples) directory.
 | &#9745;     | `variance(x)`                                               | Returns the variance of x                                                                                                                                                                                                                                                                                          |
 | &#9745;     | `variance_larger_than_standard_deviation(x)`                | Is variance higher than the standard deviation?                                                                                                                                                                                                                                                                    |
 | &#9745;     | `variation_coefficient(x)`                                  | Returns the variation coefficient (standard error / mean, give relative value of variation around mean) of x.                                                                                                                                                                                                      |
+
+## Acknowledgement
+
+The `tsfx` package was developed within the [Vinnova](https://www.vinnova.se) projects
+[DFusion](https://www.vinnova.se/en/p/dfusion---disturbance-data-fusion/) and
+[TolkAI](https://www.vinnova.se/en/p/intepretable-ai-from-start-to-finish/)
