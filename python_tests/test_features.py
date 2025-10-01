@@ -67,9 +67,9 @@ def test_only_nan_group_dropped_with_date():
 
     dyn_settings = DynamicGroupBySettings(
         time_col="time",
-        every="3y",
-        period="3y",
-        offset="0",
+        every="1y",
+        period="1y",
+        offset="0y",
         datetime_format="%Y-%m-%d",
     )
     settings = ExtractionSettings(
@@ -79,7 +79,10 @@ def test_only_nan_group_dropped_with_date():
         dynamic_settings=dyn_settings,
     )
     fdf = extract_features(df, settings)
-    assert fdf.get_column("id").to_list() == ["a", "b", "c"]
+    assert fdf.get_column("id").to_list() == ["a", "a", "a", "b", "b", "b", "c", "c", "c"]
+    assert fdf["val__mean"].fill_nan(None).to_list()[0] == 1.0
+    assert fdf["val__mean"].fill_nan(None).to_list()[1] == 2.0
+    assert fdf["val__mean"].fill_nan(None).to_list()[2] == 3.0
     assert fdf["val__mean"].fill_nan(None).to_list()[-1] == None
 
 def test_long_constant_df():

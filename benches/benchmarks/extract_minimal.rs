@@ -1,4 +1,5 @@
-use criterion::{black_box, criterion_group, Criterion};
+use criterion::{criterion_group, Criterion};
+use std::hint::black_box;
 
 use polars::prelude::*;
 use tsfx::extract::{lazy_feature_df, ExtractionSettings, FeatureSetting};

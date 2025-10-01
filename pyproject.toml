@@ -4,14 +4,14 @@ build-backend = "maturin"
 
 [project]
 name = "tsfx"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 classifiers = [
   "Programming Language :: Rust",
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
-dependencies = ["polars==1.7.0", "pyarrow"]
+dependencies = ["polars==1.32.0", "pyarrow"]
 
 [project.optional-dependencies]
 dev = ["maturin", "ruff", "mypy", "pre-commit", "pytest"]

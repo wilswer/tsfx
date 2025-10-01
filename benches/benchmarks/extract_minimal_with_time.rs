@@ -1,19 +1,14 @@
-use criterion::{black_box, criterion_group, Criterion};
+use criterion::{criterion_group, Criterion};
+use std::hint::black_box;
 
 use polars::prelude::*;
 use tsfx::extract::{lazy_feature_df, DynamicGroupBySettings, ExtractionSettings, FeatureSetting};
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let df = LazyCsvReader::new("test_data/all_stocks_5yr.csv")
+    let df = LazyCsvReader::new(PlPath::from_str("test_data/all_stocks_5yr.csv"))
         .finish()
         .unwrap()
-        .drop_nulls(Some(vec![
-            col("open"),
-            col("high"),
-            col("low"),
-            col("close"),
-            col("volume"),
-        ]));
+        .drop_nulls(None);
     c.bench_function("extract_minimal_with_time", |b| {
         b.iter(|| {
             lazy_feature_df(

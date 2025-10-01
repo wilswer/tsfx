@@ -229,11 +229,12 @@ mod tests {
             .unwrap()
             .column("value__standard_deviation")
             .unwrap()
+            .clone()
+            .into_frame()
             .iter()
             .next()
             .unwrap()
-            .try_extract::<f32>()
-            .unwrap()
+            .first()
             .is_nan());
     }
 }

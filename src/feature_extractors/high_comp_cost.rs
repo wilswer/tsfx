@@ -32,9 +32,13 @@ fn _get_matches(templates: Vec<Array1<f64>>, r: f64) -> usize {
     matches
 }
 
-fn _sample_entropy(s: Series) -> Result<Option<Series>, PolarsError> {
+fn _out(_: &Schema, _: &Field) -> Result<Field, PolarsError> {
+    Ok(Field::new("".into(), DataType::Float64))
+}
+
+fn _sample_entropy(s: Column) -> Result<Option<Column>, PolarsError> {
     if s.is_empty() {
-        return Ok(None);
+        return Ok(Some(Column::new("".into(), &[f64::NAN])));
     }
     let arr = s
         .into_frame()
@@ -51,7 +55,7 @@ fn _sample_entropy(s: Series) -> Result<Option<Series>, PolarsError> {
     let templates_m_plus_1 = _into_subchunks(&arr, m + 1);
     let matches_m_plus_1 = _get_matches(templates_m_plus_1, r);
     let out = ((matches_m as f64) / (matches_m_plus_1 as f64)).ln();
-    let s = Series::new("".into(), &[out as f64]);
+    let s = Column::new("".into(), &[out as f64]);
     Ok(Some(s))
 }
 
