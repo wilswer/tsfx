@@ -4,7 +4,7 @@ pub mod feature_extractors;
 pub mod utils;
 
 use error::ExtractionError;
-use extract::{lazy_feature_df, DynamicGroupBySettings, ExtractionSettings, FeatureSetting};
+use extract::{DynamicGroupBySettings, ExtractionSettings, FeatureSetting, lazy_feature_df};
 use pyo3::prelude::*;
 use pyo3_polars::{PyDataFrame, PyLazyFrame};
 

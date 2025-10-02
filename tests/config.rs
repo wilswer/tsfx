@@ -42,12 +42,16 @@ fn test_read_config_from_empty_file() {
     assert!(config.ratio_value_number_to_time_series_length.is_none());
     assert!(config.sum_of_reoccurring_values.is_none());
     assert!(config.sum_of_reoccurring_data_points.is_none());
-    assert!(config
-        .percentage_of_reoccurring_values_to_all_values
-        .is_none());
-    assert!(config
-        .percentage_of_reoccurring_values_to_all_datapoints
-        .is_none());
+    assert!(
+        config
+            .percentage_of_reoccurring_values_to_all_values
+            .is_none()
+    );
+    assert!(
+        config
+            .percentage_of_reoccurring_values_to_all_datapoints
+            .is_none()
+    );
     assert!(config.agg_linear_trend.is_none());
     assert!(config.mean_n_absolute_max.is_none());
     assert!(config.autocorrelation.is_none());

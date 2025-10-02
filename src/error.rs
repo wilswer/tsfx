@@ -1,5 +1,5 @@
 use polars::prelude::PolarsError;
-use pyo3::{exceptions::PyBaseException, PyErr};
+use pyo3::{PyErr, exceptions::PyBaseException};
 use thiserror::Error;
 
 #[derive(Error, Debug)]

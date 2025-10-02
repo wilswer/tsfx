@@ -1,8 +1,8 @@
-use criterion::{criterion_group, Criterion};
+use criterion::{Criterion, criterion_group};
 use std::hint::black_box;
 
 use polars::prelude::*;
-use tsfx::extract::{lazy_feature_df, ExtractionSettings, FeatureSetting};
+use tsfx::extract::{ExtractionSettings, FeatureSetting, lazy_feature_df};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let cdf = df![

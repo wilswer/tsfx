@@ -3,14 +3,14 @@ use std::ops::{Add, Div, Mul, Rem, Sub};
 use std::{fmt::Display, str::FromStr};
 
 use anyhow::Result;
-use itertools::izip;
 use itertools::Itertools;
+use itertools::izip;
 use linfa::prelude::*;
 use linfa_linear::LinearRegression;
 use ndarray::ArrayView1;
-use ndarray::{s, Array, Array1, Axis, Ix1};
+use ndarray::{Array, Array1, Axis, Ix1, s};
 use ndarray_stats::errors::QuantileError;
-use ndarray_stats::{interpolate::Midpoint, QuantileExt, SummaryStatisticsExt};
+use ndarray_stats::{QuantileExt, SummaryStatisticsExt, interpolate::Midpoint};
 use noisy_float::types::n64;
 use num::FromPrimitive;
 use ordered_float::OrderedFloat;
@@ -1456,7 +1456,7 @@ fn _autocorrelation(s: Column, lags: &[usize]) -> Result<Option<Column>, PolarsE
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        None => return _make_nan_struct_column_int("autocorrelation", "lag", lags),
     };
     let v = arr.var(1.0);
     let mut ss: Vec<Column> = Vec::with_capacity(lags.len());
@@ -1586,7 +1586,7 @@ fn _index_mass_quantile(s: Column, qs: &[f64]) -> Result<Option<Column>, PolarsE
     let mut abs_arr = arr.mapv(|x| x.abs());
     let abs_sum = abs_arr.sum();
     if abs_sum == 0.0 {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return _make_nan_struct_column("index_mass_quantile", "q", qs);
     }
     abs_arr.accumulate_axis_inplace(Axis(0), |&prev, curr| *curr += prev);
     let mass_centralized = abs_arr.mapv(|x| x / abs_sum);
@@ -1766,7 +1766,7 @@ pub fn number_peaks(name: &str, n: usize) -> Expr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::extract::{lazy_feature_df, ExtractionSettings, FeatureSetting};
+    use crate::extract::{ExtractionSettings, FeatureSetting, lazy_feature_df};
     use polars::datatypes::AnyValue;
 
     #[test]

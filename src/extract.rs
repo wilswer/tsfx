@@ -88,7 +88,7 @@ pub fn lazy_feature_df(
 
 #[cfg(test)]
 mod tests {
-    use super::{lazy_feature_df, ExtractionSettings, FeatureSetting};
+    use super::{ExtractionSettings, FeatureSetting, lazy_feature_df};
     use polars::prelude::*;
 
     #[test]
@@ -216,25 +216,26 @@ mod tests {
                 .unwrap(),
             df!["value__median" => [1.0, 2.0, 3.0]].unwrap()
         );
-        assert!(gdf
-            .clone()
-            .sort(
-                ["id"],
-                SortMultipleOptions {
-                    ..Default::default()
-                }
-            )
-            .select([col("value__standard_deviation").cast(DataType::Float32)])
-            .collect()
-            .unwrap()
-            .column("value__standard_deviation")
-            .unwrap()
-            .clone()
-            .into_frame()
-            .iter()
-            .next()
-            .unwrap()
-            .first()
-            .is_nan());
+        assert!(
+            gdf.clone()
+                .sort(
+                    ["id"],
+                    SortMultipleOptions {
+                        ..Default::default()
+                    }
+                )
+                .select([col("value__standard_deviation").cast(DataType::Float32)])
+                .collect()
+                .unwrap()
+                .column("value__standard_deviation")
+                .unwrap()
+                .clone()
+                .into_frame()
+                .iter()
+                .next()
+                .unwrap()
+                .first()
+                .is_nan()
+        );
     }
 }

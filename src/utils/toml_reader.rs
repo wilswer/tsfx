@@ -845,12 +845,16 @@ mod tests {
         assert!(config.ratio_value_number_to_time_series_length.is_some());
         assert!(config.sum_of_reoccurring_values.is_some());
         assert!(config.sum_of_reoccurring_data_points.is_some());
-        assert!(config
-            .percentage_of_reoccurring_values_to_all_values
-            .is_some());
-        assert!(config
-            .percentage_of_reoccurring_values_to_all_datapoints
-            .is_some());
+        assert!(
+            config
+                .percentage_of_reoccurring_values_to_all_values
+                .is_some()
+        );
+        assert!(
+            config
+                .percentage_of_reoccurring_values_to_all_datapoints
+                .is_some()
+        );
         assert!(config.agg_linear_trend.is_some());
         assert_eq!(
             config.clone().agg_linear_trend.unwrap().parameters.len(),
