@@ -219,5 +219,6 @@ For more examples, see the [examples](examples) directory.
 ## Acknowledgement
 
 The `tsfx` package was developed within the [Vinnova](https://www.vinnova.se) projects
-[DFusion](https://www.vinnova.se/en/p/dfusion---disturbance-data-fusion/) and
-[TolkAI](https://www.vinnova.se/en/p/intepretable-ai-from-start-to-finish/)
+[DFusion](https://www.vinnova.se/en/p/dfusion---disturbance-data-fusion/),
+[TolkAI](https://www.vinnova.se/en/p/intepretable-ai-from-start-to-finish/), and
+[SIFT](https://www.vinnova.se/en/p/similarity-search-of-time-series-data-evaluation-of-search-engine-in-industrial-process-datasift-/).
