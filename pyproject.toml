@@ -4,6 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "tsfx"
+description = "TSFX -- Time Series Feature eXtraction"
+readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [
   "Programming Language :: Rust",
