@@ -102,7 +102,7 @@ dyn_settings = DynamicGroupBySettings(
     time_col="time",
     every="3y",
     period="3y",
-    offset="0",
+    offset="0y",
     datetime_format="%Y-%m-%d",
 )
 settings = ExtractionSettings(
