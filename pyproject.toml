@@ -47,7 +47,11 @@ testpaths = ["python_tests"]
 
 [tool.ruff]
 line-length = 88
+# Assume Python 3.11.
+target-version = "py311"
+extend-include = ["*.ipynb"]
 
+[tool.ruff.lint]
 # Enable Pyflakes `E` and `F` codes by default.
 ignore = [
   "N806",
@@ -105,14 +109,10 @@ exclude = [
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
-# Assume Python 3.11.
-target-version = "py311"
 
-extend-include = ["*.ipynb"]
-
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 
-[tool.ruff.mccabe]
+[tool.ruff.lint.mccabe]
 # Unlike Flake8, default to a complexity level of 10.
 max-complexity = 10

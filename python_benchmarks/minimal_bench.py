@@ -37,7 +37,7 @@ def tsfx_minimal() -> None:
     lf = lf.drop_nulls()
     print("Data loaded")
     opts = ExtractionSettings(
-        grouping_col="Name",
+        grouping_cols=["Name"],
         feature_setting=FeatureSetting.Minimal,
         value_cols=["open", "high", "low", "close", "volume"],
     )
