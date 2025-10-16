@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Publishing DTD v1.2 20190208//EN"
+                  "JATS-publishing1.dtd">
+<article xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:xlink="http://www.w3.org/1999/xlink" dtd-version="1.2" article-type="other">
+<front>
+<journal-meta>
+<journal-id></journal-id>
+<journal-title-group>
+<journal-title>Journal of Open Source Software</journal-title>
+<abbrev-journal-title>JOSS</abbrev-journal-title>
+</journal-title-group>
+<issn publication-format="electronic">2475-9066</issn>
+<publisher>
+<publisher-name>Open Journals</publisher-name>
+</publisher>
+</journal-meta>
+<article-meta>
+<article-id pub-id-type="publisher-id">0</article-id>
+<article-id pub-id-type="doi">N/A</article-id>
+<title-group>
+<article-title>TSFX: A Python package for time series feature
+extraction</article-title>
+</title-group>
+<contrib-group>
+<contrib contrib-type="author" equal-contrib="yes">
+<contrib-id contrib-id-type="orcid">https://orcid.org/0000-0002-1262-9143</contrib-id>
+<name>
+<surname>Vermelin</surname>
+<given-names>Wilhelm Söderkvist</given-names>
+</name>
+<xref ref-type="aff" rid="aff-1"/>
+<xref ref-type="aff" rid="aff-2"/>
+</contrib>
+<aff id="aff-1">
+<institution-wrap>
+<institution>RISE Research Institutes of Sweden</institution>
+</institution-wrap>
+</aff>
+<aff id="aff-2">
+<institution-wrap>
+<institution>Mälardalen University</institution>
+</institution-wrap>
+</aff>
+</contrib-group>
+<pub-date date-type="pub" publication-format="electronic" iso-8601-date="2025-10-16">
+<day>16</day>
+<month>10</month>
+<year>2025</year>
+</pub-date>
+<volume>¿VOL?</volume>
+<issue>¿ISSUE?</issue>
+<fpage>¿PAGE?</fpage>
+<permissions>
+<copyright-statement>Authors of papers retain copyright and release the
+work under a Creative Commons Attribution 4.0 International License (CC
+BY 4.0)</copyright-statement>
+<copyright-year>1970</copyright-year>
+<copyright-holder>The article authors</copyright-holder>
+<license license-type="open-access" xlink:href="https://creativecommons.org/licenses/by/4.0/">
+<license-p>Authors of papers retain copyright and release the work under
+a Creative Commons Attribution 4.0 International License (CC BY
+4.0)</license-p>
+</license>
+</permissions>
+<kwd-group kwd-group-type="author">
+<kwd>Python</kwd>
+<kwd>Polars</kwd>
+<kwd>Rust</kwd>
+<kwd>time series</kwd>
+<kwd>feature extraction</kwd>
+</kwd-group>
+</article-meta>
+</front>
+<body>
+<sec id="summary">
+  <title>Summary</title>
+  <p>TSFX is a Python
+  (<xref alt="Van Rossum &amp; Drake, 2009" rid="ref-python" ref-type="bibr">Van
+  Rossum &amp; Drake, 2009</xref>) library for extracting features from
+  time series data. It is inspired by the tsfresh
+  (<xref alt="Christ et al., 2018" rid="ref-tsfresh" ref-type="bibr">Christ
+  et al., 2018</xref>) Python package with a special focus on
+  performance. In order to achieve good performance, it utilizes Polars
+  (<xref alt="Vink et al., 2023" rid="ref-polars" ref-type="bibr">Vink
+  et al., 2023</xref>) which is a high performance DataFrame library
+  written in Rust
+  (<xref alt="The Rust Programming Language, n.d." rid="ref-rustlang" ref-type="bibr"><italic>The
+  Rust Programming Language</italic>, n.d.</xref>) with Python bindings
+  created through PyO3
+  (<xref alt="Project &amp; Contributors, n.d." rid="ref-pyo3" ref-type="bibr">Project
+  &amp; Contributors, n.d.</xref>). The feature extraction functions are
+  also implemented in Rust for performance. Compared to tsfresh, TSFX
+  offers a conservative estimate of 10x performance, using the same set
+  of time series features.</p>
+  <p>TSFX can be installed using <monospace>pip</monospace>:</p>
+  <code language="bash">pip install tsfx</code>
+  <p>TSFX can also be configured using a TOML
+  (<xref alt="TOML, n.d." rid="ref-toml" ref-type="bibr"><italic>TOML</italic>,
+  n.d.</xref>) configuration file (default name
+  <monospace>.tsfx-config.toml</monospace>).</p>
+</sec>
+<sec id="statement-of-need">
+  <title>Statement of need</title>
+  <p>Time series is a ubiquitous data modality, used in many domains
+  such as finance, industry, meteorology, and medicine, to mention a
+  few. As hardware to collect and store time series data is becoming
+  increasingly affordable, the amount of available time series data is
+  increasing in many domains. A common preprocessing step when dealing
+  with time series is feature extraction where useful features, such as
+  mean, variance, skewness, etc. are extracted from time series to be
+  used in downstream tasks such as classification, regression or
+  clustering. For large time series datasets, performance is
+  increasingly important to enable timely data preprocessing. TSFX is
+  made for this purpose: extracting features from large time series
+  datasets.</p>
+</sec>
+<sec id="acknowledgements">
+  <title>Acknowledgements</title>
+  <p>The TSFX package was developed within the
+  <ext-link ext-link-type="uri" xlink:href="https://www.vinnova.se">Vinnova</ext-link>
+  projects
+  <ext-link ext-link-type="uri" xlink:href="https://www.vinnova.se/en/p/dfusion---disturbance-data-fusion/">DFusion</ext-link>,
+  <ext-link ext-link-type="uri" xlink:href="https://www.vinnova.se/en/p/intepretable-ai-from-start-to-finish/">TolkAI</ext-link>,
+  and
+  <ext-link ext-link-type="uri" xlink:href="https://www.vinnova.se/en/p/similarity-search-of-time-series-data-evaluation-of-search-engine-in-industrial-process-datasift-/">SIFT</ext-link>.</p>
+</sec>
+</body>
+<back>
+<ref-list>
+  <title></title>
+  <ref id="ref-tsfresh">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Christ</surname><given-names>Maximilian</given-names></name>
+        <name><surname>Braun</surname><given-names>Nils</given-names></name>
+        <name><surname>Neuffer</surname><given-names>Julius</given-names></name>
+        <name><surname>Kempa-Liehr</surname><given-names>Andreas W.</given-names></name>
+      </person-group>
+      <article-title>Time series FeatuRe extraction on basis of scalable hypothesis tests (tsfresh – a python package)</article-title>
+      <source>Neurocomputing</source>
+      <year iso-8601-date="2018">2018</year>
+      <volume>307</volume>
+      <issn>0925-2312</issn>
+      <uri>https://www.sciencedirect.com/science/article/pii/S0925231218304843</uri>
+      <pub-id pub-id-type="doi">https://doi.org/10.1016/j.neucom.2018.03.067</pub-id>
+      <fpage>72</fpage>
+      <lpage>77</lpage>
+    </element-citation>
+  </ref>
+  <ref id="ref-polars">
+    <element-citation publication-type="software">
+      <person-group person-group-type="author">
+        <name><surname>Vink</surname><given-names>Ritchie</given-names></name>
+        <name><surname>Gooijer</surname><given-names>Stijn de</given-names></name>
+        <name><surname>Beedie</surname><given-names>Alexander</given-names></name>
+        <name><surname>Zundert</surname><given-names>J van</given-names></name>
+        <name><surname>Hulselmans</surname><given-names>Gert</given-names></name>
+        <name><surname>Grinstead</surname><given-names>Cory</given-names></name>
+        <name><surname>Gorelli</surname><given-names>Marco Edward</given-names></name>
+        <name><surname>Santamaria</surname><given-names>Matteo</given-names></name>
+        <name><surname>Heres</surname><given-names>Daniël</given-names></name>
+        <name><surname>ibENPC</surname></name>
+        <name><surname>Leitao</surname><given-names>Jorge</given-names></name>
+        <name><surname>Heerden</surname><given-names>Marc van</given-names></name>
+        <name><surname>Jermain</surname><given-names>Colin</given-names></name>
+        <name><surname>Russell</surname><given-names>Ryan</given-names></name>
+        <name><surname>Pryer</surname><given-names>Chris</given-names></name>
+        <name><surname>Castellanos</surname><given-names>Adrián Gallego</given-names></name>
+        <name><surname>Goh</surname><given-names>Jeremy</given-names></name>
+        <name><surname>Wilksch</surname><given-names>Moritz</given-names></name>
+        <name><surname>illumination-k</surname></name>
+        <name><surname>Conradt</surname><given-names>Max</given-names></name>
+        <name><surname>Brannigan</surname><given-names>Liam</given-names></name>
+        <name><surname>Tan</surname><given-names>Yu Ri</given-names></name>
+        <name><surname>elbaro</surname></name>
+        <name><surname>Peek</surname><given-names>Joshua</given-names></name>
+        <name><surname>Stalder</surname><given-names>Nicolas</given-names></name>
+        <name><surname>Welling</surname><given-names>Søren Havelund</given-names></name>
+        <name><surname>Gregory</surname><given-names>Adam</given-names></name>
+        <name><surname>paq</surname></name>
+        <name><surname>Keller</surname><given-names>Jakob</given-names></name>
+      </person-group>
+      <article-title>Pola-rs/polars: Python polars 0.16.11</article-title>
+      <publisher-name>Zenodo</publisher-name>
+      <year iso-8601-date="2023-03">2023</year><month>03</month>
+      <uri>https://doi.org/10.5281/zenodo.7699984</uri>
+      <pub-id pub-id-type="doi">10.5281/zenodo.7699984</pub-id>
+    </element-citation>
+  </ref>
+  <ref id="ref-rustlang">
+    <element-citation>
+      <article-title>The rust programming language</article-title>
+      <publisher-name>https://rust-lang.org/</publisher-name>
+    </element-citation>
+  </ref>
+  <ref id="ref-pyo3">
+    <element-citation>
+      <person-group person-group-type="author">
+        <name><surname>Project</surname><given-names>PyO3</given-names></name>
+        <name><surname>Contributors</surname></name>
+      </person-group>
+      <article-title>PyO3</article-title>
+      <publisher-name>GitHub</publisher-name>
+      <uri>https://github.com/PyO3</uri>
+    </element-citation>
+  </ref>
+  <ref id="ref-toml">
+    <element-citation>
+      <article-title>TOML: Tom’s obvious minimal language</article-title>
+      <uri>https://toml.io/en/</uri>
+    </element-citation>
+  </ref>
+  <ref id="ref-python">
+    <element-citation publication-type="book">
+      <person-group person-group-type="author">
+        <name><surname>Van Rossum</surname><given-names>Guido</given-names></name>
+        <name><surname>Drake</surname><given-names>Fred L.</given-names></name>
+      </person-group>
+      <source>Python 3 reference manual</source>
+      <publisher-name>CreateSpace</publisher-name>
+      <publisher-loc>Scotts Valley, CA</publisher-loc>
+      <year iso-8601-date="2009">2009</year>
+      <isbn>1441412697</isbn>
+    </element-citation>
+  </ref>
+</ref-list>
+</back>
+</article>
