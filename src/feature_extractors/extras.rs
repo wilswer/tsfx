@@ -1781,7 +1781,7 @@ mod tests {
 
         // Configure extraction settings
         let opts = ExtractionSettings {
-            grouping_col: "id".to_string(),
+            grouping_cols: vec!["id".to_string()],
             feature_setting: FeatureSetting::Efficient,
             value_cols: vec!["val".to_string()],
             config_path: None,

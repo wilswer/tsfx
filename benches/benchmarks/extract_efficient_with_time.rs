@@ -14,7 +14,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             lazy_feature_df(
                 black_box(df.clone()),
                 ExtractionSettings {
-                    grouping_col: "Name".to_string(),
+                    grouping_cols: vec!["Name".to_string()],
                     value_cols: vec![
                         "open".to_string(),
                         "high".to_string(),

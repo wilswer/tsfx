@@ -17,7 +17,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             lazy_feature_df(
                 black_box(cdf.clone()),
                 ExtractionSettings {
-                    grouping_col: "id".to_string(),
+                    grouping_cols: vec!["id".to_string()],
                     value_cols: vec!["value".to_string()],
                     feature_setting: FeatureSetting::Efficient,
                     config_path: None,

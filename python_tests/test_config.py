@@ -14,7 +14,7 @@ def test_empty_config():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
         config_path="./python_tests/data/.tsfx-config-empty.toml",

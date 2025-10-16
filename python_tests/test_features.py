@@ -14,7 +14,7 @@ def test_empty_df():
     df = pl.DataFrame({"id": [], "val": []})
     df = df.select([pl.col("id").cast(pl.Utf8), pl.col("val").cast(pl.Float64)])
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -25,7 +25,7 @@ def test_empty_df():
 def test_unit_length_df():
     df = pl.DataFrame({"id": ["a"], "val": [1.0]}).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -37,7 +37,7 @@ def test_only_nan_group_dropped():
     df = pl.DataFrame({"id": ["a", "b", "c", "c"], "val": [1.0, 2.0, None, None]})
     df = df.select([pl.col("id").cast(pl.Utf8), pl.col("val").cast(pl.Float64)])
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -73,7 +73,7 @@ def test_only_nan_group_dropped_with_date():
         datetime_format="%Y-%m-%d",
     )
     settings = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         value_cols=["val", "value"],
         feature_setting=FeatureSetting.Efficient,
         dynamic_settings=dyn_settings,
@@ -89,7 +89,7 @@ def test_long_constant_df():
     N = 100_000
     df = pl.DataFrame({"id": ["a"] * (N + 1) + ["b"] * (N + 1), "val": [0.0] * N + [1.0] + [1.0] * N + [2.0]}).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -103,7 +103,7 @@ def test_long_constant_df():
 def test_nan_df():
     df = pl.DataFrame({"id": ["a", "b", "c", "c"], "val": [1.0, 2.0, 1.0, None]}).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -122,7 +122,7 @@ def test_nan_df2():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -140,7 +140,7 @@ def test_length():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -158,12 +158,31 @@ def test_sum_values():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
     fdf = fdf.sort("id")
+
+    assert fdf.get_column("val__sum_values").to_list() == [1.0, 3.0, 6.0, 4.0]
+
+
+def test_sum_values_multiple_groups():
+    df = pl.DataFrame(
+        {
+            "id": ["a", "b", "b", "c", "c", "c", "d", "d", "d", "d"],
+            "id2": ["x", "x", "x", "y", "y", "y", "y", "y", "y", "y"],
+            "val": [1.0, 1.0, 2.0, 1.0, 2.0, 3.0, 1.0, 1.0, 1.0, 1.0],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_cols=["id", "id2"],
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort(["id", "id2"])
 
     assert fdf.get_column("val__sum_values").to_list() == [1.0, 3.0, 6.0, 4.0]
 
@@ -176,7 +195,7 @@ def test_minimum():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -194,7 +213,7 @@ def test_maximum():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -212,7 +231,7 @@ def test_absolute_energy():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -230,7 +249,7 @@ def test_median1():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -248,7 +267,7 @@ def test_median2():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -266,7 +285,7 @@ def test_linear_trend_intercept():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -286,7 +305,7 @@ def test_linear_trend_slope():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -306,7 +325,7 @@ def test_has_duplicate_max():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -324,7 +343,7 @@ def test_has_duplicate_min():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -342,7 +361,7 @@ def test_has_duplicate1():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -360,7 +379,7 @@ def test_has_duplicate2():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -378,7 +397,7 @@ def test_ratio_value_number_to_time_series_length():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -398,7 +417,7 @@ def test_variation_coefficient():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -449,7 +468,7 @@ def test_sum_of_reoccurring_values():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -505,7 +524,7 @@ def test_sum_of_reoccurring_data_points():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -529,7 +548,7 @@ def test_standard_deviation():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -549,7 +568,7 @@ def test_variance():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -567,7 +586,7 @@ def test_variance_larger_than_standard_deviation():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -585,7 +604,7 @@ def test_large_standard_deviation():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -604,7 +623,7 @@ def test_symmetry_looking():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -622,7 +641,7 @@ def test_percentage_of_reoccurring_values_to_all_values():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -672,7 +691,7 @@ def test_percentage_of_reoccurring_values_to_all_datapoints():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -693,7 +712,7 @@ def test_agg_linear_trend_intercept():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -719,7 +738,7 @@ def test_agg_linear_trend_slope():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -745,7 +764,7 @@ def test_mean_n_absolute_max():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -765,7 +784,7 @@ def test_mean_change():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -784,7 +803,7 @@ def test_number_crossing_m1():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -803,7 +822,7 @@ def test_number_crossing_m2():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -822,7 +841,7 @@ def test_number_crossing_m3():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -841,7 +860,7 @@ def test_number_crossing_m4():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -860,7 +879,7 @@ def test_range_count():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -879,7 +898,7 @@ def test_index_mass_quantile():
     ).lazy()
 
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -899,7 +918,7 @@ def test_c3():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -918,7 +937,7 @@ def test_c3_2():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -937,7 +956,7 @@ def test_time_reversal_asymmetry_statistic():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -962,7 +981,7 @@ def test_time_reversal_asymmetry_statistic_2():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
@@ -987,12 +1006,32 @@ def test_number_peaks():
         },
     ).lazy()
     opts = ExtractionSettings(
-        grouping_col="id",
+        grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
     )
     fdf = extract_features(df, opts)
     fdf = fdf.sort("id")
+    assert fdf.get_column("val__number_peaks__n_1").to_list() == [2.0]
+    assert fdf.get_column("val__number_peaks__n_3").to_list() == [1.0]
+    assert fdf.get_column("val__number_peaks__n_5").to_list() == [0.0]
+
+
+def test_number_peaks_multiple_groups():
+    df = pl.DataFrame(
+        {
+            "id": ["a"] * 14,
+            "id2": ["b"] * 14,
+            "val": [0, 1, 2, 1, 0, 1, 2, 3, 4, 5, 4, 3, 2, 1],
+        },
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_cols=["id", "id2"],
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df, opts)
+    fdf = fdf.sort(["id", "id2"])
     assert fdf.get_column("val__number_peaks__n_1").to_list() == [2.0]
     assert fdf.get_column("val__number_peaks__n_3").to_list() == [1.0]
     assert fdf.get_column("val__number_peaks__n_5").to_list() == [0.0]

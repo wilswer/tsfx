@@ -11,13 +11,13 @@ class FeatureSetting(Enum):
 class ExtractionSettings:
     def __init__(
         self,
-        grouping_col: str,
+        grouping_cols: Sequence[str],
         value_cols: Sequence[str],
         feature_setting: FeatureSetting,
         config_path: str | None = None,
         dynamic_settings: DynamicGroupBySettings | None = None,
     ) -> None:
-        self.grouping_col = grouping_col
+        self.grouping_cols = grouping_cols
         self.value_cols = value_cols
         self.feature_setting = feature_setting
         self.dynamic_settings = dynamic_settings

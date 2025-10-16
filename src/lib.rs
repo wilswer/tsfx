@@ -19,7 +19,7 @@ enum PyFeatureSetting {
 #[pyclass(name = "ExtractionSettings")]
 #[derive(Clone)]
 struct PyExtractionSettings {
-    grouping_col: String,
+    grouping_cols: Vec<String>,
     value_cols: Vec<String>,
     feature_setting: PyFeatureSetting,
     config_path: Option<String>,
@@ -39,16 +39,16 @@ struct PyDynamicGroupBySettings {
 #[pymethods]
 impl PyExtractionSettings {
     #[new]
-    #[pyo3(signature = (grouping_col, value_cols, feature_setting, config_path=None, dynamic_settings=None))]
+    #[pyo3(signature = (grouping_cols, value_cols, feature_setting, config_path=None, dynamic_settings=None))]
     fn new(
-        grouping_col: String,
+        grouping_cols: Vec<String>,
         value_cols: Vec<String>,
         feature_setting: PyFeatureSetting,
         config_path: Option<String>,
         dynamic_settings: Option<PyDynamicGroupBySettings>,
     ) -> Self {
         PyExtractionSettings {
-            grouping_col,
+            grouping_cols,
             value_cols,
             feature_setting,
             config_path,
@@ -103,7 +103,7 @@ impl From<PyDynamicGroupBySettings> for DynamicGroupBySettings {
 impl From<PyExtractionSettings> for ExtractionSettings {
     fn from(opts: PyExtractionSettings) -> Self {
         ExtractionSettings {
-            grouping_col: opts.grouping_col,
+            grouping_cols: opts.grouping_cols,
             value_cols: opts.value_cols,
             feature_setting: opts.feature_setting.into(),
             config_path: opts.config_path,

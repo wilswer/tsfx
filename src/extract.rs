@@ -24,7 +24,7 @@ pub struct DynamicGroupBySettings {
 
 #[derive(Clone, Debug)]
 pub struct ExtractionSettings {
-    pub grouping_col: String,
+    pub grouping_cols: Vec<String>,
     pub value_cols: Vec<String>,
     pub feature_setting: FeatureSetting,
     pub config_path: Option<String>,
@@ -52,8 +52,8 @@ pub fn lazy_feature_df(
     opts: ExtractionSettings,
 ) -> Result<LazyFrame, ExtractionError> {
     let aggregators = get_aggregators(&opts);
-    let mut selected_cols = Vec::new();
-    selected_cols.push(col(&opts.grouping_col));
+    let grouping_cols: Vec<Expr> = opts.grouping_cols.into_iter().map(col).collect();
+    let mut selected_cols = grouping_cols.clone();
     for val_col in &opts.value_cols {
         selected_cols.push(col(val_col));
     }
@@ -70,7 +70,7 @@ pub fn lazy_feature_df(
         selected_cols.push(col(&dynamic_settings.time_col));
         df.select(&selected_cols).group_by_dynamic(
             col(&dynamic_settings.time_col).str().to_date(time_options),
-            [col(&opts.grouping_col)],
+            &grouping_cols,
             DynamicGroupOptions {
                 index_column: dynamic_settings.time_col.into(),
                 every: Duration::parse(&dynamic_settings.every),
@@ -80,8 +80,7 @@ pub fn lazy_feature_df(
             },
         )
     } else {
-        df.select(&selected_cols)
-            .group_by([col(&opts.grouping_col)])
+        df.select(&selected_cols).group_by(&grouping_cols)
     };
     Ok(gdf.agg(aggregators).collect()?.lazy())
 }
@@ -100,7 +99,7 @@ mod tests {
         .unwrap()
         .lazy();
         let opts = ExtractionSettings {
-            grouping_col: "id".to_string(),
+            grouping_cols: vec!["id".to_string()],
             value_cols: vec!["value".to_string()],
             feature_setting: FeatureSetting::Minimal,
             config_path: None,
@@ -152,7 +151,7 @@ mod tests {
         .unwrap()
         .lazy();
         let opts = ExtractionSettings {
-            grouping_col: "id".to_string(),
+            grouping_cols: vec!["id".to_string()],
             value_cols: vec!["value".to_string()],
             feature_setting: FeatureSetting::Minimal,
             config_path: None,

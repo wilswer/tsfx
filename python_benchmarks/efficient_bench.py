@@ -49,7 +49,7 @@ def tsfx_efficient() -> float:
     lf = lf.drop_nulls()
     print("Data loaded")
     opts = ExtractionSettings(
-        grouping_col="Name",
+        grouping_cols=["Name"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=[
             "open",
@@ -71,4 +71,4 @@ def tsfx_efficient() -> float:
 if __name__ == "__main__":
     time1 = tsfx_efficient()
     time2 = tsfresh_efficient()
-    print(f"Speed-up ~ {time2/time1:.1f}x")
+    print(f"Speed-up ~ {time2 / time1:.1f}x")
