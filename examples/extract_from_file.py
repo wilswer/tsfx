@@ -18,7 +18,7 @@ dyn_opts = DynamicGroupBySettings(
 )
 
 opts = ExtractionSettings(
-    grouping_col="Name",
+    grouping_cols=["Name"],
     value_cols=["open", "high", "low", "close", "volume"],
     feature_setting=FeatureSetting.Efficient,
     dynamic_settings=dyn_opts,
@@ -27,7 +27,7 @@ gdf = extract_features(lf, opts)
 print(gdf.sort(by=pl.col("Name")))
 
 opts = ExtractionSettings(
-    grouping_col="Name",
+    grouping_cols=["Name"],
     feature_setting=FeatureSetting.Efficient,
     value_cols=["open", "high", "low", "close", "volume"],
 )
