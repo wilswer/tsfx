@@ -62,7 +62,7 @@ class ExtractionSettings:
     feature_setting:
         One of the `FeatureSetting` presets controlling which feature calculators run.
     config_path:
-        Optional path to `.tsfx-config.yaml` config file.
+        Optional path to `.tsfx-config.toml` config file.
     dynamic_settings:
         Optional `DynamicGroupBySettings` for time-windowed extraction.
 
