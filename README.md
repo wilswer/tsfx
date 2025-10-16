@@ -40,7 +40,7 @@ df = pl.DataFrame(
     },
 ).lazy()
 settings = ExtractionSettings(
-    grouping_col="id",
+    grouping_cols=["id"],
     feature_setting=FeatureSetting.Efficient,
     value_cols=["val", "value"],
 )
@@ -106,7 +106,7 @@ dyn_settings = DynamicGroupBySettings(
     datetime_format="%Y-%m-%d",
 )
 settings = ExtractionSettings(
-    grouping_col="id",
+    grouping_cols=["id"],
     value_cols=["val", "value"],
     feature_setting=FeatureSetting.Efficient,
     dynamic_settings=dyn_settings,
