@@ -102,7 +102,6 @@ a Creative Commons Attribution 4.0 International License (CC BY
   dataset:</p>
   <code language="python">import polars as pl
 from tsfx import (
-    DynamicGroupBySettings,
     ExtractionSettings,
     FeatureSetting,
     extract_features,
@@ -139,6 +138,11 @@ with pl.Config(set_tbl_width_chars=80):
 │ b   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.0     ┆ 0.0     ┆ 0.0     ┆ 0.0     │
 │ c   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.0     ┆ 0.0     ┆ 0.0     ┆ 0.0     │
 └─────┴────────┴─────────┴─────────┴───┴─────────┴─────────┴─────────┴─────────┘</code>
+  <p>If the DataFrame has a time column, it is also possible to extract
+  over a time window by passing
+  <monospace>DynamicGroupBySettings</monospace> into the feature
+  extraction settings, like so:
+  <monospace>ExtractionSettings(..., dynamic_settings=DynamicGroupBySettings(...))</monospace>.</p>
 </sec>
 <sec id="statement-of-need">
   <title>Statement of need</title>

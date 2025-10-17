@@ -44,7 +44,6 @@ Below is a simple example of extracting features from a time series dataset:
 ```python
 import polars as pl
 from tsfx import (
-    DynamicGroupBySettings,
     ExtractionSettings,
     FeatureSetting,
     extract_features,
@@ -85,6 +84,10 @@ shape: (3, 314)
 │ c   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.0     ┆ 0.0     ┆ 0.0     ┆ 0.0     │
 └─────┴────────┴─────────┴─────────┴───┴─────────┴─────────┴─────────┴─────────┘
 ```
+
+If the DataFrame has a time column, it is also possible to extract over a time
+window by passing `DynamicGroupBySettings` into the feature extraction settings,
+like so: `ExtractionSettings(..., dynamic_settings=DynamicGroupBySettings(...))`.
 
 # Statement of need
 
