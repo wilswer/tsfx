@@ -13,7 +13,7 @@ dyn_opts = DynamicGroupBySettings(
     time_col="date",
     every="1y",
     period="1y",
-    offset="0",
+    offset="0y",
     datetime_format="%Y-%m-%d",
 )
 

@@ -20,7 +20,8 @@ settings = ExtractionSettings(
 )
 gdf = extract_features(df, settings)
 gdf = gdf.sort(by="id")
-print(gdf)
+with pl.Config(set_tbl_width_chars=80):
+    print(gdf)
 
 tdf = pl.DataFrame(
     {
@@ -45,7 +46,7 @@ dyn_settings = DynamicGroupBySettings(
     time_col="time",
     every="3y",
     period="3y",
-    offset="0",
+    offset="0y",
     datetime_format="%Y-%m-%d",
 )
 settings = ExtractionSettings(
@@ -56,4 +57,5 @@ settings = ExtractionSettings(
 )
 gdf = extract_features(tdf, settings)
 gdf = gdf.sort(by="id")
-print(gdf)
+with pl.Config(set_tbl_width_chars=80):
+    print(gdf)
