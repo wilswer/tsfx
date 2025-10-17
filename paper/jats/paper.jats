@@ -22,7 +22,7 @@
 extraction</article-title>
 </title-group>
 <contrib-group>
-<contrib contrib-type="author" equal-contrib="yes">
+<contrib contrib-type="author">
 <contrib-id contrib-id-type="orcid">https://orcid.org/0000-0002-1262-9143</contrib-id>
 <name>
 <surname>Vermelin</surname>
@@ -98,10 +98,51 @@ a Creative Commons Attribution 4.0 International License (CC BY
   (<xref alt="TOML, n.d." rid="ref-toml" ref-type="bibr"><italic>TOML</italic>,
   n.d.</xref>) configuration file (default name
   <monospace>.tsfx-config.toml</monospace>).</p>
+  <p>Below is a simple example of extracting features from a time series
+  dataset:</p>
+  <code language="python">import polars as pl
+from tsfx import (
+    DynamicGroupBySettings,
+    ExtractionSettings,
+    FeatureSetting,
+    extract_features,
+)
+
+df = pl.DataFrame(
+    {
+        &quot;id&quot;: [&quot;a&quot;, &quot;a&quot;, &quot;a&quot;, &quot;b&quot;, &quot;b&quot;, &quot;b&quot;, &quot;c&quot;, &quot;c&quot;, &quot;c&quot;],
+        &quot;val&quot;: [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+        &quot;value&quot;: [4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 4.0, 5.0, 6.0],
+    },
+).lazy()
+settings = ExtractionSettings(
+    grouping_cols=[&quot;id&quot;],
+    feature_setting=FeatureSetting.Efficient,
+    value_cols=[&quot;val&quot;, &quot;value&quot;],
+)
+gdf = extract_features(df, settings)
+gdf = gdf.sort(by=&quot;id&quot;)
+with pl.Config(set_tbl_width_chars=80):
+    print(gdf)</code>
+  <p>Running the code above generates a new DataFrame with the extracted
+  features:</p>
+  <code language="bash">shape: (3, 314)
+┌─────┬────────┬─────────┬─────────┬───┬─────────┬─────────┬─────────┬─────────┐
+│ id  ┆ length ┆ val__su ┆ val__me ┆ … ┆ value__ ┆ value__ ┆ value__ ┆ value__ │
+│ --- ┆ ---    ┆ m_value ┆ an      ┆   ┆ number_ ┆ number_ ┆ number_ ┆ number_ │
+│ str ┆ u32    ┆ s       ┆ ---     ┆   ┆ peaks__ ┆ peaks__ ┆ peaks__ ┆ peaks__ │
+│     ┆        ┆ ---     ┆ f64     ┆   ┆ n_3     ┆ n_5     ┆ n_10    ┆ n_50    │
+│     ┆        ┆ f64     ┆         ┆   ┆ ---     ┆ ---     ┆ ---     ┆ ---     │
+│     ┆        ┆         ┆         ┆   ┆ f64     ┆ f64     ┆ f64     ┆ f64     │
+╞═════╪════════╪═════════╪═════════╪═══╪═════════╪═════════╪═════════╪═════════╡
+│ a   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.0     ┆ 0.0     ┆ 0.0     ┆ 0.0     │
+│ b   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.0     ┆ 0.0     ┆ 0.0     ┆ 0.0     │
+│ c   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.0     ┆ 0.0     ┆ 0.0     ┆ 0.0     │
+└─────┴────────┴─────────┴─────────┴───┴─────────┴─────────┴─────────┴─────────┘</code>
 </sec>
 <sec id="statement-of-need">
   <title>Statement of need</title>
-  <p>Time series is a ubiquitous data modality, used in many domains
+  <p>Time series is a ubiquitous data modality, present in many domains
   such as finance, industry, meteorology, and medicine, to mention a
   few. As hardware to collect and store time series data is becoming
   increasingly affordable, the amount of available time series data is
@@ -109,10 +150,9 @@ a Creative Commons Attribution 4.0 International License (CC BY
   with time series is feature extraction where useful features, such as
   mean, variance, skewness, etc. are extracted from time series to be
   used in downstream tasks such as classification, regression or
-  clustering. For large time series datasets, performance is
-  increasingly important to enable timely data preprocessing. TSFX is
-  made for this purpose: extracting features from large time series
-  datasets.</p>
+  clustering. For large time series datasets, performance is important
+  for enabling timely data preprocessing. TSFX is made for this purpose:
+  extracting features from large time series datasets.</p>
 </sec>
 <sec id="acknowledgements">
   <title>Acknowledgements</title>
@@ -122,7 +162,11 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <ext-link ext-link-type="uri" xlink:href="https://www.vinnova.se/en/p/dfusion---disturbance-data-fusion/">DFusion</ext-link>,
   <ext-link ext-link-type="uri" xlink:href="https://www.vinnova.se/en/p/intepretable-ai-from-start-to-finish/">TolkAI</ext-link>,
   and
-  <ext-link ext-link-type="uri" xlink:href="https://www.vinnova.se/en/p/similarity-search-of-time-series-data-evaluation-of-search-engine-in-industrial-process-datasift-/">SIFT</ext-link>.</p>
+  <ext-link ext-link-type="uri" xlink:href="https://www.vinnova.se/en/p/similarity-search-of-time-series-data-evaluation-of-search-engine-in-industrial-process-datasift-/">SIFT</ext-link>.
+  This research work has been funded by the Knowledge Foundation within
+  the framework of the INDTECH (Grant Number 20200132) and INDTECH+
+  Research School project (Grant Number 20220132), participating
+  companies and Mälardalen University.</p>
 </sec>
 </body>
 <back>
