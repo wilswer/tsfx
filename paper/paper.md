@@ -9,7 +9,6 @@ tags:
 authors:
   - name: Wilhelm Söderkvist Vermelin
     orcid: 0000-0002-1262-9143
-    equal-contrib: true
     affiliation: "1, 2" # (Multiple affiliations must be quoted)
 affiliations:
   - name: RISE Research Institutes of Sweden
@@ -42,15 +41,15 @@ TSFX can also be configured using a TOML [@toml] configuration file (default nam
 
 # Statement of need
 
-Time series is a ubiquitous data modality, used in many domains such as finance,
+Time series is a ubiquitous data modality, present in many domains such as finance,
 industry, meteorology, and medicine, to mention a few. As hardware to collect
 and store time series data is becoming increasingly affordable, the amount of
 available time series data is increasing in many domains. A common preprocessing
 step when dealing with time series is feature extraction where useful features,
 such as mean, variance, skewness, etc. are extracted from time series to be used
 in downstream tasks such as classification, regression or clustering.
-For large time series datasets, performance is increasingly important to enable
-timely data preprocessing.
+For large time series datasets, performance is important for enabling timely
+data preprocessing.
 TSFX is made for this purpose: extracting features from large time series
 datasets.
 
