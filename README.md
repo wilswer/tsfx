@@ -26,7 +26,6 @@ Below is a simple example of extracting features from a time series dataset:
 ```python
 import polars as pl
 from tsfx import (
-    DynamicGroupBySettings,
     ExtractionSettings,
     FeatureSetting,
     extract_features,
