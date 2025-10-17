@@ -55,14 +55,12 @@ extend-include = ["*.ipynb"]
 # Enable Pyflakes `E` and `F` codes by default.
 ignore = [
   "N806",
-  "ANN101",
   "D203",
   "D107",
   "D105",
   "D100",
   "D213",
   "D104",
-  "PD901",
 ]
 select = [
   "E",
