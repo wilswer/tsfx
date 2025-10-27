@@ -84,22 +84,22 @@ a Creative Commons Attribution 4.0 International License (CC BY
   Polars
   (<xref alt="Vink et al., 2023" rid="ref-polars" ref-type="bibr">Vink
   et al., 2023</xref>) which is a fast DataFrame library written in Rust
-  (<xref alt="The Rust Programming Language, n.d." rid="ref-rustlang" ref-type="bibr"><italic>The
-  Rust Programming Language</italic>, n.d.</xref>) with Python bindings
+  (<xref alt="The Rust Programming Language, 2015" rid="ref-rustlang" ref-type="bibr"><italic>The
+  Rust Programming Language</italic>, 2015</xref>) with Python bindings
   facilitated through PyO3
-  (<xref alt="Project &amp; Contributors, n.d." rid="ref-pyo3" ref-type="bibr">Project
-  &amp; Contributors, n.d.</xref>). The feature extraction functions are
+  (<xref alt="Project &amp; Contributors, 2023" rid="ref-pyo3" ref-type="bibr">Project
+  &amp; Contributors, 2023</xref>). The feature extraction functions are
   implemented in Rust for even faster execution. To benchmark, the “1
   billion row challenge”
-  (<xref alt="Morling, n.d." rid="ref-1brc" ref-type="bibr">Morling,
-  n.d.</xref>) was used. The benchmark shows that compared to tsfresh,
+  (<xref alt="Morling, 2024" rid="ref-1brc" ref-type="bibr">Morling,
+  2024</xref>) was used. The benchmark shows that compared to tsfresh,
   TSFX offers approximately 10 times higher performance, using the same
   set of time series features.</p>
   <p>TSFX can be installed using <monospace>pip</monospace>:</p>
   <code language="bash">pip install tsfx</code>
   <p>TSFX can also be configured using a TOML
-  (<xref alt="TOML, n.d." rid="ref-toml" ref-type="bibr"><italic>TOML</italic>,
-  n.d.</xref>) configuration file (default name
+  (<xref alt="TOML, 2021" rid="ref-toml" ref-type="bibr"><italic>TOML</italic>,
+  2021</xref>) configuration file (default name
   <monospace>.tsfx-config.toml</monospace>).</p>
   <p>Below is a simple example of extracting features from a time series
   dataset:</p>
@@ -242,6 +242,7 @@ with pl.Config(set_tbl_width_chars=80):
     <element-citation>
       <article-title>The rust programming language</article-title>
       <publisher-name>https://rust-lang.org/</publisher-name>
+      <year iso-8601-date="2015">2015</year>
     </element-citation>
   </ref>
   <ref id="ref-pyo3">
@@ -252,12 +253,14 @@ with pl.Config(set_tbl_width_chars=80):
       </person-group>
       <article-title>PyO3</article-title>
       <publisher-name>GitHub</publisher-name>
+      <year iso-8601-date="2023">2023</year>
       <uri>https://github.com/PyO3</uri>
     </element-citation>
   </ref>
   <ref id="ref-toml">
     <element-citation>
       <article-title>TOML: Tom’s obvious minimal language</article-title>
+      <year iso-8601-date="2021">2021</year>
       <uri>https://toml.io/en/</uri>
     </element-citation>
   </ref>
@@ -280,6 +283,7 @@ with pl.Config(set_tbl_width_chars=80):
         <name><surname>Morling</surname><given-names>Gunnar</given-names></name>
       </person-group>
       <article-title>The one billion row challenge</article-title>
+      <year iso-8601-date="2024">2024</year>
       <uri> https://www.morling.dev/blog/one-billion-row-challenge/ </uri>
     </element-citation>
   </ref>
