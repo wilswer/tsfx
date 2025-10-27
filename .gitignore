@@ -178,3 +178,4 @@ tolkai_stuff
 *.bak
 pyrightconfig.json
 .zed/
+test_data/measurements.txt
