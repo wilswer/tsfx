@@ -23,11 +23,12 @@ bibliography: paper.bib
 
 TSFX is a Python [@python] library for extracting features from time series
 data. It is inspired by the tsfresh [@tsfresh] Python package with a special
-focus on performance. In order to achieve good performance, it utilizes Polars
-[@polars] which is a high performance DataFrame library written in Rust
-[@rustlang] with Python bindings created through PyO3 [@pyo3]. The feature
-extraction functions are also implemented in Rust for performance. Compared to
-tsfresh, TSFX offers a conservative estimate of 10x performance, using the same
+focus on performance on large time series datasets. To this end, it utilizes
+Polars [@polars] which is a fast DataFrame library written in Rust [@rustlang]
+with Python bindings facilitated through PyO3 [@pyo3]. The feature extraction
+functions are implemented in Rust for even faster execution. To benchmark, the
+"1 billion row challenge" [@1brc] was used. The benchmark shows that compared to
+tsfresh, TSFX offers approximately 10 times higher performance, using the same
 set of time series features.
 
 TSFX can be installed using `pip`:
@@ -87,7 +88,8 @@ shape: (3, 314)
 
 If the DataFrame has a time column, it is also possible to extract over a time
 window by passing `DynamicGroupBySettings` into the feature extraction settings,
-like so: `ExtractionSettings(..., dynamic_settings=DynamicGroupBySettings(...))`.
+like so:
+`ExtractionSettings(..., dynamic_settings=DynamicGroupBySettings(...))`.
 
 # Statement of need
 
@@ -95,12 +97,12 @@ Time series is a ubiquitous data modality, present in many domains such as
 finance, industry, meteorology, and medicine, to mention a few. As hardware to
 collect and store time series data is becoming increasingly affordable, the
 amount of available time series data is increasing in many domains. A common
-preprocessing step when dealing with time series is feature extraction where
-useful features, such as mean, variance, skewness, etc. are extracted from time
-series to be used in downstream tasks such as classification, regression or
-clustering. For large time series datasets, performance is important for
-enabling timely data preprocessing. TSFX is made for this purpose: extracting
-features from large time series datasets.
+preprocessing step when dealing with time series is feature extraction. This
+involves calculating representative features such as mean, variance, skewness,
+etc. from the time series to be used in downstream tasks such as classification,
+regression or clustering. For large time series datasets, performance is
+important for enabling timely data preprocessing. TSFX is made for this purpose:
+extracting features from large time series datasets.
 
 # Acknowledgements
 

@@ -80,18 +80,21 @@ a Creative Commons Attribution 4.0 International License (CC BY
   time series data. It is inspired by the tsfresh
   (<xref alt="Christ et al., 2018" rid="ref-tsfresh" ref-type="bibr">Christ
   et al., 2018</xref>) Python package with a special focus on
-  performance. In order to achieve good performance, it utilizes Polars
+  performance on large time series datasets. To this end, it utilizes
+  Polars
   (<xref alt="Vink et al., 2023" rid="ref-polars" ref-type="bibr">Vink
-  et al., 2023</xref>) which is a high performance DataFrame library
-  written in Rust
+  et al., 2023</xref>) which is a fast DataFrame library written in Rust
   (<xref alt="The Rust Programming Language, n.d." rid="ref-rustlang" ref-type="bibr"><italic>The
   Rust Programming Language</italic>, n.d.</xref>) with Python bindings
-  created through PyO3
+  facilitated through PyO3
   (<xref alt="Project &amp; Contributors, n.d." rid="ref-pyo3" ref-type="bibr">Project
   &amp; Contributors, n.d.</xref>). The feature extraction functions are
-  also implemented in Rust for performance. Compared to tsfresh, TSFX
-  offers a conservative estimate of 10x performance, using the same set
-  of time series features.</p>
+  implemented in Rust for even faster execution. To benchmark, the “1
+  billion row challenge”
+  (<xref alt="Morling, n.d." rid="ref-1brc" ref-type="bibr">Morling,
+  n.d.</xref>) was used. The benchmark shows that compared to tsfresh,
+  TSFX offers approximately 10 times higher performance, using the same
+  set of time series features.</p>
   <p>TSFX can be installed using <monospace>pip</monospace>:</p>
   <code language="bash">pip install tsfx</code>
   <p>TSFX can also be configured using a TOML
@@ -151,12 +154,12 @@ with pl.Config(set_tbl_width_chars=80):
   few. As hardware to collect and store time series data is becoming
   increasingly affordable, the amount of available time series data is
   increasing in many domains. A common preprocessing step when dealing
-  with time series is feature extraction where useful features, such as
-  mean, variance, skewness, etc. are extracted from time series to be
-  used in downstream tasks such as classification, regression or
-  clustering. For large time series datasets, performance is important
-  for enabling timely data preprocessing. TSFX is made for this purpose:
-  extracting features from large time series datasets.</p>
+  with time series is feature extraction. This involves calculating
+  representative features such as mean, variance, skewness, etc. from
+  the time series to be used in downstream tasks such as classification,
+  regression or clustering. For large time series datasets, performance
+  is important for enabling timely data preprocessing. TSFX is made for
+  this purpose: extracting features from large time series datasets.</p>
 </sec>
 <sec id="acknowledgements">
   <title>Acknowledgements</title>
@@ -269,6 +272,15 @@ with pl.Config(set_tbl_width_chars=80):
       <publisher-loc>Scotts Valley, CA</publisher-loc>
       <year iso-8601-date="2009">2009</year>
       <isbn>1441412697</isbn>
+    </element-citation>
+  </ref>
+  <ref id="ref-1brc">
+    <element-citation>
+      <person-group person-group-type="author">
+        <name><surname>Morling</surname><given-names>Gunnar</given-names></name>
+      </person-group>
+      <article-title>The one billion row challenge</article-title>
+      <uri> https://www.morling.dev/blog/one-billion-row-challenge/ </uri>
     </element-citation>
   </ref>
 </ref-list>
