@@ -92,9 +92,11 @@ a Creative Commons Attribution 4.0 International License (CC BY
   implemented in Rust for even faster execution. To benchmark, the “1
   billion row challenge”
   (<xref alt="Morling, 2024" rid="ref-1brc" ref-type="bibr">Morling,
-  2024</xref>) was used. The benchmark shows that compared to tsfresh,
-  TSFX offers approximately 10 times higher performance, using the same
-  set of time series features.</p>
+  2024</xref>) was used. In this benchmark, TSFX took approx. 200
+  seconds (using 64 CPU cores) to extract features vs tsfresh which took
+  2000 seconds (using 80 CPU cores). This means that compared to
+  tsfresh, TSFX offers approximately 10 times higher performance, using
+  the same set of time series features.</p>
   <p>TSFX can be installed using <monospace>pip</monospace>:</p>
   <code language="bash">pip install tsfx</code>
   <p>TSFX can also be configured using a TOML

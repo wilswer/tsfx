@@ -27,9 +27,11 @@ focus on performance on large time series datasets. To this end, it utilizes
 Polars [@polars] which is a fast DataFrame library written in Rust [@rustlang]
 with Python bindings facilitated through PyO3 [@pyo3]. The feature extraction
 functions are implemented in Rust for even faster execution. To benchmark, the
-"1 billion row challenge" [@1brc] was used. The benchmark shows that compared to
-tsfresh, TSFX offers approximately 10 times higher performance, using the same
-set of time series features.
+"1 billion row challenge" [@1brc] was used. In this benchmark, TSFX took approx.
+200 seconds (using 64 CPU cores) to extract features vs tsfresh which took 2000
+seconds (using 80 CPU cores). This means that compared to tsfresh, TSFX offers
+approximately 10 times higher performance, using the same set of time series
+features.
 
 TSFX can be installed using `pip`:
 
