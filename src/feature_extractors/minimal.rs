@@ -51,15 +51,15 @@ pub fn count(name: &str) -> Expr {
     col(name).count().alias("length")
 }
 
-fn _sum_values(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _sum_values(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let sum = arr.sum();
     let s = Column::new("".into(), &[sum]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 fn _out(_: &Schema, _: &Field) -> Result<Field, PolarsError> {
@@ -70,10 +70,11 @@ fn _out(_: &Schema, _: &Field) -> Result<Field, PolarsError> {
 ///
 /// The sum of all values in the time series
 pub fn sum_values(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_sum_values, o)
-        .get(0)
+        .apply(_sum_values, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__sum_values", name))
 }
 
@@ -82,15 +83,15 @@ pub fn expr_sum(name: &str) -> Expr {
     col(name).sum().alias(format!("{}__sum", name))
 }
 
-fn _mean(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _mean(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mean = arr.mean().unwrap_or(f64::NAN);
     let s = Column::new("".into(), &[mean]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 /// Mean feature.
@@ -99,10 +100,9 @@ fn _mean(s: Column) -> Result<Option<Column>, PolarsError> {
 /// $$ \mu = \frac{1}{n} \sum_{i=1}^{n} x_i, $$
 /// where $n$ is the number of values in the time series
 pub fn mean(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_mean, o)
-        .get(0)
+        .apply(_mean, |_, _| Ok(Field::new("".into(), DataType::Float64)))
+        .get(0, true)
         .alias(format!("{}__mean", name))
 }
 
@@ -111,25 +111,24 @@ pub fn expr_mean(name: &str) -> Expr {
     col(name).mean().alias(format!("{}__mean", name))
 }
 
-fn _min(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _min(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let min = arr.min().unwrap_or(&f64::NAN);
     let s = Column::new("".into(), &[*min]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 /// Minimum feature.
 ///
 /// The minimum value in the time series
 pub fn minimum(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_min, o)
-        .get(0)
+        .apply(_min, |_, _| Ok(Field::new("".into(), DataType::Float64)))
+        .get(0, true)
         .alias(format!("{}__minimum", name))
 }
 
@@ -138,25 +137,24 @@ pub fn expr_minimum(name: &str) -> Expr {
     col(name).min().alias(format!("{}__minimum", name))
 }
 
-fn _max(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _max(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let max = arr.max().unwrap_or(&f64::NAN);
     let s = Column::new("".into(), &[*max]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 /// Maximum feature.
 ///
 /// The maximum value in the time series
 pub fn maximum(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_max, o)
-        .get(0)
+        .apply(_max, |_, _| Ok(Field::new("".into(), DataType::Float64)))
+        .get(0, true)
         .alias(format!("{}__maximum", name))
 }
 
@@ -175,15 +173,15 @@ pub fn expr_median(name: &str) -> Expr {
         .alias(format!("{}__median", name))
 }
 
-fn _standard_deviation(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _standard_deviation(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let standard_deviation = arr.std(1.0);
     let s = Column::new("".into(), &[standard_deviation]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 /// Standard deviation feature.
@@ -192,10 +190,11 @@ fn _standard_deviation(s: Column) -> Result<Option<Column>, PolarsError> {
 /// $$ \sigma = \sqrt{\frac{1}{n - 1} \sum_{i=1}^{n} (x_i - \mu)^2}, $$
 /// where $n$ is the number of values in the time series and $\mu$ is the mean of the time series
 pub fn standard_deviation(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_standard_deviation, o)
-        .get(0)
+        .apply(_standard_deviation, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__standard_deviation", name))
 }
 
@@ -206,15 +205,15 @@ pub fn expr_standard_deviation(name: &str) -> Expr {
         .alias(format!("{}__standard_deviation", name))
 }
 
-fn _variance(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _variance(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let variance = arr.var(1.0);
     let s = Column::new("".into(), &[variance]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 /// Variance feature.
@@ -223,10 +222,11 @@ fn _variance(s: Column) -> Result<Option<Column>, PolarsError> {
 /// $$ \sigma^2 = \frac{1}{n - 1} \sum_{i=1}^{n} (x_i - \mu)^2, $$
 /// where $n$ is the number of values in the time Column and $\mu$ is the mean of the time Column
 pub fn variance(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_variance, o)
-        .get(0)
+        .apply(_variance, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__variance", name))
 }
 
@@ -235,10 +235,10 @@ pub fn expr_variance(name: &str) -> Expr {
     col(name).var(1).alias(format!("{}__variance", name))
 }
 
-fn _rms(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _rms(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let rms = arr
@@ -247,7 +247,7 @@ fn _rms(s: Column) -> Result<Option<Column>, PolarsError> {
         .map(f64::sqrt)
         .unwrap_or(f64::NAN);
     let s = Column::new("".into(), &[rms]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 /// Root mean square feature.
@@ -256,10 +256,9 @@ fn _rms(s: Column) -> Result<Option<Column>, PolarsError> {
 /// $$ \text{RMS} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} x_i^2}, $$
 /// where $n$ is the number of values in the time Column
 pub fn root_mean_square(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_rms, o)
-        .get(0)
+        .apply(_rms, |_, _| Ok(Field::new("".into(), DataType::Float64)))
+        .get(0, true)
         .alias(format!("{}__root_mean_square", name))
 }
 
@@ -281,15 +280,15 @@ pub fn expr_skewness(name: &str) -> Expr {
     skewness.alias(format!("{}__expr_skewness", name))
 }
 
-fn _skewness(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _skewness(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let skewness = arr.skewness().unwrap_or(f64::NAN);
     let s = Column::new("".into(), &[skewness]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 /// Skewness feature.
@@ -299,9 +298,10 @@ fn _skewness(s: Column) -> Result<Option<Column>, PolarsError> {
 /// where $n$ is the number of values in the time series, $\mu$ is the mean of the time series,
 /// and $\sigma$ is the standard deviation of the time Column
 pub fn skewness(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_skewness, o)
-        .get(0)
+        .apply(_skewness, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__skewness", name))
 }

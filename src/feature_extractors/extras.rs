@@ -5,10 +5,8 @@ use std::{fmt::Display, str::FromStr};
 use anyhow::Result;
 use itertools::Itertools;
 use itertools::izip;
-use linfa::prelude::*;
-use linfa_linear::LinearRegression;
 use ndarray::ArrayView1;
-use ndarray::{Array, Array1, Axis, Ix1, s};
+use ndarray::{Array1, Axis, Ix1, s};
 use ndarray_stats::errors::QuantileError;
 use ndarray_stats::{QuantileExt, SummaryStatisticsExt, interpolate::Midpoint};
 use noisy_float::types::n64;
@@ -20,6 +18,40 @@ use polars::series::ops::NullBehavior;
 
 use crate::extract::ExtractionSettings;
 use crate::utils::toml_reader::load_config;
+
+/// Calculates the Ordinary Least Squares (OLS) slope and intercept
+/// for a sequence of y-values where x-values are assumed to be a sequential index (0, 1, 2, ..., N-1).
+/// Returns a tuple of (intercept, slope).
+pub fn calculate_sequential_ols(y_values: impl IntoIterator<Item = f64>, n: usize) -> (f64, f64) {
+    // Cannot fit a line with fewer than 2 points
+    if n < 2 {
+        return (f64::NAN, f64::NAN);
+    }
+
+    let n_f64 = n as f64;
+    let mut sum_y = 0.0;
+    let mut sum_xy = 0.0;
+
+    // Calculate sums in a single pass
+    for (i, val) in y_values.into_iter().enumerate() {
+        sum_y += val;
+        sum_xy += (i as f64) * val;
+    }
+
+    let mean_x = (n_f64 - 1.0) / 2.0;
+    let mean_y = sum_y / n_f64;
+
+    // Sum of squares of x (SS_xx) for a sequence 0..n-1 has a known closed-form formula
+    let ss_xx = n_f64 * (n_f64 * n_f64 - 1.0) / 12.0;
+
+    // Sum of products (SS_xy)
+    let ss_xy = sum_xy - n_f64 * mean_x * mean_y;
+
+    let slope = ss_xy / ss_xx;
+    let intercept = mean_y - slope * mean_x;
+
+    (intercept, slope)
+}
 
 pub fn extra_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
     let config = match &opts.config_path {
@@ -259,7 +291,7 @@ where
         return Err(QuantileError::EmptyInput);
     }
     xs.as_slice_mut().unwrap().sort_unstable();
-    Ok(if xs.len() % 2 == 0 {
+    Ok(if xs.len().is_multiple_of(2) {
         (xs[xs.len() / 2] + xs[xs.len() / 2 - 1]) / (T::from_u64(2).unwrap())
     } else {
         xs[xs.len() / 2]
@@ -270,7 +302,7 @@ fn _make_nan_struct_column(
     name: &str,
     parameter_name: &str,
     rs: &[f64],
-) -> Result<Option<Column>, PolarsError> {
+) -> Result<Column, PolarsError> {
     let mut ss: Vec<Column> = Vec::with_capacity(rs.len());
     for r in rs.iter() {
         ss.push(Column::new(
@@ -278,15 +310,17 @@ fn _make_nan_struct_column(
             &[f64::NAN],
         ))
     }
-    let s = DataFrame::new(ss)?.into_struct(name.into()).into_column();
-    Ok(Some(s))
+    let s = DataFrame::new(1, ss)?
+        .into_struct(name.into())
+        .into_column();
+    Ok(s)
 }
 
 fn _make_nan_struct_column_int(
     name: &str,
     parameter_name: &str,
     ns: &[usize],
-) -> Result<Option<Column>, PolarsError> {
+) -> Result<Column, PolarsError> {
     let mut ss: Vec<Column> = Vec::with_capacity(ns.len());
     for n in ns.iter() {
         ss.push(Column::new(
@@ -294,8 +328,10 @@ fn _make_nan_struct_column_int(
             &[f64::NAN],
         ))
     }
-    let s = DataFrame::new(ss)?.into_struct(name.into()).into_column();
-    Ok(Some(s))
+    let s = DataFrame::new(1, ss)?
+        .into_struct(name.into())
+        .into_column();
+    Ok(s)
 }
 
 fn _get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize> {
@@ -329,15 +365,15 @@ fn _roll(x: &mut [f64], shift: isize) -> &[f64] {
     x
 }
 
-fn _absolute_energy(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _absolute_energy(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let abs_energy = arr.mapv(|x| x.powi(2)).sum();
     let s = Column::new("".into(), &[abs_energy]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 fn _out(_: &Schema, _: &Field) -> Result<Field, PolarsError> {
@@ -351,10 +387,11 @@ fn _out(_: &Schema, _: &Field) -> Result<Field, PolarsError> {
 /// $$ \text{absolute energy} = \sum_{i=1}^{n}x_i^2,$$
 /// where $n$ is the number of values in the time series.
 pub fn absolute_energy(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_absolute_energy, o)
-        .get(0)
+        .apply(_absolute_energy, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{name}__absolute_energy"))
 }
 
@@ -367,10 +404,10 @@ pub fn expr_abs_energy(name: &str) -> Expr {
         .alias(format!("{name}__absolute_energy"))
 }
 
-fn _mean_absolute_change(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _mean_absolute_change(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -380,7 +417,7 @@ fn _mean_absolute_change(s: Column) -> Result<Option<Column>, PolarsError> {
     let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
     let mean_abs_change = diffs.mapv(|x| x.abs()).mean().unwrap_or(f64::NAN);
     let s = Column::new("".into(), &[mean_abs_change]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 /// Mean absolute change feature.
@@ -389,10 +426,11 @@ fn _mean_absolute_change(s: Column) -> Result<Option<Column>, PolarsError> {
 /// $$ \text{mean abs. change} = \frac{1}{n-1}\sum_{i=1}^{n-1} \|x_{i + 1} - x_{i}\|.$$
 /// It is the average of the absolute value of differences in the time series.
 pub fn mean_absolute_change(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_mean_absolute_change, o)
-        .get(0)
+        .apply(_mean_absolute_change, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__mean_absolute_change", name))
 }
 
@@ -404,15 +442,15 @@ pub fn expr_mean_change(name: &str) -> Expr {
     (diffs.sum() / n).alias(format!("{}__mean_change", name))
 }
 
-fn _kurtosis(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _kurtosis(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let kurtosis = arr.kurtosis().unwrap_or(f64::NAN);
     let s = Column::new("".into(), &[kurtosis]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 /// Kurtosis feature.
@@ -422,10 +460,11 @@ fn _kurtosis(s: Column) -> Result<Option<Column>, PolarsError> {
 /// where $n$ is the number of values in the time series, $\mu$ is the mean of the time series,
 /// and $\sigma$ is the standard deviation of the time series
 pub fn kurtosis(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_kurtosis, o)
-        .get(0)
+        .apply(_kurtosis, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__kurtosis", name))
 }
 
@@ -439,50 +478,42 @@ pub fn expr_kurtosis(name: &str) -> Expr {
     skewness.alias(format!("{}__expr_kurtosis", name))
 }
 
-fn _linear_trend(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _linear_trend(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let x = ndarray::Array::range(0., arr.len() as f64, 1.);
-    let x = x.insert_axis(Axis(1));
-    let dataset = Dataset::new(x, arr);
-    let lin_reg = LinearRegression::new();
-    let model = lin_reg.fit(&dataset);
-    match model {
-        Ok(model) => {
-            let s_i = model.intercept();
-            let s_s = model.params()[0];
-            let s = DataFrame::new(vec![
-                Column::new("intercept".into(), &[s_i]),
-                Column::new("slope".into(), &[s_s]),
-            ])?
-            .into_struct("linear_trend".into())
-            .into_column();
-            Ok(Some(s))
-        }
-        Err(_) => {
-            let s = DataFrame::new(vec![
-                Column::new("intercept".into(), &[f64::NAN]),
-                Column::new("slope".into(), &[f64::NAN]),
-            ])?
-            .into_struct("linear_trend".into())
-            .into_column();
-            Ok(Some(s))
-        }
-    }
+
+    // Cast the column to Float64
+    let series = s.as_materialized_series().cast(&DataType::Float64)?;
+    let ca = series.f64()?;
+
+    // Call our decoupled OLS function
+    let (intercept, slope) = calculate_sequential_ols(ca.into_no_null_iter(), ca.len());
+
+    // Build the Struct column result
+    let result = DataFrame::new(
+        1,
+        vec![
+            Column::new("intercept".into(), &[intercept]),
+            Column::new("slope".into(), &[slope]),
+        ],
+    )?
+    .into_struct("linear_trend".into())
+    .into_column();
+
+    Ok(result)
 }
 
 pub fn linear_trend(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Struct(vec![
-        Field::new("intercept".into(), DataType::Float64),
-        Field::new("slope".into(), DataType::Float64),
-    ]));
     let name = name.to_string();
     col(&name)
-        .apply(_linear_trend, o)
+        .apply(_linear_trend, |_, _| {
+            Ok(Field::new(
+                "".into(),
+                DataType::Struct(vec![
+                    Field::new("intercept".into(), DataType::Float64),
+                    Field::new("slope".into(), DataType::Float64),
+                ]),
+            ))
+        })
         .struct_()
         .rename_fields(
             [
@@ -491,7 +522,7 @@ pub fn linear_trend(name: &str) -> Expr {
             ]
             .to_vec(),
         )
-        .get(0)
+        .get(0, true)
         .alias(format!("{}__linear_trend", name))
 }
 
@@ -503,7 +534,7 @@ pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
         .alias(format!("{}__variance_larger_than_standard_deviation", name))
 }
 
-fn _ratio_beyond_r_sigma(s: Column, rs: &[f64]) -> Result<Option<Column>, PolarsError> {
+fn _ratio_beyond_r_sigma(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
         return _make_nan_struct_column("ratio_beyond_r_sigma", "r", rs);
@@ -526,10 +557,10 @@ fn _ratio_beyond_r_sigma(s: Column, rs: &[f64]) -> Result<Option<Column>, Polars
             &[ratio],
         ));
     }
-    let s = DataFrame::new(ss)?
+    let s = DataFrame::new(1, ss)?
         .into_struct("ratio_beyond_r_sigma".into())
         .into_column();
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn ratio_beyond_r_sigma(name: &str, rs: Vec<f64>) -> Expr {
@@ -543,16 +574,23 @@ pub fn ratio_beyond_r_sigma(name: &str, rs: Vec<f64>) -> Expr {
             DataType::Float64,
         ));
     }
-    let o = GetOutput::from_type(DataType::Struct(struct_names));
     col(&name)
-        .apply(move |s| _ratio_beyond_r_sigma(s, &rs), o)
+        .apply(
+            move |s| _ratio_beyond_r_sigma(s, &rs),
+            move |_, _| {
+                Ok(Field::new(
+                    "".into(),
+                    DataType::Struct(struct_names.clone()),
+                ))
+            },
+        )
         .struct_()
         .rename_fields(new_field_names)
-        .get(0)
+        .get(0, true)
         .alias(format!("{}__ratio_beyond_r_sigma", name))
 }
 
-fn _large_standard_deviation(s: Column, rs: &[f64]) -> Result<Option<Column>, PolarsError> {
+fn _large_standard_deviation(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
         return _make_nan_struct_column("large_standard_deviation", "r", rs);
@@ -569,10 +607,10 @@ fn _large_standard_deviation(s: Column, rs: &[f64]) -> Result<Option<Column>, Po
             &[out as u8 as f64],
         ));
     }
-    let s = DataFrame::new(ss)?
+    let s = DataFrame::new(1, ss)?
         .into_struct("large_standard_deviation".into())
         .into_column();
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn large_standard_deviation(name: &str, rs: Vec<f64>) -> Expr {
@@ -585,16 +623,23 @@ pub fn large_standard_deviation(name: &str, rs: Vec<f64>) -> Expr {
             DataType::Float64,
         ));
     }
-    let o = GetOutput::from_type(DataType::Struct(struct_names));
     col(name)
-        .apply(move |s| _large_standard_deviation(s, &rs), o)
+        .apply(
+            move |s| _large_standard_deviation(s, &rs),
+            move |_, _| {
+                Ok(Field::new(
+                    "".into(),
+                    DataType::Struct(struct_names.clone()),
+                ))
+            },
+        )
         .struct_()
         .rename_fields(new_field_names)
-        .get(0)
+        .get(0, true)
         .alias(format!("{}__large_standard_deviation", name))
 }
 
-fn _symmetry_looking(s: Column, rs: &[f64]) -> Result<Option<Column>, PolarsError> {
+fn _symmetry_looking(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
         return _make_nan_struct_column("symmetry_looking", "r", rs);
@@ -608,7 +653,7 @@ fn _symmetry_looking(s: Column, rs: &[f64]) -> Result<Option<Column>, PolarsErro
     let median_res = _median_mut(&mut arr);
     let median = match median_res {
         Ok(m) => f64::from(m),
-        Err(_) => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let mean_opt = arr.mean();
     let mean = match mean_opt {
@@ -635,10 +680,10 @@ fn _symmetry_looking(s: Column, rs: &[f64]) -> Result<Option<Column>, PolarsErro
             &[out as u8 as f64],
         ));
     }
-    let s = DataFrame::new(ss)?
+    let s = DataFrame::new(1, ss)?
         .into_struct("symmetry_looking".into())
         .into_column();
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn symmetry_looking(name: &str, rs: Vec<f64>) -> Expr {
@@ -651,69 +696,78 @@ pub fn symmetry_looking(name: &str, rs: Vec<f64>) -> Expr {
             DataType::Float64,
         ));
     }
-    let o = GetOutput::from_type(DataType::Struct(struct_names));
     col(name)
-        .apply(move |s| _symmetry_looking(s, &rs), o)
+        .apply(
+            move |s| _symmetry_looking(s, &rs),
+            move |_, _| {
+                Ok(Field::new(
+                    "".into(),
+                    DataType::Struct(struct_names.clone()),
+                ))
+            },
+        )
         .struct_()
         .rename_fields(new_field_names)
-        .get(0)
+        .get(0, true)
         .alias(format!("{}__symmetry_looking__r_", name))
 }
 
-fn _has_duplicate_max(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _has_duplicate_max(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let max_res = arr.max();
     let max = match max_res {
         Ok(m) => m,
-        Err(_) => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let count = arr.mapv(|x| if x == *max { 1.0 } else { 0.0 }).sum();
     let out = count > 1.0;
     let s = Column::new("".into(), &[out as u8 as f64]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn has_duplicate_max(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_has_duplicate_max, o)
-        .get(0)
+        .apply(_has_duplicate_max, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__has_duplicate_max", name))
 }
 
-fn _has_duplicate_min(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _has_duplicate_min(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let min_res = arr.min();
     let min = match min_res {
         Ok(m) => m,
-        Err(_) => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let count = arr.mapv(|x| if x == *min { 1.0 } else { 0.0 }).sum();
     let out = count > 1.0;
     let s = Column::new("".into(), &[out as u8 as f64]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn has_duplicate_min(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_has_duplicate_min, o)
-        .get(0)
+        .apply(_has_duplicate_min, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__has_duplicate_min", name))
 }
 
-fn _cid_ce(s: Column, normalize: bool) -> Result<Option<Column>, PolarsError> {
+fn _cid_ce(s: Column, normalize: bool) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -730,45 +784,48 @@ fn _cid_ce(s: Column, normalize: bool) -> Result<Option<Column>, PolarsError> {
     let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
     let out = diffs.mapv(|x| x.powi(2)).sum().sqrt();
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn cid_ce(name: &str, normalize: bool) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(move |s| _cid_ce(s, normalize), o)
-        .get(0)
+        .apply(
+            move |s| _cid_ce(s, normalize),
+            |_, _| Ok(Field::new("".into(), DataType::Float64)),
+        )
+        .get(0, true)
         .alias(format!("{}__cid_ce__normalize_{:.1}", name, normalize))
 }
 
-fn _absolute_maximum(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _absolute_maximum(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let abs_arr = arr.mapv(|x| x.abs());
     let max_res = abs_arr.max();
     let max = match max_res {
         Ok(m) => *m,
-        Err(_) => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let s = Column::new("".into(), &[max]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn absolute_maximum(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_absolute_maximum, o)
-        .get(0)
+        .apply(_absolute_maximum, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__absolute_maximum", name))
 }
 
-fn _absolute_sum_of_changes(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _absolute_sum_of_changes(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -778,107 +835,114 @@ fn _absolute_sum_of_changes(s: Column) -> Result<Option<Column>, PolarsError> {
     let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
     let out = diffs.mapv(|x| x.abs()).sum();
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn absolute_sum_of_changes(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_absolute_sum_of_changes, o)
-        .get(0)
+        .apply(_absolute_sum_of_changes, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__absolute_sum_of_changes", name))
 }
 
-fn _count_above_mean(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _count_above_mean(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let out = arr.mapv(|x| if x > mean { 1.0 } else { 0.0 }).sum();
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn count_above_mean(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_count_above_mean, o)
-        .get(0)
+        .apply(_count_above_mean, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__count_above_mean", name))
 }
 
-fn _count_below_mean(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _count_below_mean(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let out = arr.mapv(|x| if x < mean { 1.0 } else { 0.0 }).sum();
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn count_below_mean(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_count_below_mean, o)
-        .get(0)
+        .apply(_count_below_mean, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__count_below_mean", name))
 }
 
-fn _count_above(s: Column, t: f64) -> Result<Option<Column>, PolarsError> {
+fn _count_above(s: Column, t: f64) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let out = arr.mapv(|x| if x > t { 1.0 } else { 0.0 }).sum();
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn count_above(name: &str, t: f64) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(move |s| _count_above(s, t), o)
-        .get(0)
+        .apply(
+            move |s| _count_above(s, t),
+            |_, _| Ok(Field::new("".into(), DataType::Float64)),
+        )
+        .get(0, true)
         .alias(format!("{}__count_above__t_{:.1}", name, t))
 }
 
-fn _count_below(s: Column, t: f64) -> Result<Option<Column>, PolarsError> {
+fn _count_below(s: Column, t: f64) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let out = arr.mapv(|x| if x > t { 1.0 } else { 0.0 }).sum();
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn count_below(name: &str, t: f64) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(move |s| _count_below(s, t), o)
-        .get(0)
+        .apply(
+            move |s| _count_below(s, t),
+            |_, _| Ok(Field::new("".into(), DataType::Float64)),
+        )
+        .get(0, true)
         .alias(format!("{}__count_below__t_{:.1}", name, t))
 }
 
-fn _first_location_of_maximum(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _first_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -888,25 +952,26 @@ fn _first_location_of_maximum(s: Column) -> Result<Option<Column>, PolarsError> 
     let max_res = arr.argmax();
     let max = match max_res {
         Ok(m) => m,
-        Err(_) => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let out = max as f64 / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn first_location_of_maximum(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_first_location_of_maximum, o)
-        .get(0)
+        .apply(_first_location_of_maximum, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__first_location_of_maximum", name))
 }
 
-fn _first_location_of_minimum(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _first_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -916,25 +981,26 @@ fn _first_location_of_minimum(s: Column) -> Result<Option<Column>, PolarsError> 
     let min_res = arr.argmin();
     let min = match min_res {
         Ok(m) => m,
-        Err(_) => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let out = min as f64 / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn first_location_of_minimum(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_first_location_of_minimum, o)
-        .get(0)
+        .apply(_first_location_of_minimum, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__first_location_of_minimum", name))
 }
 
-fn _last_location_of_maximum(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _last_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -944,25 +1010,26 @@ fn _last_location_of_maximum(s: Column) -> Result<Option<Column>, PolarsError> {
     let max_res = arr.argmax();
     let max = match max_res {
         Ok(m) => m,
-        Err(_) => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let out = 1.0 - (max as f64 / arr.len() as f64);
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn last_location_of_maximum(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_last_location_of_maximum, o)
-        .get(0)
+        .apply(_last_location_of_maximum, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__last_location_of_maximum", name))
 }
 
-fn _last_location_of_minimum(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _last_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -972,25 +1039,26 @@ fn _last_location_of_minimum(s: Column) -> Result<Option<Column>, PolarsError> {
     let min_res = arr.argmin();
     let min = match min_res {
         Ok(m) => m,
-        Err(_) => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let out = 1.0 - (min as f64 / arr.len() as f64);
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn last_location_of_minimum(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_last_location_of_minimum, o)
-        .get(0)
+        .apply(_last_location_of_minimum, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__last_location_of_minimum", name))
 }
 
-fn _longest_strike_below_mean(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _longest_strike_below_mean(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -1000,7 +1068,7 @@ fn _longest_strike_below_mean(s: Column) -> Result<Option<Column>, PolarsError> 
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let bool_arr = arr.mapv(|x| x < mean);
     let out = _get_length_sequences_where(&bool_arr)
@@ -1008,21 +1076,22 @@ fn _longest_strike_below_mean(s: Column) -> Result<Option<Column>, PolarsError> 
         .max()
         .unwrap_or(0);
     let s = Column::new("".into(), &[out as f64]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn longest_strike_below_mean(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_longest_strike_below_mean, o)
-        .get(0)
+        .apply(_longest_strike_below_mean, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__longest_strike_below_mean", name))
 }
 
-fn _longest_strike_above_mean(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _longest_strike_above_mean(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -1032,7 +1101,7 @@ fn _longest_strike_above_mean(s: Column) -> Result<Option<Column>, PolarsError> 
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let bool_arr = arr.mapv(|x| x > mean);
     let out = _get_length_sequences_where(&bool_arr)
@@ -1040,21 +1109,22 @@ fn _longest_strike_above_mean(s: Column) -> Result<Option<Column>, PolarsError> 
         .max()
         .unwrap_or(0);
     let s = Column::new("".into(), &[out as f64]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn longest_strike_above_mean(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_longest_strike_above_mean, o)
-        .get(0)
+        .apply(_longest_strike_above_mean, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__longest_strike_above_mean", name))
 }
 
-fn _has_duplicate(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _has_duplicate(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -1074,46 +1144,48 @@ fn _has_duplicate(s: Column) -> Result<Option<Column>, PolarsError> {
     };
     let out = len < arr.len();
     let s = Column::new("".into(), &[out as u8 as f64]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn has_duplicate(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_has_duplicate, o)
-        .get(0)
+        .apply(_has_duplicate, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__has_duplicate", name))
 }
 
-fn _variation_coefficient(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _variation_coefficient(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
-        None => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let std = arr.std(1.0);
     let out = if mean == 0.0 { f64::NAN } else { std / mean };
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn variation_coefficient(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_variation_coefficient, o)
-        .get(0)
+        .apply(_variation_coefficient, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__variation_coefficient", name))
 }
 
-fn _mean_change(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _mean_change(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -1126,23 +1198,24 @@ fn _mean_change(s: Column) -> Result<Option<Column>, PolarsError> {
         (arr[arr.len() - 1] - arr[0]) / ((arr.len() - 1) as f64)
     };
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 /// The mean change of a time series is defined as
 /// $$ \text{mean change} = \frac{1}{n-1} \sum_{i=1}^{n-1} x_{i + 1} - x_{i} = \frac{x_{n} - x_1}{n-1} $$.
 pub fn mean_change(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_mean_change, o)
-        .get(0)
+        .apply(_mean_change, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__mean_change", name))
 }
 
-fn _ratio_value_number_to_time_series_length(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _ratio_value_number_to_time_series_length(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -1162,24 +1235,25 @@ fn _ratio_value_number_to_time_series_length(s: Column) -> Result<Option<Column>
     };
     let out = len_unique as f64 / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn ratio_value_number_to_time_series_length(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_ratio_value_number_to_time_series_length, o)
-        .get(0)
+        .apply(_ratio_value_number_to_time_series_length, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!(
             "{}__ratio_value_number_to_time_series_length",
             name
         ))
 }
 
-fn _sum_of_reoccurring_values(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _sum_of_reoccurring_values(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr.mapv(OrderedFloat);
@@ -1192,21 +1266,22 @@ fn _sum_of_reoccurring_values(s: Column) -> Result<Option<Column>, PolarsError> 
         }
     }
     let s = Column::new("".into(), &[sum]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn sum_of_reoccurring_values(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_sum_of_reoccurring_values, o)
-        .get(0)
+        .apply(_sum_of_reoccurring_values, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__sum_of_reoccurring_values", name))
 }
 
-fn _sum_of_reoccurring_data_points(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _sum_of_reoccurring_data_points(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr.mapv(OrderedFloat);
@@ -1219,23 +1294,22 @@ fn _sum_of_reoccurring_data_points(s: Column) -> Result<Option<Column>, PolarsEr
         }
     }
     let s = Column::new("".into(), &[sum]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn sum_of_reoccurring_data_points(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_sum_of_reoccurring_data_points, o)
-        .get(0)
+        .apply(_sum_of_reoccurring_data_points, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__sum_of_reoccurring_data_points", name))
 }
 
-fn _percentage_of_reoccurring_values_to_all_values(
-    s: Column,
-) -> Result<Option<Column>, PolarsError> {
+fn _percentage_of_reoccurring_values_to_all_values(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr.mapv(OrderedFloat);
@@ -1248,26 +1322,25 @@ fn _percentage_of_reoccurring_values_to_all_values(
     }
     let out = (more_than_once as f64) / counts.keys().len() as f64;
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn percentage_of_reoccurring_values_to_all_values(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_percentage_of_reoccurring_values_to_all_values, o)
-        .get(0)
+        .apply(_percentage_of_reoccurring_values_to_all_values, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!(
             "{}__percentage_of_reoccurring_values_to_all_values",
             name
         ))
 }
 
-fn _percentage_of_reoccurring_values_to_all_datapoints(
-    s: Column,
-) -> Result<Option<Column>, PolarsError> {
+fn _percentage_of_reoccurring_values_to_all_datapoints(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr.mapv(OrderedFloat);
@@ -1280,14 +1353,16 @@ fn _percentage_of_reoccurring_values_to_all_datapoints(
     }
     let out = (more_than_once as f64) / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn percentage_of_reoccurring_values_to_all_datapoints(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(_percentage_of_reoccurring_values_to_all_datapoints, o)
-        .get(0)
+        .apply(
+            _percentage_of_reoccurring_values_to_all_datapoints,
+            |_, _| Ok(Field::new("".into(), DataType::Float64)),
+        )
+        .get(0, true)
         .alias(format!(
             "{}__percentage_of_reoccurring_values_to_all_datapoints",
             name
@@ -1298,18 +1373,21 @@ fn _agg_linear_trend(
     s: Column,
     chunk_size: usize,
     aggregator: ChunkAggregator,
-) -> Result<Option<Column>, PolarsError> {
+) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() || s.len() < chunk_size {
         let s_i = f64::NAN;
         let s_s = f64::NAN;
-        let s = DataFrame::new(vec![
-            Column::new("agg_intercept".into(), &[s_i]),
-            Column::new("agg_slope".into(), &[s_s]),
-        ])?
+        let s = DataFrame::new(
+            1,
+            vec![
+                Column::new("agg_intercept".into(), &[s_i]),
+                Column::new("agg_slope".into(), &[s_s]),
+            ],
+        )?
         .into_struct("agg_linear_trend".into())
         .into_column();
-        return Ok(Some(s));
+        return Ok(s);
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -1322,49 +1400,38 @@ fn _agg_linear_trend(
         ChunkAggregator::Min => _aggregate_on_chunks(arr, chunk_size, |x| *x.min().unwrap()),
         ChunkAggregator::Var => _aggregate_on_chunks(arr, chunk_size, |x| x.var(1.0)),
     };
-    let x = Array::range(0., agg_arr.len() as f64, 1.);
-    let x = x.insert_axis(Axis(1));
-    let dataset = Dataset::new(x, agg_arr);
-    let linreg = LinearRegression::new();
-    let model = linreg.fit(&dataset);
-    match model {
-        Ok(model) => {
-            let s_i = model.intercept();
-            let s_s = model.params()[0];
-            let s = DataFrame::new(vec![
-                Column::new("agg_intercept".into(), &[s_i]),
-                Column::new("agg_slope".into(), &[s_s]),
-            ])?
-            .into_struct("agg_linear_trend".into())
-            .into_column();
-            Ok(Some(s))
-        }
-        Err(_) => {
-            let s_i = f64::NAN;
-            let s_s = f64::NAN;
-            let s = DataFrame::new(vec![
-                Column::new("agg_intercept".into(), &[s_i]),
-                Column::new("agg_slope".into(), &[s_s]),
-            ])?
-            .into_struct("agg_linear_trend".into())
-            .into_column();
-            Ok(Some(s))
-        }
-    }
+    let agg_len = agg_arr.len();
+    let (s_i, s_s) = calculate_sequential_ols(agg_arr, agg_len);
+
+    let s = DataFrame::new(
+        1,
+        vec![
+            Column::new("agg_intercept".into(), &[s_i]),
+            Column::new("agg_slope".into(), &[s_s]),
+        ],
+    )?
+    .into_struct("agg_linear_trend".into())
+    .into_column();
+
+    Ok(s)
 }
 
 fn agg_linear_trend(name: &str, chunk_size: usize, aggregator: impl Into<String>) -> Expr {
-    let o = GetOutput::from_type(DataType::Struct(vec![
-        Field::new("agg_intercept".into(), DataType::Float64),
-        Field::new("agg_slope".into(), DataType::Float64),
-    ]));
     let agg_str = aggregator.into();
     let agg_enum = ChunkAggregator::from_str(&agg_str).unwrap();
     let name = name.to_string();
     col(&name)
         .apply(
             move |s| _agg_linear_trend(s, chunk_size, agg_enum.clone()),
-            o,
+            |_, _| {
+                Ok(Field::new(
+                    "".into(),
+                    DataType::Struct(vec![
+                        Field::new("agg_intercept".into(), DataType::Float64),
+                        Field::new("agg_slope".into(), DataType::Float64),
+                    ]),
+                ))
+            },
         )
         .struct_()
         .rename_fields(
@@ -1380,14 +1447,14 @@ fn agg_linear_trend(name: &str, chunk_size: usize, aggregator: impl Into<String>
             ]
             .to_vec(),
         )
-        .get(0)
+        .get(0, true)
         .alias(format!(
             "{}__agg_linear_trend__chunk_size_{:.1}__agg_{}",
             name, chunk_size, agg_str
         ))
 }
 
-fn _mean_n_absolute_max(s: Column, ns: &[usize]) -> Result<Option<Column>, PolarsError> {
+fn _mean_n_absolute_max(s: Column, ns: &[usize]) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
         return _make_nan_struct_column_int("mean_n_absolute_max", "n", ns);
@@ -1418,10 +1485,10 @@ fn _mean_n_absolute_max(s: Column, ns: &[usize]) -> Result<Option<Column>, Polar
             &[out],
         ));
     }
-    let s = DataFrame::new(ss)?
+    let s = DataFrame::new(1, ss)?
         .into_struct("mean_n_absolute_max".into())
         .into_column();
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn mean_n_absolute_max(name: &str, ns: Vec<usize>) -> Expr {
@@ -1434,16 +1501,23 @@ pub fn mean_n_absolute_max(name: &str, ns: Vec<usize>) -> Expr {
             DataType::Float64,
         ));
     }
-    let o = GetOutput::from_type(DataType::Struct(struct_names));
     col(name)
-        .apply(move |s| _mean_n_absolute_max(s, &ns), o)
+        .apply(
+            move |s| _mean_n_absolute_max(s, &ns),
+            move |_, _| {
+                Ok(Field::new(
+                    "".into(),
+                    DataType::Struct(struct_names.clone()),
+                ))
+            },
+        )
         .struct_()
         .rename_fields(new_field_names)
-        .get(0)
+        .get(0, true)
         .alias(format!("{}__mean_n_absolute_max", name))
 }
 
-fn _autocorrelation(s: Column, lags: &[usize]) -> Result<Option<Column>, PolarsError> {
+fn _autocorrelation(s: Column, lags: &[usize]) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
         return _make_nan_struct_column_int("autocorrelation", "lag", lags);
@@ -1474,10 +1548,10 @@ fn _autocorrelation(s: Column, lags: &[usize]) -> Result<Option<Column>, PolarsE
             &[out],
         ));
     }
-    let s = DataFrame::new(ss)?
+    let s = DataFrame::new(1, ss)?
         .into_struct("autocorrelation".into())
         .into_column();
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn autocorrelation(name: &str, lags: Vec<usize>) -> Expr {
@@ -1490,29 +1564,36 @@ pub fn autocorrelation(name: &str, lags: Vec<usize>) -> Expr {
             DataType::Float64,
         ));
     }
-    let o = GetOutput::from_type(DataType::Struct(struct_names));
     col(name)
-        .apply(move |s| _autocorrelation(s, &lags), o)
+        .apply(
+            move |s| _autocorrelation(s, &lags),
+            move |_, _| {
+                Ok(Field::new(
+                    "".into(),
+                    DataType::Struct(struct_names.clone()),
+                ))
+            },
+        )
         .struct_()
         .rename_fields(new_field_names)
-        .get(0)
+        .get(0, true)
         .alias(format!("{}__autocorrelation", name))
 }
 
-fn _quantile(s: Column, q: f64) -> Result<Option<Column>, PolarsError> {
+fn _quantile(s: Column, q: f64) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let mut arr = arr.mapv(n64);
     let q_res = arr.quantile_axis_mut(Axis(0), n64(q), &Midpoint);
     let q_val = match q_res {
         Ok(m) => m[0],
-        Err(_) => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let s = Column::new("".into(), &[f64::from(q_val)]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn expr_quantile(name: &str, q: f64) -> Expr {
@@ -1521,41 +1602,43 @@ pub fn expr_quantile(name: &str, q: f64) -> Expr {
         .alias(format!("{}__quantile__q_{:.1}", name, q))
 }
 
-fn _number_crossing_m(s: Column, m: f64) -> Result<Option<Column>, PolarsError> {
+fn _number_crossing_m(s: Column, m: f64) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let iarr = arr.into_iter().filter(|x| x != &m).collect::<Vec<_>>();
     let mut count = 0;
     for (x1, x2) in izip!(iarr.iter(), iarr.iter().skip(1)) {
         if x1.is_nan() {
-            return Ok(Some(Column::new("".into(), &[f64::NAN])));
+            return Ok(Column::new("".into(), &[f64::NAN]));
         }
         if (x1 < &m && x2 > &m) || (x1 > &m && x2 < &m) {
             count += 1;
         }
     }
     let s = Column::new("".into(), &[count as f64]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn number_crossing_m(name: &str, m: f64) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(move |s| _number_crossing_m(s, m), o)
-        .get(0)
+        .apply(
+            move |s| _number_crossing_m(s, m),
+            |_, _| Ok(Field::new("".into(), DataType::Float64)),
+        )
+        .get(0, true)
         .alias(format!("{}__number_crossing_m__m_{:.1}", name, m))
 }
 
-fn _range_count(s: Column, lower: f64, upper: f64) -> Result<Option<Column>, PolarsError> {
+fn _range_count(s: Column, lower: f64, upper: f64) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     if upper < lower {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let count = arr
@@ -1563,21 +1646,23 @@ fn _range_count(s: Column, lower: f64, upper: f64) -> Result<Option<Column>, Pol
         .filter(|x| x >= &lower && x <= &upper)
         .count();
     let s = Column::new("".into(), &[count as f64]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn range_count(name: &str, lower: f64, upper: f64) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(move |s| _range_count(s, lower, upper), o)
-        .get(0)
+        .apply(
+            move |s| _range_count(s, lower, upper),
+            |_, _| Ok(Field::new("".into(), DataType::Float64)),
+        )
+        .get(0, true)
         .alias(format!(
             "{}__range_count__min_{:.1}__max_{:.1}",
             name, lower, upper,
         ))
 }
 
-fn _index_mass_quantile(s: Column, qs: &[f64]) -> Result<Option<Column>, PolarsError> {
+fn _index_mass_quantile(s: Column, qs: &[f64]) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
         return _make_nan_struct_column("index_mass_quantile", "q", qs);
@@ -1603,10 +1688,10 @@ fn _index_mass_quantile(s: Column, qs: &[f64]) -> Result<Option<Column>, PolarsE
             &[out],
         ));
     }
-    let s = DataFrame::new(ss)?
+    let s = DataFrame::new(1, ss)?
         .into_struct("index_mass_quantile".into())
         .into_column();
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn index_mass_quantile(name: &str, qs: Vec<f64>) -> Expr {
@@ -1619,23 +1704,30 @@ pub fn index_mass_quantile(name: &str, qs: Vec<f64>) -> Expr {
             DataType::Float64,
         ));
     }
-    let o = GetOutput::from_type(DataType::Struct(struct_names));
     col(name)
-        .apply(move |s| _index_mass_quantile(s, &qs), o)
+        .apply(
+            move |s| _index_mass_quantile(s, &qs),
+            move |_, _| {
+                Ok(Field::new(
+                    "".into(),
+                    DataType::Struct(struct_names.clone()),
+                ))
+            },
+        )
         .struct_()
         .rename_fields(new_field_names)
-        .get(0)
+        .get(0, true)
         .alias(format!("{}__index_mass_quantile", name))
 }
 
-fn _c3(s: Column, lag: usize) -> Result<Option<Column>, PolarsError> {
+fn _c3(s: Column, lag: usize) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let n = s.len();
     if n <= 2 * lag {
-        return Ok(Some(Column::new("".into(), &[0 as f64])));
+        return Ok(Column::new("".into(), &[0 as f64]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -1656,31 +1748,30 @@ fn _c3(s: Column, lag: usize) -> Result<Option<Column>, PolarsError> {
     let mean_opt = prod.mean();
     let out = match mean_opt {
         Some(m) => m,
-        None => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
-    let s = Column::new("".into(), &[out as f64]);
-    Ok(Some(s))
+    let s = Column::new("".into(), &[out]);
+    Ok(s)
 }
 
 pub fn c3(name: &str, lag: usize) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(move |s| _c3(s, lag), o)
-        .get(0)
+        .apply(
+            move |s| _c3(s, lag),
+            |_, _| Ok(Field::new("".into(), DataType::Float64)),
+        )
+        .get(0, true)
         .alias(format!("{}__c3__lag_{:.0}", name, lag))
 }
 
-fn _time_reversal_asymmetry_statistic(
-    s: Column,
-    lag: usize,
-) -> Result<Option<Column>, PolarsError> {
+fn _time_reversal_asymmetry_statistic(s: Column, lag: usize) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let n = s.len();
     if n <= 2 * lag {
-        return Ok(Some(Column::new("".into(), &[0 as f64])));
+        return Ok(Column::new("".into(), &[0 as f64]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -1700,30 +1791,32 @@ fn _time_reversal_asymmetry_statistic(
     let mean_opt = prod.mean();
     let out = match mean_opt {
         Some(m) => m,
-        None => return Ok(Some(Column::new("".into(), &[f64::NAN]))),
+        None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
-    let s = Column::new("".into(), &[out as f64]);
-    Ok(Some(s))
+    let s = Column::new("".into(), &[out]);
+    Ok(s)
 }
 
 pub fn time_reversal_asymmetry_statistic(name: &str, lag: usize) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(move |s| _time_reversal_asymmetry_statistic(s, lag), o)
-        .get(0)
+        .apply(
+            move |s| _time_reversal_asymmetry_statistic(s, lag),
+            |_, _| Ok(Field::new("".into(), DataType::Float64)),
+        )
+        .get(0, true)
         .alias(format!(
             "{}__time_reversal_asymmetry_statistic__lag_{:.0}",
             name, lag
         ))
 }
 
-fn _number_peaks(s: Column, n: usize) -> Result<Option<Column>, PolarsError> {
+fn _number_peaks(s: Column, n: usize) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     if s.len() < n {
-        return Ok(Some(Column::new("".into(), &[0 as f64])));
+        return Ok(Column::new("".into(), &[0 as f64]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let arr = arr
@@ -1752,14 +1845,16 @@ fn _number_peaks(s: Column, n: usize) -> Result<Option<Column>, PolarsError> {
     }
     let count = res.unwrap().into_iter().filter(|x| *x).count();
     let s = Column::new("".into(), &[count as f64]);
-    Ok(Some(s))
+    Ok(s)
 }
 
 pub fn number_peaks(name: &str, n: usize) -> Expr {
-    let o = GetOutput::from_type(DataType::Float64);
     col(name)
-        .apply(move |s| _number_peaks(s, n), o)
-        .get(0)
+        .apply(
+            move |s| _number_peaks(s, n),
+            |_, _| Ok(Field::new("".into(), DataType::Float64)),
+        )
+        .get(0, true)
         .alias(format!("{}__number_peaks__n_{:.0}", name, n))
 }
 
