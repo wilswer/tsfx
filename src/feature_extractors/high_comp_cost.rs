@@ -36,9 +36,9 @@ fn _out(_: &Schema, _: &Field) -> Result<Field, PolarsError> {
     Ok(Field::new("".into(), DataType::Float64))
 }
 
-fn _sample_entropy(s: Column) -> Result<Option<Column>, PolarsError> {
+fn _sample_entropy(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
-        return Ok(Some(Column::new("".into(), &[f64::NAN])));
+        return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s
         .into_frame()
@@ -55,14 +55,15 @@ fn _sample_entropy(s: Column) -> Result<Option<Column>, PolarsError> {
     let templates_m_plus_1 = _into_subchunks(&arr, m + 1);
     let matches_m_plus_1 = _get_matches(templates_m_plus_1, r);
     let out = ((matches_m as f64) / (matches_m_plus_1 as f64)).ln();
-    let s = Column::new("".into(), &[out as f64]);
-    Ok(Some(s))
+    let s = Column::new("".into(), &[out]);
+    Ok(s)
 }
 
 pub fn sample_entropy(name: &str) -> Expr {
-    let o = GetOutput::from_type(DataType::Float32);
     col(name)
-        .apply(_sample_entropy, o)
-        .get(0)
+        .apply(_sample_entropy, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__sample_entropy", name))
 }

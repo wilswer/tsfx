@@ -229,11 +229,10 @@ mod tests {
                 .column("value__standard_deviation")
                 .unwrap()
                 .clone()
-                .into_frame()
+                .into_materialized_series()
                 .iter()
                 .next()
                 .unwrap()
-                .first()
                 .is_nan()
         );
     }
