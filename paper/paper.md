@@ -7,7 +7,7 @@ tags:
   - time series
   - feature extraction
 authors:
-  - name: Wilhelm Söderkvist Vermelin
+  - name: Wilhelm Wermelin
     orcid: 0000-0002-1262-9143
     affiliation: "1, 2" # (Multiple affiliations must be quoted)
 affiliations:
