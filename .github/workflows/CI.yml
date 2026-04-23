@@ -43,7 +43,7 @@ jobs:
           CFLAGS_aarch64_unknown_linux_gnu: "-march=armv8-a"
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --find-interpreter --zig
           sccache: false
           manylinux: auto
       - name: Upload wheels
