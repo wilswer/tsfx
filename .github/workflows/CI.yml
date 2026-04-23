@@ -26,12 +26,6 @@ jobs:
             target: x86
           - runner: ubuntu-22.04
             target: aarch64
-          - runner: ubuntu-22.04
-            target: armv7
-          - runner: ubuntu-22.04
-            target: s390x
-          - runner: ubuntu-22.04
-            target: ppc64le
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -40,10 +34,10 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         env:
-          CFLAGS_aarch64_unknown_linux_gnu: "-march=armv8-a"
+          CFLAGS_aarch64_unknown_linux_gnu: "-D__ARM_ARCH=8"
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter --zig
+          args: --release --out dist --find-interpreter
           sccache: false
           manylinux: auto
       - name: Upload wheels
@@ -63,8 +57,6 @@ jobs:
             target: x86
           - runner: ubuntu-22.04
             target: aarch64
-          - runner: ubuntu-22.04
-            target: armv7
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -72,7 +64,7 @@ jobs:
           python-version: 3.x
       - name: Build wheels
         env:
-          CFLAGS_aarch64_unknown_linux_musl: "-march=armv8-a"
+          CFLAGS_aarch64_unknown_linux_musl: "-D__ARM_ARCH=8"
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
