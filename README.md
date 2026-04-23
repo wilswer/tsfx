@@ -4,20 +4,53 @@ _TSFX -- Time Series Feature eXtraction_
 
 ## About
 
-TSFX is a Python library for extracting features from time series data.
-Inspired by the great [TSFresh](https://tsfresh.com/) library, TSFX aims to
-provide a similar feature set focused on performance on large datasets.
-In order to achieve this, TSFX is built on top of the
-[Polars](https://pola.rs/) DataFrame library, and feature extractors are
-implemented in Rust.
+TSFX is a Python library for extracting features from time series data. Inspired
+by the great [TSFresh](https://tsfresh.com/) library, TSFX aims to provide a
+similar feature set focused on performance on large datasets. In order to
+achieve this, TSFX is built on top of the [Polars](https://pola.rs/) DataFrame
+library, and feature extractors are implemented in Rust.
 
 ## Installation
 
-Install from PyPI:
+For most common platforms and architectures, pre-built wheels are available. You
+can install the package directly from PyPI:
 
 ```bash
 pip install tsfx
 ```
+
+### Installing from Source (Unsupported Targets)
+
+If a pre-built wheel is not available for your specific platform, `pip` will
+automatically attempt to build the package from the source distribution
+(`sdist`).
+
+Because `tsfx` is built with [Maturin](https://maturin.rs/) and its core
+features are implemented in Rust, you will need a Rust compiler to build it from
+source. **Important: Building from source requires an up-to-date nightly Rust
+toolchain.**
+
+To set up your environment for a source build:
+
+1. **Install Rust** (if you haven't already) using [rustup](https://rustup.rs/):
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   ```
+
+2. **Install and switch to the nightly toolchain**:
+   ```bash
+   rustup toolchain install nightly
+   rustup default nightly
+   ```
+   _(Note: You may also want to run `rustup update nightly` to ensure it is
+   fully up to date)._
+
+3. **Install the package**:
+   ```bash
+   pip install tsfx
+   ```
+   `pip` will now use your nightly Rust compiler to build the package for your
+   target.
 
 ## Usage
 
@@ -69,8 +102,8 @@ shape: (3, 314)
 
 ### Extracting over a time window
 
-An additional feature of TSFX is the ability to extract features over a time window.
-Below is an example of extracting features over a 3 year window:
+An additional feature of TSFX is the ability to extract features over a time
+window. Below is an example of extracting features over a 3 year window:
 
 ```python
 import polars as pl
@@ -219,7 +252,8 @@ For more examples, see the [examples](examples) directory.
 
 ## Acknowledgement
 
-The `tsfx` package was developed within the [Vinnova](https://www.vinnova.se) projects
+The `tsfx` package was developed within the [Vinnova](https://www.vinnova.se)
+projects
 [DFusion](https://www.vinnova.se/en/p/dfusion---disturbance-data-fusion/),
 [TolkAI](https://www.vinnova.se/en/p/intepretable-ai-from-start-to-finish/), and
 [SIFT](https://www.vinnova.se/en/p/similarity-search-of-time-series-data-evaluation-of-search-engine-in-industrial-process-datasift-/).
