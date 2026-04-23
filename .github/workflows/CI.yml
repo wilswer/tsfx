@@ -7,9 +7,6 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-      - master
     tags:
       - '*'
   pull_request:
@@ -24,13 +21,13 @@ jobs:
     strategy:
       matrix:
         platform:
-          - runner: ubuntu-22.04
+          - runner: ubuntu-latest
             target: x86_64
-          - runner: ubuntu-22.04
+          - runner: ubuntu-latest
             target: x86
-          - runner: ubuntu-22.04
+          - runner: ubuntu-latest
             target: aarch64
-          - runner: ubuntu-22.04
+          - runner: ubuntu-latest
             target: armv7
     steps:
       - uses: actions/checkout@v4
@@ -82,10 +79,8 @@ jobs:
     strategy:
       matrix:
         platform:
-          - runner: macos-13
-            target: x86_64
-          - runner: macos-14
-            target: aarch64
+          - runner: macos-latest
+          - runner: macos-15-intel
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
