@@ -116,7 +116,7 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 max-complexity = 10
 
 [tool.bumpversion]
-current_version = "0.3.2"
+current_version = "0.3.3"
 commit = true
 tag = true
 tag_name = "v{new_version}"
