@@ -1,12 +1,12 @@
 import math
-import pytest
 
 import polars as pl
+import pytest
 from tsfx import (
+    DynamicGroupBySettings,
     ExtractionSettings,
     FeatureSetting,
     extract_features,
-    DynamicGroupBySettings,
 )
 
 
@@ -45,6 +45,7 @@ def test_only_nan_group_dropped():
     fdf = fdf.sort("id")
     assert fdf.get_column("id").to_list() == ["a", "b", "c"]
 
+
 def test_only_nan_group_dropped_with_date():
     df = pl.DataFrame(
         {
@@ -79,15 +80,31 @@ def test_only_nan_group_dropped_with_date():
         dynamic_settings=dyn_settings,
     )
     fdf = extract_features(df, settings)
-    assert fdf.get_column("id").to_list() == ["a", "a", "a", "b", "b", "b", "c", "c", "c"]
+    assert fdf.get_column("id").to_list() == [
+        "a",
+        "a",
+        "a",
+        "b",
+        "b",
+        "b",
+        "c",
+        "c",
+        "c",
+    ]
     assert fdf["val__mean"].fill_nan(None).to_list()[0] == 1.0
     assert fdf["val__mean"].fill_nan(None).to_list()[1] == 2.0
     assert fdf["val__mean"].fill_nan(None).to_list()[2] == 3.0
     assert fdf["val__mean"].fill_nan(None).to_list()[-1] == None
 
+
 def test_long_constant_df():
     N = 100_000
-    df = pl.DataFrame({"id": ["a"] * (N + 1) + ["b"] * (N + 1), "val": [0.0] * N + [1.0] + [1.0] * N + [2.0]}).lazy()
+    df = pl.DataFrame(
+        {
+            "id": ["a"] * (N + 1) + ["b"] * (N + 1),
+            "val": [0.0] * N + [1.0] + [1.0] * N + [2.0],
+        },
+    ).lazy()
     opts = ExtractionSettings(
         grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
@@ -97,7 +114,6 @@ def test_long_constant_df():
     fdf = fdf.sort("id")
     assert fdf.get_column("id").to_list() == ["a", "b"]
     assert fdf.get_column("val__mean").to_list() == pytest.approx([0.0, 1.0], abs=1e-4)
-
 
 
 def test_nan_df():
@@ -293,7 +309,8 @@ def test_linear_trend_intercept():
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__linear_trend_intercept").to_list() == pytest.approx(
-        [1.0, 1.0, 3.0, -1.0], abs=1e-6,
+        [1.0, 1.0, 3.0, -1.0],
+        abs=1e-6,
     )
 
 
@@ -313,7 +330,8 @@ def test_linear_trend_slope():
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__linear_trend_slope").to_list() == pytest.approx(
-        [0.0, 1.0, -1.0, 0.0], abs=1e-6,
+        [0.0, 1.0, -1.0, 0.0],
+        abs=1e-6,
     )
 
 
@@ -578,6 +596,7 @@ def test_variance():
     assert fdf.get_column("val__variance").to_list()[0] == 0
     assert math.isnan(fdf.get_column("val__variance").to_list()[-1])
 
+
 def test_variance_larger_than_standard_deviation():
     df = pl.DataFrame(
         {
@@ -592,8 +611,14 @@ def test_variance_larger_than_standard_deviation():
     )
     fdf = extract_features(df, opts)
     fdf = fdf.sort("id")
-    assert fdf.get_column("val__variance_larger_than_standard_deviation").to_list()[0] == 1.0
-    assert fdf.get_column("val__variance_larger_than_standard_deviation").to_list()[1] == 0.0
+    assert (
+        fdf.get_column("val__variance_larger_than_standard_deviation").to_list()[0]
+        == 1.0
+    )
+    assert (
+        fdf.get_column("val__variance_larger_than_standard_deviation").to_list()[1]
+        == 0.0
+    )
 
 
 def test_large_standard_deviation():
@@ -615,11 +640,48 @@ def test_large_standard_deviation():
     assert fdf.get_column("val__large_standard_deviation__r_0.50").to_list()[0] == 1.0
     assert fdf.get_column("val__large_standard_deviation__r_0.70").to_list()[0] == 0.0
 
+
 def test_symmetry_looking():
     df = pl.DataFrame(
         {
-            "id": ["a", "a", "a", "a", "b", "b", "b", "b", "b", "c", "c", "c", "c", "c", "c", "d", "d"],
-            "val": [-1.0, -1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -2.0, -2.0, -2.0, -1.0, -1.0, -1.0, -0.9, -0.900001],
+            "id": [
+                "a",
+                "a",
+                "a",
+                "a",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "d",
+                "d",
+            ],
+            "val": [
+                -1.0,
+                -1.0,
+                1.0,
+                1.0,
+                -1.0,
+                -1.0,
+                -1.0,
+                -1.0,
+                1.0,
+                -2.0,
+                -2.0,
+                -2.0,
+                -1.0,
+                -1.0,
+                -1.0,
+                -0.9,
+                -0.900001,
+            ],
         },
     ).lazy()
     opts = ExtractionSettings(
@@ -630,7 +692,13 @@ def test_symmetry_looking():
     fdf = extract_features(df, opts)
     fdf = fdf.sort("id")
     assert fdf.get_column("val__symmetry_looking__r_0.75").to_list()[0] == 1.0
-    assert fdf.get_column("val__symmetry_looking__r_0.05").to_list() == [1.0, 0.0, 1.0, 1.0]
+    assert fdf.get_column("val__symmetry_looking__r_0.05").to_list() == [
+        1.0,
+        0.0,
+        1.0,
+        1.0,
+    ]
+
 
 def test_percentage_of_reoccurring_values_to_all_values():
     df = pl.DataFrame(
@@ -906,7 +974,8 @@ def test_index_mass_quantile():
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__index_mass_quantile__q_0.5").to_list() == pytest.approx(
-        [0.5, 0.2], abs=1e-6,
+        [0.5, 0.2],
+        abs=1e-6,
     )
 
 

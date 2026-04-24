@@ -49,7 +49,7 @@ testpaths = ["python_tests"]
 line-length = 88
 # Assume Python 3.11.
 target-version = "py311"
-extend-include = ["*.ipynb"]
+extend-include = ["*.ipynb", "python_tests/"]
 
 [tool.ruff.lint]
 # Enable Pyflakes `E` and `F` codes by default.

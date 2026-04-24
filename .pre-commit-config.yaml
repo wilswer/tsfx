@@ -23,13 +23,13 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2 # Use the sha / tag you want to point at
+    rev: v1.20.2 # Use the sha / tag you want to point at
     hooks:
       - id: mypy
         files: ^src/
         args: []
   - repo: https://github.com/asottile/setup-cfg-fmt
-    rev: v3.1.0
+    rev: v3.2.0
     hooks:
       - id: setup-cfg-fmt
   - repo: https://github.com/asottile/add-trailing-comma
@@ -37,11 +37,15 @@ repos:
     hooks:
       - id: add-trailing-comma
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.14.0
+    rev: v0.15.11
     hooks:
-      - id: ruff
-        args: ["--fix"]
+      # Run the linter.
+      - id: ruff-check
+        types_or: [ pyi ]
+        args: [ --fix ]
+      # Run the formatter.
       - id: ruff-format
+        types_or: [ pyi ]
   - repo: https://github.com/doublify/pre-commit-rust
     rev: v1.0
     hooks:
