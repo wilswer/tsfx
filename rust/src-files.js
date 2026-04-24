@@ -1,0 +1,2 @@
+createSrcSidebar('[["tsfx",["",[["feature_extractors",[],["extractors.rs","extras.rs","high_comp_cost.rs","minimal.rs","mod.rs"]],["utils",[],["mod.rs","toml_reader.rs"]]],["error.rs","extract.rs","lib.rs"]]]]');
+//{"start":19,"fragment_lengths":[189]}

@@ -1,0 +1,1151 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="TSFX -- Time Series Feature eXtraction">
+      
+      
+      
+      
+      
+        <link rel="next" href="api/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>tsfx Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#tsfx" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="." title="tsfx Documentation" class="md-header__button md-logo" aria-label="tsfx Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            tsfx Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Home
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="." title="tsfx Documentation" class="md-nav__button md-logo" aria-label="tsfx Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    tsfx Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="." class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#about" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        About
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#installing-from-source-unsupported-targets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installing from Source (Unsupported Targets)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Usage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#extracting-over-a-time-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extracting over a time window
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#feature-coverage-compared-to-tsfresh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feature Coverage Compared to TSFresh
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#acknowledgement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Acknowledgement
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="rust/tsfx/index.html" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#about" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        About
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#installing-from-source-unsupported-targets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installing from Source (Unsupported Targets)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Usage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#extracting-over-a-time-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extracting over a time window
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#feature-coverage-compared-to-tsfresh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feature Coverage Compared to TSFresh
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#acknowledgement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Acknowledgement
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="tsfx">TSFX</h1>
+<p><em>TSFX -- Time Series Feature eXtraction</em></p>
+<h2 id="about">About</h2>
+<p>TSFX is a Python library for extracting features from time series data. Inspired
+by the great <a href="https://tsfresh.com/">TSFresh</a> library, TSFX aims to provide a
+similar feature set focused on performance on large datasets. In order to
+achieve this, TSFX is built on top of the <a href="https://pola.rs/">Polars</a> DataFrame
+library, and feature extractors are implemented in Rust.</p>
+<h2 id="installation">Installation</h2>
+<p>For most common platforms and architectures, pre-built wheels are available. You
+can install the package directly from PyPI:</p>
+<pre><code class="language-bash">pip install tsfx
+</code></pre>
+<h3 id="installing-from-source-unsupported-targets">Installing from Source (Unsupported Targets)</h3>
+<p>If a pre-built wheel is not available for your specific platform, <code>pip</code> will
+automatically attempt to build the package from the source distribution
+(<code>sdist</code>).</p>
+<p>Because <code>tsfx</code> is built with <a href="https://maturin.rs/">Maturin</a> and its core
+features are implemented in Rust, you will need a Rust compiler to build it from
+source. <strong>Important: Building from source requires an up-to-date nightly Rust
+toolchain.</strong></p>
+<p>To set up your environment for a source build:</p>
+<ol>
+<li>
+<p><strong>Install Rust</strong> (if you haven't already) using <a href="https://rustup.rs/">rustup</a>:
+   <code>bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh</code></p>
+</li>
+<li>
+<p><strong>Install and switch to the nightly toolchain</strong>:
+   <code>bash
+   rustup toolchain install nightly
+   rustup default nightly</code>
+   <em>(Note: You may also want to run <code>rustup update nightly</code> to ensure it is
+   fully up to date).</em></p>
+</li>
+<li>
+<p><strong>Install the package</strong>:
+   <code>bash
+   pip install tsfx</code>
+   <code>pip</code> will now use your nightly Rust compiler to build the package for your
+   target.</p>
+</li>
+</ol>
+<h2 id="usage">Usage</h2>
+<p>Below is a simple example of extracting features from a time series dataset:</p>
+<pre><code class="language-python">import polars as pl
+from tsfx import (
+    ExtractionSettings,
+    FeatureSetting,
+    extract_features,
+)
+
+df = pl.DataFrame(
+    {
+        &quot;id&quot;: [&quot;a&quot;, &quot;a&quot;, &quot;a&quot;, &quot;b&quot;, &quot;b&quot;, &quot;b&quot;, &quot;c&quot;, &quot;c&quot;, &quot;c&quot;],
+        &quot;val&quot;: [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+        &quot;value&quot;: [4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 4.0, 5.0, 6.0],
+    },
+).lazy()
+settings = ExtractionSettings(
+    grouping_cols=[&quot;id&quot;],
+    feature_setting=FeatureSetting.Efficient,
+    value_cols=[&quot;val&quot;, &quot;value&quot;],
+)
+gdf = extract_features(df, settings)
+gdf = gdf.sort(by=&quot;id&quot;)
+with pl.Config(set_tbl_width_chars=80):
+    print(gdf)
+</code></pre>
+<p>which produces the following output:</p>
+<pre><code class="language-bash">shape: (3, 314)
+┌─────┬────────┬─────────┬─────────┬───┬─────────┬─────────┬─────────┬─────────┐
+│ id  ┆ length ┆ val__su ┆ val__me ┆ … ┆ value__ ┆ value__ ┆ value__ ┆ value__ │
+│ --- ┆ ---    ┆ m_value ┆ an      ┆   ┆ number_ ┆ number_ ┆ number_ ┆ number_ │
+│ str ┆ u32    ┆ s       ┆ ---     ┆   ┆ peaks__ ┆ peaks__ ┆ peaks__ ┆ peaks__ │
+│     ┆        ┆ ---     ┆ f64     ┆   ┆ n_3     ┆ n_5     ┆ n_10    ┆ n_50    │
+│     ┆        ┆ f64     ┆         ┆   ┆ ---     ┆ ---     ┆ ---     ┆ ---     │
+│     ┆        ┆         ┆         ┆   ┆ f64     ┆ f64     ┆ f64     ┆ f64     │
+╞═════╪════════╪═════════╪═════════╪═══╪═════════╪═════════╪═════════╪═════════╡
+│ a   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.0     ┆ 0.0     ┆ 0.0     ┆ 0.0     │
+│ b   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.0     ┆ 0.0     ┆ 0.0     ┆ 0.0     │
+│ c   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.0     ┆ 0.0     ┆ 0.0     ┆ 0.0     │
+└─────┴────────┴─────────┴─────────┴───┴─────────┴─────────┴─────────┴─────────┘
+</code></pre>
+<h3 id="extracting-over-a-time-window">Extracting over a time window</h3>
+<p>An additional feature of TSFX is the ability to extract features over a time
+window. Below is an example of extracting features over a 3 year window:</p>
+<pre><code class="language-python">import polars as pl
+from tsfx import (
+    DynamicGroupBySettings,
+    ExtractionSettings,
+    FeatureSetting,
+    extract_features,
+)
+tdf = pl.DataFrame(
+    {
+        &quot;id&quot;: [&quot;a&quot;, &quot;a&quot;, &quot;a&quot;, &quot;b&quot;, &quot;b&quot;, &quot;b&quot;, &quot;c&quot;, &quot;c&quot;, &quot;c&quot;],
+        &quot;time&quot;: [
+            &quot;2001-01-01&quot;,
+            &quot;2002-01-01&quot;,
+            &quot;2003-01-01&quot;,
+            &quot;2001-01-01&quot;,
+            &quot;2002-01-01&quot;,
+            &quot;2003-01-01&quot;,
+            &quot;2001-01-01&quot;,
+            &quot;2002-01-01&quot;,
+            &quot;2003-01-01&quot;,
+        ],
+        &quot;val&quot;: [1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0],
+        &quot;value&quot;: [4.0, 5.0, 6.0, 6.0, 5.0, 4.0, 4.0, 5.0, 6.0],
+    },
+).lazy()
+
+dyn_settings = DynamicGroupBySettings(
+    time_col=&quot;time&quot;,
+    every=&quot;3y&quot;,
+    period=&quot;3y&quot;,
+    offset=&quot;0y&quot;,
+    datetime_format=&quot;%Y-%m-%d&quot;,
+)
+settings = ExtractionSettings(
+    grouping_cols=[&quot;id&quot;],
+    value_cols=[&quot;val&quot;, &quot;value&quot;],
+    feature_setting=FeatureSetting.Efficient,
+    dynamic_settings=dyn_settings,
+)
+gdf = extract_features(tdf, settings)
+gdf = gdf.sort(by=&quot;id&quot;)
+print(gdf)
+</code></pre>
+<p>which produces the following output:</p>
+<pre><code class="language-bash">shape: (3, 317)
+┌─────┬────────────┬────────┬─────────────┬───┬─────────────┬────────────┬────────────┬────────────┐
+│ id  ┆ time       ┆ length ┆ val__sum_va ┆ … ┆ value__numb ┆ value__num ┆ value__num ┆ value__num │
+│ --- ┆ ---        ┆ ---    ┆ lues        ┆   ┆ er_peaks__n ┆ ber_peaks_ ┆ ber_peaks_ ┆ ber_peaks_ │
+│ str ┆ date       ┆ u32    ┆ ---         ┆   ┆ _3          ┆ _n_5       ┆ _n_10      ┆ _n_50      │
+│     ┆            ┆        ┆ f32         ┆   ┆ ---         ┆ ---        ┆ ---        ┆ ---        │
+│     ┆            ┆        ┆             ┆   ┆ f32         ┆ f32        ┆ f32        ┆ f32        │
+╞═════╪════════════╪════════╪═════════════╪═══╪═════════════╪════════════╪════════════╪════════════╡
+│ a   ┆ 2001-01-01 ┆ 3      ┆ 6.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+│ b   ┆ 2001-01-01 ┆ 3      ┆ 6.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+│ c   ┆ 2001-01-01 ┆ 3      ┆ 6.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+└─────┴────────────┴────────┴─────────────┴───┴─────────────┴────────────┴────────────┴────────────┘
+</code></pre>
+<p>For more examples, see the <a href="examples">examples</a> directory.</p>
+<h2 id="feature-coverage-compared-to-tsfresh">Feature Coverage Compared to TSFresh</h2>
+<table>
+<thead>
+<tr>
+<th>Implemented</th>
+<th>Function</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&#9745;</td>
+<td><code>abs_energy(x)</code></td>
+<td>Returns the absolute energy of the time series which is the sum over the squared values</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>absolute_maximum(x)</code></td>
+<td>Calculates the highest absolute value of the time series x</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>absolute_sum_of_changes(x)</code></td>
+<td>Returns the sum over the absolute value of consecutive changes in the series x</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>agg_autocorrelation(x, param)</code></td>
+<td>Descriptive statistics on the autocorrelation of the time series</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>agg_linear_trend(x, param)</code></td>
+<td>Calculates a linear least-squares regression for values of the time series that were aggregated over chunks versus the sequence from 0 up to the number of chunks minus one</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>approximate_entropy(x, m, r)</code></td>
+<td>Implements a vectorized Approximate entropy algorithm</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>ar_coefficient(x, param)</code></td>
+<td>This feature calculator fits the unconditional maximum likelihood of an autoregressive AR(k) process</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>augmented_dickey_fuller(x, param)</code></td>
+<td>Does the time series have a unit root?</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>autocorrelation(x, lag)</code></td>
+<td>Calculates the autocorrelation of the specified lag, according to the formula [1]</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>benford_correlation(x)</code></td>
+<td>Useful for anomaly detection applications [1][2]. Returns the correlation from first digit distribution when</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>binned_entropy(x, max_bins)</code></td>
+<td>First bins the values of x into max_bins equidistant bins</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>c3(x, lag)</code></td>
+<td>Uses c3 statistics to measure non linearity in the time series</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>change_quantiles(x, ql, qh, isabs, f_agg)</code></td>
+<td>First fixes a corridor given by the quantiles ql and qh of the distribution of x</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>cid_ce(x, normalize)</code></td>
+<td>This function calculator is an estimate for a time series complexity [1] (A more complex time series has more peaks, valleys etc.).</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>count_above(x, t)</code></td>
+<td>Returns the percentage of values in x that are higher than t</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>count_above_mean(x)</code></td>
+<td>Returns the number of values in x that are higher than the mean of x</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>count_below(x, t)</code></td>
+<td>Returns the percentage of values in x that are lower than t</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>count_below_mean(x)</code></td>
+<td>Returns the number of values in x that are lower than the mean of x</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>cwt_coefficients(x, param)</code></td>
+<td>Calculates a Continuous wavelet transform for the Ricker wavelet, also known as the "Mexican hat wavelet" which is defined by</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>energy_ratio_by_chunks(x, param)</code></td>
+<td>Calculates the sum of squares of chunk i out of N chunks expressed as a ratio with the sum of squares over the whole series.</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>fft_aggregated(x, param)</code></td>
+<td>Returns the spectral centroid (mean), variance, skew, and kurtosis of the absolute fourier transform spectrum</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>fft_coefficient(x, param)</code></td>
+<td>Calculates the fourier coefficients of the one-dimensional discrete Fourier Transform for real input by fast fourier transformation algorithm</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>first_location_of_maximum(x)</code></td>
+<td>Returns the first location of the maximum value of x</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>first_location_of_minimum(x)</code></td>
+<td>Returns the first location of the minimal value of x</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>fourier_entropy(x, bins)</code></td>
+<td>Calculate the binned entropy of the power spectral density of the time series (using the welch method)</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>friedrich_coefficients(x, param)</code></td>
+<td>Coefficients of polynomial h(x), which has been fitted to the deterministic dynamics of Langevin model</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>has_duplicate(x)</code></td>
+<td>Checks if any value in x occurs more than once</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>has_duplicate_max(x)</code></td>
+<td>Checks if the maximum value of x is observed more than once</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>has_duplicate_min(x)</code></td>
+<td>Checks if the minimal value of x is observed more than once</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>index_mass_quantile(x, param)</code></td>
+<td>Calculates the relative index i of time series x where q% of the mass of x lies left of i.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>kurtosis(x)</code></td>
+<td>Returns the kurtosis of x (calculated with the adjusted Fisher-Pearson standardized moment coefficient G2).</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>large_standard_deviation(x, r)</code></td>
+<td>Does time series have large standard deviation?</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>last_location_of_maximum(x)</code></td>
+<td>Returns the relative last location of the maximum value of x.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>last_location_of_minimum(x)</code></td>
+<td>Returns the last location of the minimal value of x.</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>lempel_ziv_complexity(x, bins)</code></td>
+<td>Calculate a complexity estimate based on the Lempel-Ziv compression algorithm.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>length(x)</code></td>
+<td>Returns the length of x</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>linear_trend(x, param)</code></td>
+<td>Calculate a linear least-squares regression for the values of the time series versus the sequence from 0 to length of the time series minus one.</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>linear_trend_timewise(x, param)</code></td>
+<td>Calculate a linear least-squares regression for the values of the time series versus the sequence from 0 to length of the time series minus one.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>longest_strike_above_mean(x)</code></td>
+<td>Returns the length of the longest consecutive subsequence in x that is bigger than the mean of x</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>longest_strike_below_mean(x)</code></td>
+<td>Returns the length of the longest consecutive subsequence in x that is smaller than the mean of x</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>matrix_profile(x, param)</code></td>
+<td>Calculates the 1-D Matrix Profile[1] and returns Tukey's Five Number Set plus the mean of that Matrix Profile.</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>max_langevin_fixed_point(x, r, m)</code></td>
+<td>Largest fixed point of dynamics <code>:math:argmax_x {h(x)=0}</code> estimated from polynomial h(x), which has been fitted to the deterministic dynamics of Langevin model</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>maximum(x)</code></td>
+<td>Calculates the highest value of the time series x.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>mean(x)</code></td>
+<td>Returns the mean of x</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>mean_abs_change(x)</code></td>
+<td>Average over first differences.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>mean_change(x)</code></td>
+<td>Average over time series differences.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>mean_n_absolute_max(x, number_of_maxima)</code></td>
+<td>Calculates the arithmetic mean of the n absolute maximum values of the time series.</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>mean_second_derivative_central(x)</code></td>
+<td>Returns the mean value of a central approximation of the second derivative</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>median(x)</code></td>
+<td>Returns the median of x</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>minimum(x)</code></td>
+<td>Calculates the lowest value of the time series x.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>number_crossing_m(x, m)</code></td>
+<td>Calculates the number of crossings of x on m.</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>number_cwt_peaks(x, n)</code></td>
+<td>Number of different peaks in x.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>number_peaks(x, n)</code></td>
+<td>Calculates the number of peaks of at least support n in the time series x.</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>partial_autocorrelation(x, param)</code></td>
+<td>Calculates the value of the partial autocorrelation function at the given lag.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>percentage_of_reoccurring_datapoints_to_all_datapoints(x)</code></td>
+<td>Returns the percentage of non-unique data points.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>percentage_of_reoccurring_values_to_all_values(x)</code></td>
+<td>Returns the percentage of values that are present in the time series more than once.</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>permutation_entropy(x, tau, dimension)</code></td>
+<td>Calculate the permutation entropy.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>quantile(x, q)</code></td>
+<td>Calculates the q quantile of x.</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>query_similarity_count(x, param)</code></td>
+<td>This feature calculator accepts an input query subsequence parameter, compares the query (under z-normalized Euclidean distance)to all subsequences within the time series, and returns a count of the number of times the query was found in the time series (within some predefined maximum distance threshold).</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>range_count(x, min, max)</code></td>
+<td>Count observed values within the interval [min, max].</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>ratio_beyond_r_sigma(x, r)</code></td>
+<td>Ratio of values that are more than r * std(x) (so r times sigma) away from the mean of x.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>ratio_value_number_to_time_series_length(x)</code></td>
+<td>Returns a factor which is 1 if all values in the time series occur only once, and below one if this is not the case.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>root_mean_square(x)</code></td>
+<td>Returns the root mean square (rms) of the time series.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>sample_entropy(x)</code></td>
+<td>Calculate and return sample entropy of x.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>skewness(x)</code></td>
+<td>Returns the sample skewness of x (calculated with the adjusted Fisher-Pearson standardized moment coefficient G1).</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>spkt_welch_density(x, param)</code></td>
+<td>This feature calculator estimates the cross power spectral density of the time series x at different frequencies.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>standard_deviation(x)</code></td>
+<td>Returns the standard deviation of x</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>sum_of_reoccurring_data_points(x)</code></td>
+<td>Returns the sum of all data points, that are present in the time series more than once.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>sum_of_reoccurring_values(x)</code></td>
+<td>Returns the sum of all values, that are present in the time series more than once.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>sum_values(x)</code></td>
+<td>Calculates the sum over the time series values</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>symmetry_looking(x, param)</code></td>
+<td>Boolean variable denoting if the distribution of x looks symmetric.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>time_reversal_asymmetry_statistic(x, lag)</code></td>
+<td>Returns the time reversal asymmetry statistic.</td>
+</tr>
+<tr>
+<td>&#9744;</td>
+<td><code>value_count(x, value)</code></td>
+<td>Count occurrences of value in time series x.</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>variance(x)</code></td>
+<td>Returns the variance of x</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>variance_larger_than_standard_deviation(x)</code></td>
+<td>Is variance higher than the standard deviation?</td>
+</tr>
+<tr>
+<td>&#9745;</td>
+<td><code>variation_coefficient(x)</code></td>
+<td>Returns the variation coefficient (standard error / mean, give relative value of variation around mean) of x.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="acknowledgement">Acknowledgement</h2>
+<p>The <code>tsfx</code> package was developed within the <a href="https://www.vinnova.se">Vinnova</a>
+projects
+<a href="https://www.vinnova.se/en/p/dfusion---disturbance-data-fusion/">DFusion</a>,
+<a href="https://www.vinnova.se/en/p/intepretable-ai-from-start-to-finish/">TolkAI</a>, and
+<a href="https://www.vinnova.se/en/p/similarity-search-of-time-series-data-evaluation-of-search-engine-in-industrial-process-datasift-/">SIFT</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": [], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

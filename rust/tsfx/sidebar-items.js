@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PyFeatureSetting"],"fn":["__pyfunction_extract_features","extract_features","tsfx"],"mod":["error","extract","feature_extractors","utils"],"struct":["PyDynamicGroupBySettings","PyExtractionSettings"]};

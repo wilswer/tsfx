@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["extractors","extras","high_comp_cost","minimal"]};
