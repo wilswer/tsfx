@@ -1,0 +1,46 @@
+name: Deploy Documentation
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install dependencies
+        run: |
+          pip install maturin mkdocs-material mkdocstrings-python
+          maturin develop
+
+      - name: Build MkDocs (Python Docs)
+        run: mkdocs build
+
+      - name: Build Cargo Docs (Rust Docs)
+        run: cargo doc --no-deps --document-private-items
+
+      - name: Merge Rust docs into MkDocs
+        run: |
+          mkdir -p site/rust
+          cp -r target/doc/* site/rust/
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site

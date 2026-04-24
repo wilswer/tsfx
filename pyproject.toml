@@ -16,7 +16,7 @@ dynamic = ["version"]
 dependencies = ["polars==1.40.0", "pyarrow"]
 
 [project.optional-dependencies]
-dev = ["maturin", "ruff", "mypy", "pre-commit", "pytest", "bump-my-version"]
+dev = ["maturin", "ruff", "mypy", "pre-commit", "pytest", "bump-my-version", "mkdocs-material", "mkdocstrings[python]"]
 bench = ["tsfresh", "pandas"]
 examples = [
   "plotly",

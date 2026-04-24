@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import Enum, auto
 
+import polars as pl
+
 """Type stubs for the tsfx public configuration types."""
 
 class FeatureSetting(Enum):
@@ -39,7 +41,7 @@ class DynamicGroupBySettings:
     every: str
     period: str
     offset: str
-    datetime_format: str
+    datetime_format: str | None
 
     def __init__(
         self,
@@ -47,7 +49,7 @@ class DynamicGroupBySettings:
         every: str,
         period: str,
         offset: str,
-        datetime_format: str,
+        datetime_format: str | None = None,
     ) -> None: ...
 
 class ExtractionSettings:
@@ -82,3 +84,28 @@ class ExtractionSettings:
         config_path: str | None = None,
         dynamic_settings: DynamicGroupBySettings | None = None,
     ) -> None: ...
+
+def extract_features(
+    lf: pl.LazyFrame,
+    settings: ExtractionSettings,
+    streaming: bool = False,
+) -> pl.DataFrame:
+    """Extract time-series features from a Polars LazyFrame.
+
+    Parameters
+    ----------
+    lf:
+        The input data to extract features from.
+    settings:
+        The configuration controlling grouping and feature complexity.
+    streaming:
+        If True, executes the query using Polars' streaming engine
+        for out-of-core processing.
+
+    Returns
+    -------
+    polars.DataFrame
+        A new DataFrame containing the grouped IDs and their extracted features.
+
+    """
+    ...
