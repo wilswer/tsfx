@@ -25,6 +25,16 @@ jobs:
 
       - name: Install dependencies
         run: |
+          # 1. Create a virtual environment named '.venv'
+          python -m venv .venv
+
+          # 2. Add the venv to the GitHub Action's PATH so future steps can use it
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
+          # 3. Activate the venv for this specific step
+          source .venv/bin/activate
+
+          # 4. Install tools and compile the package
           pip install maturin mkdocs-material mkdocstrings-python
           maturin develop
 
