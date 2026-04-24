@@ -1,5 +1,9 @@
 # TSFX
 
+[![CI](https://github.com/wilswer/tsfx/actions/workflows/CI.yml/badge.svg)](https://github.com/wilswer/tsfx/actions/workflows/CI.yml)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://wilswer.github.io/tsfx/)
+[![Docs Build](https://github.com/wilswer/tsfx/actions/workflows/docs.yml/badge.svg)](https://github.com/wilswer/tsfx/actions/workflows/docs.yml)
+
 _TSFX -- Time Series Feature eXtraction_
 
 ## About

@@ -16,7 +16,7 @@ dynamic = ["version"]
 dependencies = ["polars==1.40.0", "pyarrow"]
 
 [project.optional-dependencies]
-dev = ["maturin", "ruff", "mypy", "pre-commit", "pytest", "bump-my-version"]
+dev = ["maturin", "ruff", "mypy", "pre-commit", "pytest", "bump-my-version", "mkdocs-material", "mkdocstrings[python]"]
 bench = ["tsfresh", "pandas"]
 examples = [
   "plotly",
@@ -49,7 +49,7 @@ testpaths = ["python_tests"]
 line-length = 88
 # Assume Python 3.11.
 target-version = "py311"
-extend-include = ["*.ipynb"]
+extend-include = ["*.ipynb", "python_tests/"]
 
 [tool.ruff.lint]
 # Enable Pyflakes `E` and `F` codes by default.
@@ -116,7 +116,7 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 max-complexity = 10
 
 [tool.bumpversion]
-current_version = "0.3.2"
+current_version = "0.3.3"
 commit = true
 tag = true
 tag_name = "v{new_version}"
