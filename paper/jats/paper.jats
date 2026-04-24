@@ -77,11 +77,82 @@ a Creative Commons Attribution 4.0 International License (CC BY
   <p>TSFX is a Python
   (<xref alt="Van Rossum &amp; Drake, 2009" rid="ref-python" ref-type="bibr">Van
   Rossum &amp; Drake, 2009</xref>) library for extracting features from
-  time series data. It is inspired by the tsfresh
+  time series data. Time series feature extraction means deriving
+  meaningful measures from a time series that are typically then used
+  for downstream tasks such as visualization, classification, regression
+  or similarity search. Mathematically, it is an operation that
+  decouples the time series from the time index. Given a univariate time
+  series of length <inline-formula><alternatives>
+  <tex-math><![CDATA[T]]></tex-math>
+  <mml:math display="inline" xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>T</mml:mi></mml:math></alternatives></inline-formula>,
+  <inline-formula><alternatives>
+  <tex-math><![CDATA[X_t]]></tex-math>
+  <mml:math display="inline" xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:msub><mml:mi>X</mml:mi><mml:mi>t</mml:mi></mml:msub></mml:math></alternatives></inline-formula>,
+  where <inline-formula><alternatives>
+  <tex-math><![CDATA[t \in \{1,\,2,\,\dots,\, T-1, T\}]]></tex-math>
+  <mml:math display="inline" xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mrow><mml:mi>t</mml:mi><mml:mo>∈</mml:mo><mml:mo stretchy="false" form="prefix">{</mml:mo><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:mspace width="0.167em"></mml:mspace><mml:mn>2</mml:mn><mml:mo>,</mml:mo><mml:mspace width="0.167em"></mml:mspace><mml:mi>…</mml:mi><mml:mo>,</mml:mo><mml:mspace width="0.167em"></mml:mspace><mml:mi>T</mml:mi><mml:mo>−</mml:mo><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:mi>T</mml:mi><mml:mo stretchy="false" form="postfix">}</mml:mo></mml:mrow></mml:math></alternatives></inline-formula>
+  a feature extractor <inline-formula><alternatives>
+  <tex-math><![CDATA[f]]></tex-math>
+  <mml:math display="inline" xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>f</mml:mi></mml:math></alternatives></inline-formula>
+  is a mapping with the following characteristic:</p>
+  <p><disp-formula><alternatives>
+  <tex-math><![CDATA[f: X_t \mapsto \mathbb{R}]]></tex-math>
+  <mml:math display="block" xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mrow><mml:mi>f</mml:mi><mml:mo>:</mml:mo><mml:msub><mml:mi>X</mml:mi><mml:mi>t</mml:mi></mml:msub><mml:mo>↦</mml:mo><mml:mi>ℝ</mml:mi></mml:mrow></mml:math></alternatives></disp-formula></p>
+  <p>where <inline-formula><alternatives>
+  <tex-math><![CDATA[\mathbb{R}]]></tex-math>
+  <mml:math display="inline" xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>ℝ</mml:mi></mml:math></alternatives></inline-formula>
+  denotes the real numbers. An example of a time series feature is the
+  mean (in which case the feature extractor is the mathematical
+  operation of calculating the mean):</p>
+  <p><disp-formula><alternatives>
+  <tex-math><![CDATA[ f_\mathrm{mean}(X_t) = \bar{X} = \frac{1}{T}\sum_{t=0}^T X_t. ]]></tex-math>
+  <mml:math display="block" xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mrow><mml:msub><mml:mi>f</mml:mi><mml:mrow><mml:mi mathvariant="normal">m</mml:mi><mml:mi mathvariant="normal">e</mml:mi><mml:mi mathvariant="normal">a</mml:mi><mml:mi mathvariant="normal">n</mml:mi></mml:mrow></mml:msub><mml:mrow><mml:mo stretchy="true" form="prefix">(</mml:mo><mml:msub><mml:mi>X</mml:mi><mml:mi>t</mml:mi></mml:msub><mml:mo stretchy="true" form="postfix">)</mml:mo></mml:mrow><mml:mo>=</mml:mo><mml:mover><mml:mi>X</mml:mi><mml:mo accent="true">‾</mml:mo></mml:mover><mml:mo>=</mml:mo><mml:mfrac><mml:mn>1</mml:mn><mml:mi>T</mml:mi></mml:mfrac><mml:munderover><mml:mo>∑</mml:mo><mml:mrow><mml:mi>t</mml:mi><mml:mo>=</mml:mo><mml:mn>0</mml:mn></mml:mrow><mml:mi>T</mml:mi></mml:munderover><mml:msub><mml:mi>X</mml:mi><mml:mi>t</mml:mi></mml:msub><mml:mi>.</mml:mi></mml:mrow></mml:math></alternatives></disp-formula></p>
+  <p>TSFX is a software library for calculating a multitude of such time
+  series features with a focus on runtime performance.</p>
+</sec>
+<sec id="statement-of-need">
+  <title>Statement of need</title>
+  <p>Time series is a ubiquitous data modality, present in many domains
+  such as finance, industry, meteorology, and medicine, to mention a
+  few. As hardware to collect and store time series data is becoming
+  increasingly affordable, the amount of available time series data is
+  increasing in many domains.</p>
+  <p>A common preprocessing step when dealing with time series is
+  feature extraction. This involves calculating representative features
+  such as mean, variance, skewness, etc. from the time series to be used
+  in downstream tasks such as classification, regression or clustering.
+  For large time series datasets, performance is important for enabling
+  timely data preprocessing. TSFX is made for this purpose: extracting
+  features from large time series datasets.</p>
+  <p>Additionally, other more mature alternatives are based on Pandas
+  (<xref alt="McKinney, 2010" rid="ref-pandas" ref-type="bibr">McKinney,
+  2010</xref>) DataFrames whereas TSFX is based on Polars
+  (<xref alt="Vink et al., 2023" rid="ref-polars" ref-type="bibr">Vink
+  et al., 2023</xref>) DataFrames. TSFX makes time series feature
+  extraction readily available to developers/researchers using Polars in
+  their projects.</p>
+</sec>
+<sec id="state-of-the-field">
+  <title>State of the field</title>
+  <p>TSFX is inspired by the tsfresh library
   (<xref alt="Christ et al., 2018" rid="ref-tsfresh" ref-type="bibr">Christ
-  et al., 2018</xref>) Python package with a special focus on
-  performance on large time series datasets. To this end, it utilizes
-  Polars
+  et al., 2018</xref>) and is to the author’s knowledge the leading time
+  series feature extraction library for Python (at least measured by
+  GitHub stars). Another popular time series feature extraction library
+  is tsfel
+  (<xref alt="Barandas et al., 2020" rid="ref-tsfel" ref-type="bibr">Barandas
+  et al., 2020</xref>) which offers similar functionality to the
+  tsfresh.</p>
+  <p>As mentioned above, these libraries are based on Pandas DataFrames
+  and while it is relatively easy to convert Pandas DataFrames to and
+  from Polars equivalents, TSFX has access to Polars lazy execution,
+  which can be a significant performance boost, being written
+  specifically for Polars DataFrames (or LazyFrames).</p>
+</sec>
+<sec id="software-design">
+  <title>Software design</title>
+  <p>TSFX puts an emphasis on performance on large time series datasets.
+  To this end, it utilizes Polars
   (<xref alt="Vink et al., 2023" rid="ref-polars" ref-type="bibr">Vink
   et al., 2023</xref>) which is a fast DataFrame library written in Rust
   (<xref alt="The Rust Programming Language, 2015" rid="ref-rustlang" ref-type="bibr"><italic>The
@@ -89,8 +160,8 @@ a Creative Commons Attribution 4.0 International License (CC BY
   facilitated through PyO3
   (<xref alt="Project &amp; Contributors, 2023" rid="ref-pyo3" ref-type="bibr">Project
   &amp; Contributors, 2023</xref>). The feature extraction functions are
-  implemented in Rust for even faster execution. To benchmark, the “1
-  billion row challenge”
+  implemented in Rust for fast execution. To benchmark, the “1 billion
+  row challenge”
   (<xref alt="Morling, 2024" rid="ref-1brc" ref-type="bibr">Morling,
   2024</xref>) was used. In this benchmark, TSFX took approx. 250
   seconds (using 64 CPU cores) to extract features vs tsfresh which took
@@ -149,27 +220,6 @@ with pl.Config(set_tbl_width_chars=80):
   <monospace>DynamicGroupBySettings</monospace> into the feature
   extraction settings, like so:
   <monospace>ExtractionSettings(..., dynamic_settings=DynamicGroupBySettings(...))</monospace>.</p>
-</sec>
-<sec id="statement-of-need">
-  <title>Statement of need</title>
-  <p>Time series is a ubiquitous data modality, present in many domains
-  such as finance, industry, meteorology, and medicine, to mention a
-  few. As hardware to collect and store time series data is becoming
-  increasingly affordable, the amount of available time series data is
-  increasing in many domains.</p>
-  <p>A common preprocessing step when dealing with time series is
-  feature extraction. This involves calculating representative features
-  such as mean, variance, skewness, etc. from the time series to be used
-  in downstream tasks such as classification, regression or clustering.
-  For large time series datasets, performance is important for enabling
-  timely data preprocessing. TSFX is made for this purpose: extracting
-  features from large time series datasets.</p>
-  <p>Additionally, the more mature alternative tsfresh is based on
-  Pandas
-  (<xref alt="McKinney, 2010" rid="ref-pandas" ref-type="bibr">McKinney,
-  2010</xref>) DataFrames whereas TSFX is based on Polars DataFrames.
-  TSFX makes time series feature extraction readily available to
-  developers/researchers using Polars in their projects.</p>
 </sec>
 <sec id="ai-usage-disclosure">
   <title>AI usage disclosure</title>
@@ -325,6 +375,28 @@ with pl.Config(set_tbl_width_chars=80):
       <year iso-8601-date="2010">2010</year>
       <fpage>51 </fpage>
       <lpage> 56</lpage>
+    </element-citation>
+  </ref>
+  <ref id="ref-tsfel">
+    <element-citation publication-type="article-journal">
+      <person-group person-group-type="author">
+        <name><surname>Barandas</surname><given-names>Marı́lia</given-names></name>
+        <name><surname>Folgado</surname><given-names>Duarte</given-names></name>
+        <name><surname>Fernandes</surname><given-names>Letı́ cia</given-names></name>
+        <name><surname>Santos</surname><given-names>Sara</given-names></name>
+        <name><surname>Abreu</surname><given-names>Mariana</given-names></name>
+        <name><surname>Bota</surname><given-names>Patrı́cia</given-names></name>
+        <name><surname>Liu</surname><given-names>Hui</given-names></name>
+        <name><surname>Schultz</surname><given-names>Tanja</given-names></name>
+        <name><surname>Gamboa</surname><given-names>Hugo</given-names></name>
+      </person-group>
+      <article-title>TSFEL: Time series feature extraction library</article-title>
+      <source>SoftwareX</source>
+      <publisher-name>Elsevier</publisher-name>
+      <year iso-8601-date="2020">2020</year>
+      <volume>11</volume>
+      <fpage>100456</fpage>
+      <lpage></lpage>
     </element-citation>
   </ref>
 </ref-list>

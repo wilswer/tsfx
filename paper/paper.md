@@ -22,16 +22,67 @@ bibliography: paper.bib
 # Summary
 
 TSFX is a Python [@python] library for extracting features from time series
-data. It is inspired by the tsfresh [@tsfresh] Python package with a special
-focus on performance on large time series datasets. To this end, it utilizes
-Polars [@polars] which is a fast DataFrame library written in Rust [@rustlang]
-with Python bindings facilitated through PyO3 [@pyo3]. The feature extraction
-functions are implemented in Rust for even faster execution. To benchmark, the
-"1 billion row challenge" [@1brc] was used. In this benchmark, TSFX took approx.
-250 seconds (using 64 CPU cores) to extract features vs tsfresh which took
-approx. 1500 seconds (using 80 CPU cores). Running repeated benchmarks, it has
-been observed that compared to tsfresh, TSFX offers about 5 to 10 times faster
-feature extraction, using the same set of time series features.
+data. Time series feature extraction means deriving meaningful measures from a
+time series that are typically then used for downstream tasks such as
+visualization, classification, regression or similarity search. Mathematically,
+it is an operation that decouples the time series from the time index. Given a
+univariate time series of length $T$, $X_t$, where
+$t \in \{1,\,2,\,\dots,\, T-1, T\}$ a feature extractor $f$ is a mapping with
+the following characteristic:
+
+$$f: X_t \mapsto \mathbb{R}$$
+
+where $\mathbb{R}$ denotes the real numbers. An example of a time series feature
+is the mean (in which case the feature extractor is the mathematical operation
+of calculating the mean):
+
+$$ f_\mathrm{mean}(X_t) = \bar{X} = \frac{1}{T}\sum_{t=0}^T X_t. $$
+
+TSFX is a software library for calculating a multitude of such time series
+features with a focus on runtime performance.
+
+# Statement of need
+
+Time series is a ubiquitous data modality, present in many domains such as
+finance, industry, meteorology, and medicine, to mention a few. As hardware to
+collect and store time series data is becoming increasingly affordable, the
+amount of available time series data is increasing in many domains.
+
+A common preprocessing step when dealing with time series is feature extraction.
+This involves calculating representative features such as mean, variance,
+skewness, etc. from the time series to be used in downstream tasks such as
+classification, regression or clustering. For large time series datasets,
+performance is important for enabling timely data preprocessing. TSFX is made
+for this purpose: extracting features from large time series datasets.
+
+Additionally, other more mature alternatives are based on Pandas [@pandas]
+DataFrames whereas TSFX is based on Polars [@polars] DataFrames. TSFX makes time
+series feature extraction readily available to developers/researchers using
+Polars in their projects.
+
+# State of the field
+
+TSFX is inspired by the tsfresh library [@tsfresh] and is to the author's
+knowledge the leading time series feature extraction library for Python (at
+least measured by GitHub stars). Another popular time series feature extraction
+library is tsfel [@tsfel] which offers similar functionality to the tsfresh.
+
+As mentioned above, these libraries are based on Pandas DataFrames and while it
+is relatively easy to convert Pandas DataFrames to and from Polars equivalents,
+TSFX has access to Polars lazy execution, which can be a significant performance
+boost, being written specifically for Polars DataFrames (or LazyFrames).
+
+# Software design
+
+TSFX puts an emphasis on performance on large time series datasets. To this end,
+it utilizes Polars [@polars] which is a fast DataFrame library written in Rust
+[@rustlang] with Python bindings facilitated through PyO3 [@pyo3]. The feature
+extraction functions are implemented in Rust for fast execution. To benchmark,
+the "1 billion row challenge" [@1brc] was used. In this benchmark, TSFX took
+approx. 250 seconds (using 64 CPU cores) to extract features vs tsfresh which
+took approx. 1500 seconds (using 80 CPU cores). Running repeated benchmarks, it
+has been observed that compared to tsfresh, TSFX offers about 5 to 10 times
+faster feature extraction, using the same set of time series features.
 
 TSFX can be installed using `pip`:
 
@@ -92,25 +143,6 @@ If the DataFrame has a time column, it is also possible to extract over a time
 window by passing `DynamicGroupBySettings` into the feature extraction settings,
 like so:
 `ExtractionSettings(..., dynamic_settings=DynamicGroupBySettings(...))`.
-
-# Statement of need
-
-Time series is a ubiquitous data modality, present in many domains such as
-finance, industry, meteorology, and medicine, to mention a few. As hardware to
-collect and store time series data is becoming increasingly affordable, the
-amount of available time series data is increasing in many domains.
-
-A common preprocessing step when dealing with time series is feature extraction.
-This involves calculating representative features such as mean, variance,
-skewness, etc. from the time series to be used in downstream tasks such as
-classification, regression or clustering. For large time series datasets,
-performance is important for enabling timely data preprocessing. TSFX is made
-for this purpose: extracting features from large time series datasets.
-
-Additionally, the more mature alternative tsfresh is based on Pandas [@pandas]
-DataFrames whereas TSFX is based on Polars DataFrames. TSFX makes time series
-feature extraction readily available to developers/researchers using Polars in
-their projects.
 
 # AI usage disclosure
 
