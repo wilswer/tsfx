@@ -144,6 +144,15 @@ window by passing `DynamicGroupBySettings` into the feature extraction settings,
 like so:
 `ExtractionSettings(..., dynamic_settings=DynamicGroupBySettings(...))`.
 
+# Research impact statement
+
+TSFX has been developed and used in several industrial research projects. In
+particular, the research projects
+[SIFT](https://www.vinnova.se/en/p/similarity-search-of-time-series-data-evaluation-of-search-engine-in-industrial-process-datasift-/)
+and [TolkAI](https://www.vinnova.se/en/p/intepretable-ai-from-start-to-finish/)
+TSFX is used to encode time series events into vector representations for event
+discovery and similarity search.
+
 # AI usage disclosure
 
 Generative AI tools were used in the development of this software.
