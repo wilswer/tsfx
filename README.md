@@ -173,6 +173,12 @@ shape: (3, 317)
 
 For more examples, see the [examples](examples) directory.
 
+## Contributing
+
+We welcome any kind of contribution to TSFX (bug reports, documentation
+enhancements, pull requests, etc.). More information can be found in the
+[`CONTRIBUTING.md` instruction file](./CONTRIBUTING.md).
+
 ## Feature Coverage Compared to TSFresh
 
 | Implemented | Function                                                    | Description                                                                                                                                                                                                                                                                                                        |
