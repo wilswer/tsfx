@@ -179,3 +179,7 @@ tolkai_stuff
 pyrightconfig.json
 .zed/
 test_data/measurements.txt
+
+# Local tooling state
+.vibe-wise/
+.claude/settings.local.json
