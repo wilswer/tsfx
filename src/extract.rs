@@ -215,7 +215,8 @@ mod tests {
                 .unwrap(),
             df!["value__median" => [1.0, 2.0, 3.0]].unwrap()
         );
-        assert!(
+        // tsfresh: the (population) standard deviation of a single value is 0
+        assert_eq!(
             gdf.clone()
                 .sort(
                     ["id"],
@@ -223,17 +224,10 @@ mod tests {
                         ..Default::default()
                     }
                 )
-                .select([col("value__standard_deviation").cast(DataType::Float32)])
+                .select([col("value__standard_deviation")])
                 .collect()
-                .unwrap()
-                .column("value__standard_deviation")
-                .unwrap()
-                .clone()
-                .into_materialized_series()
-                .iter()
-                .next()
-                .unwrap()
-                .is_nan()
+                .unwrap(),
+            df!["value__standard_deviation" => [0.0, 0.0, 0.0]].unwrap()
         );
     }
 }

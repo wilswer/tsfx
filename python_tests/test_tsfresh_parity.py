@@ -32,7 +32,6 @@ def _bug(*case: object, reason: str):
 
 
 _MOMENTS = "biased estimators / NaN on constant series; tsfresh uses pandas"
-_DDOF = "variance uses ddof=1; tsfresh uses ddof=0"
 
 
 def _features(values: list[float]) -> dict:
@@ -65,8 +64,8 @@ def _assert_feature(values: list[float], column: str, expected: float) -> None:
 @pytest.mark.parametrize(
     ("values", "expected"),
     [
-        _bug([1, 1, -1, -1], 1, reason=_DDOF),
-        _bug([1, 2, -2, -1], 1.58113883008, reason=_DDOF),
+        ([1, 1, -1, -1], 1),
+        ([1, 2, -2, -1], 1.58113883008),
     ],
 )
 def test_standard_deviation(values, expected):
@@ -76,8 +75,8 @@ def test_standard_deviation(values, expected):
 @pytest.mark.parametrize(
     ("values", "expected"),
     [
-        _bug([1, 1, -1, -1], 1, reason=_DDOF),
-        _bug([1, 2, -2, -1], 2.5, reason=_DDOF),
+        ([1, 1, -1, -1], 1),
+        ([1, 2, -2, -1], 2.5),
     ],
 )
 def test_variance(values, expected):
@@ -88,8 +87,8 @@ def test_variance(values, expected):
     ("values", "expected"),
     [
         ([1, 1, -1, -1], math.nan),
-        _bug([1, 2, -3, -1], -7.681145747868608, reason=_DDOF),
-        _bug([1, 2, 4, -1], 1.2018504251546631, reason=_DDOF),
+        ([1, 2, -3, -1], -7.681145747868608),
+        ([1, 2, 4, -1], 1.2018504251546631),
     ],
 )
 def test_variation_coefficient(values, expected):
@@ -100,7 +99,7 @@ def test_variation_coefficient(values, expected):
 @pytest.mark.parametrize(
     ("values", "expected"),
     [
-        _bug([-1, -1, 1, 1, 1], 0, reason=_DDOF),
+        ([-1, -1, 1, 1, 1], 0),
         ([-1, -1, 1, 1, 2], 1),
     ],
 )
@@ -115,7 +114,7 @@ def test_variance_larger_than_standard_deviation(values, expected):
         ([-1, -1, 1, 1], "0.00", 1),
         ([-1, -1, 1, 1], "0.25", 1),
         ([-1, -1, 1, 1], "0.30", 1),
-        _bug([-1, -1, 1, 1], "0.50", 0, reason=_DDOF),
+        ([-1, -1, 1, 1], "0.50", 0),
     ],
 )
 def test_large_standard_deviation(values, r, expected):
@@ -410,7 +409,7 @@ def test_agg_linear_trend_var_generated(values, attr, expected):
 # ratio_beyond_r_sigma(np.array([0, 0, 0, 1.0]), r=1.5)
 @pytest.mark.parametrize(
     ("values", "r", "expected"),
-    [_bug([0, 0, 0, 1], "1.50", 0.25, reason=_DDOF)],
+    [([0, 0, 0, 1], "1.50", 0.25)],
 )
 def test_ratio_beyond_r_sigma_generated(values, r, expected):
     _assert_feature(values, f"val__ratio_beyond_r_sigma__r_{r}", expected)
@@ -420,10 +419,9 @@ def test_ratio_beyond_r_sigma_generated(values, r, expected):
 @pytest.mark.parametrize(
     ("values", "expected"),
     [
-        _bug(
+        (
             [0.5, 0.7, 0.5, 1.1, -1.0, 1.0, -1.2, 0.2, -1.6, 0.3, -1.7, 0.2],
             0.6931471805599453,
-            reason=_DDOF,
         ),
     ],
 )

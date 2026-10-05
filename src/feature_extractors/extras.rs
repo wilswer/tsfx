@@ -503,11 +503,24 @@ pub fn linear_trend(name: &str) -> Expr {
         .alias(format!("{}__linear_trend", name))
 }
 
+fn _variance_larger_than_standard_deviation(s: Column) -> Result<Column, PolarsError> {
+    let s = s.drop_nulls();
+    if s.is_empty() {
+        return Ok(Column::new("".into(), &[f64::NAN]));
+    }
+    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let var = population_var(&arr.column(0));
+    let out = if var > var.sqrt() { 1.0 } else { 0.0 };
+    let s = Column::new("".into(), &[out]);
+    Ok(s)
+}
+
 pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
-    let std = col(name).std(1);
-    let var = col(name).var(1);
-    (var.gt(std))
-        .cast(DataType::Float64)
+    col(name)
+        .apply(_variance_larger_than_standard_deviation, |_, _| {
+            Ok(Field::new("".into(), DataType::Float64))
+        })
+        .get(0, true)
         .alias(format!("{}__variance_larger_than_standard_deviation", name))
 }
 
@@ -522,7 +535,7 @@ fn _ratio_beyond_r_sigma(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
         Some(m) => m,
         None => return _make_nan_struct_column("ratio_beyond_r_sigma", "r", rs),
     };
-    let std = arr.std(1.0);
+    let std = population_std(&arr.column(0));
     let mut ss: Vec<Column> = Vec::with_capacity(rs.len());
     for r in rs {
         let count = arr
@@ -575,7 +588,7 @@ fn _large_standard_deviation(s: Column, rs: &[f64]) -> Result<Column, PolarsErro
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
     let min = arr.min().unwrap_or(&0.0);
     let max = arr.max().unwrap_or(&0.0);
-    let std = arr.std(1.0);
+    let std = population_std(&arr.column(0));
     let mut ss: Vec<Column> = Vec::with_capacity(rs.len());
     for r in rs {
         let out = std > r * (max - min);
@@ -1152,7 +1165,7 @@ fn _variation_coefficient(s: Column) -> Result<Column, PolarsError> {
         Some(m) => m,
         None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
-    let std = arr.std(1.0);
+    let std = population_std(&arr.column(0));
     let out = if mean == 0.0 { f64::NAN } else { std / mean };
     let s = Column::new("".into(), &[out]);
     Ok(s)
@@ -1383,6 +1396,7 @@ fn _agg_linear_trend(
         ChunkAggregator::Mean => _aggregate_on_chunks(arr, chunk_size, |x| x.mean().unwrap()),
         ChunkAggregator::Max => _aggregate_on_chunks(arr, chunk_size, |x| *x.max().unwrap()),
         ChunkAggregator::Min => _aggregate_on_chunks(arr, chunk_size, |x| *x.min().unwrap()),
+        // ddof=1 on purpose: tsfresh aggregates chunks with pandas' Series.var
         ChunkAggregator::Var => _aggregate_on_chunks(arr, chunk_size, |x| x.var(1.0)),
     };
     let agg_len = agg_arr.len();

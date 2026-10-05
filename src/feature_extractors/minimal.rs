@@ -1,6 +1,7 @@
 use ndarray_stats::{QuantileExt, SummaryStatisticsExt};
 use polars::prelude::*;
 
+use crate::utils::stats::{population_std, population_var};
 use crate::{extract::ExtractionSettings, utils::toml_reader::load_config};
 
 pub fn minimal_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
@@ -159,7 +160,7 @@ fn _standard_deviation(s: Column) -> Result<Column, PolarsError> {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let standard_deviation = arr.std(1.0);
+    let standard_deviation = population_std(&arr.column(0));
     let s = Column::new("".into(), &[standard_deviation]);
     Ok(s)
 }
@@ -167,7 +168,7 @@ fn _standard_deviation(s: Column) -> Result<Column, PolarsError> {
 /// Standard deviation feature.
 ///
 /// The standard deviation of all values in the time series, where the standard deviation $\sigma$ is
-/// $$ \sigma = \sqrt{\frac{1}{n - 1} \sum_{i=1}^{n} (x_i - \mu)^2}, $$
+/// $$ \sigma = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (x_i - \mu)^2}, $$
 /// where $n$ is the number of values in the time series and $\mu$ is the mean of the time series
 pub fn standard_deviation(name: &str) -> Expr {
     col(name)
@@ -184,7 +185,7 @@ fn _variance(s: Column) -> Result<Column, PolarsError> {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let variance = arr.var(1.0);
+    let variance = population_var(&arr.column(0));
     let s = Column::new("".into(), &[variance]);
     Ok(s)
 }
@@ -192,7 +193,7 @@ fn _variance(s: Column) -> Result<Column, PolarsError> {
 /// Variance feature.
 ///
 /// The variance of all values in the time series, where the variance $\sigma^2$ is
-/// $$ \sigma^2 = \frac{1}{n - 1} \sum_{i=1}^{n} (x_i - \mu)^2, $$
+/// $$ \sigma^2 = \frac{1}{n} \sum_{i=1}^{n} (x_i - \mu)^2, $$
 /// where $n$ is the number of values in the time Column and $\mu$ is the mean of the time Column
 pub fn variance(name: &str) -> Expr {
     col(name)

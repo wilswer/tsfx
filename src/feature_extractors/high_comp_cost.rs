@@ -2,6 +2,8 @@ use itertools::Itertools;
 use ndarray::{Array1, Axis, Ix1};
 use polars::prelude::*;
 
+use crate::utils::stats::population_std;
+
 pub fn high_comp_cost_aggregators(value_cols: &[String]) -> Vec<Expr> {
     let mut aggregators = Vec::new();
     for col in value_cols {
@@ -49,7 +51,7 @@ fn _sample_entropy(s: Column) -> Result<Column, PolarsError> {
         .into_dimensionality::<Ix1>()
         .unwrap();
     let m = 2;
-    let r = 0.2 * arr.std(1.0);
+    let r = 0.2 * population_std(&arr.view());
     let templates_m = _into_subchunks(&arr, m);
     let matches_m = _get_matches(templates_m, r);
     let templates_m_plus_1 = _into_subchunks(&arr, m + 1);

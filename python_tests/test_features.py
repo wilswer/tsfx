@@ -574,7 +574,7 @@ def test_standard_deviation():
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__standard_deviation").to_list()[0] == 0
-    assert math.isnan(fdf.get_column("val__standard_deviation").to_list()[-1])
+    assert fdf.get_column("val__standard_deviation").to_list()[-1] == 0
 
 
 def test_variance():
@@ -594,7 +594,7 @@ def test_variance():
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__variance").to_list()[0] == 0
-    assert math.isnan(fdf.get_column("val__variance").to_list()[-1])
+    assert fdf.get_column("val__variance").to_list()[-1] == 0
 
 
 def test_variance_larger_than_standard_deviation():
@@ -613,7 +613,7 @@ def test_variance_larger_than_standard_deviation():
     fdf = fdf.sort("id")
     assert (
         fdf.get_column("val__variance_larger_than_standard_deviation").to_list()[0]
-        == 1.0
+        == 0.0
     )
     assert (
         fdf.get_column("val__variance_larger_than_standard_deviation").to_list()[1]
@@ -637,7 +637,7 @@ def test_large_standard_deviation():
     fdf = fdf.sort("id")
     assert fdf.get_column("val__large_standard_deviation__r_0.25").to_list()[0] == 1.0
     assert fdf.get_column("val__large_standard_deviation__r_0.30").to_list()[0] == 1.0
-    assert fdf.get_column("val__large_standard_deviation__r_0.50").to_list()[0] == 1.0
+    assert fdf.get_column("val__large_standard_deviation__r_0.50").to_list()[0] == 0.0
     assert fdf.get_column("val__large_standard_deviation__r_0.70").to_list()[0] == 0.0
 
 
