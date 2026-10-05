@@ -427,3 +427,13 @@ def test_ratio_beyond_r_sigma_generated(values, r, expected):
 )
 def test_sample_entropy_generated(values, expected):
     _assert_feature(values, "val__sample_entropy", expected)
+
+
+# skewness(np.array([0.1, 0.1, 0.1])) with pandas 3.0.2: m2 is ~6e-34 from
+# rounding, which pandas' tolerance treats as 0.
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [_bug([0.1, 0.1, 0.1], 0.0, reason=_MOMENTS)],
+)
+def test_skewness_near_constant_generated(values, expected):
+    _assert_feature(values, "val__skewness", expected)
