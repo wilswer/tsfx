@@ -1315,7 +1315,7 @@ fn _percentage_of_reoccurring_values_to_all_values(s: Column) -> Result<Column, 
     let arr = arr.mapv(OrderedFloat);
     let counts = arr.into_iter().counts();
     let mut more_than_once = 0;
-    for (_, v) in counts.iter() {
+    for v in counts.values() {
         if *v > 1 {
             more_than_once += 1;
         }
@@ -1346,7 +1346,7 @@ fn _percentage_of_reoccurring_values_to_all_datapoints(s: Column) -> Result<Colu
     let arr = arr.mapv(OrderedFloat);
     let counts = arr.iter().counts();
     let mut more_than_once = 0;
-    for (_, v) in counts.iter() {
+    for v in counts.values() {
         if *v > 1 {
             more_than_once += 1;
         }
