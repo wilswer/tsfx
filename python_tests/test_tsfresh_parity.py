@@ -32,7 +32,6 @@ def _bug(*case: object, reason: str):
 
 
 _MOMENTS = "biased estimators / NaN on constant series; tsfresh uses pandas"
-_DDOF = "variance uses ddof=1; tsfresh uses ddof=0"
 
 
 def _features(values: list[float]) -> dict:
@@ -123,9 +122,9 @@ def test_ratio_beyond_r_sigma(r, expected):
 @pytest.mark.parametrize(
     ("values", "normalize", "expected"),
     [
-        _bug([1, 1, 1], "t", 0, reason=_DDOF),
-        _bug([0, 4], "t", 2, reason=_DDOF),
-        _bug([100, 104], "t", 2, reason=_DDOF),
+        ([1, 1, 1], "t", 0),
+        ([0, 4], "t", 2),
+        ([100, 104], "t", 2),
         ([1, 1, 1], "f", 0),
         ([0.5, 3.5, 7.5], "f", 5),
         ([-4.33, -1.33, 2.67], "f", 5),
@@ -283,11 +282,11 @@ def test_longest_strike_below_mean(values, expected):
 @pytest.mark.parametrize(
     ("values", "lag", "expected"),
     [
-        _bug([1, 2, 1, 2, 1, 2], 1, -1, reason=_DDOF),
-        _bug([1, 2, 1, 2, 1, 2], 2, 1, reason=_DDOF),
-        _bug([1, 2, 1, 2, 1, 2], 3, -1, reason=_DDOF),
-        _bug([1, 2, 1, 2, 1, 2], 4, 1, reason=_DDOF),
-        _bug([0, 1, 2, 0, 1, 2], 2, -0.75, reason=_DDOF),
+        ([1, 2, 1, 2, 1, 2], 1, -1),
+        ([1, 2, 1, 2, 1, 2], 2, 1),
+        ([1, 2, 1, 2, 1, 2], 3, -1),
+        ([1, 2, 1, 2, 1, 2], 4, 1),
+        ([0, 1, 2, 0, 1, 2], 2, -0.75),
         ([1, 2, 1, 2, 1, 2], 200, math.nan),
         ([math.nan], 0, math.nan),
         ([1], 0, math.nan),

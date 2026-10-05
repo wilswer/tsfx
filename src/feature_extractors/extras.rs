@@ -16,6 +16,7 @@ use polars::lazy::dsl::*;
 use polars::prelude::*;
 
 use crate::extract::ExtractionSettings;
+use crate::utils::stats::{population_std, population_var};
 use crate::utils::toml_reader::load_config;
 
 /// Calculates the Ordinary Least Squares (OLS) slope and intercept
@@ -752,7 +753,11 @@ fn _cid_ce(s: Column, normalize: bool) -> Result<Column, PolarsError> {
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let arr = if normalize {
         let mean = arr.mean().unwrap_or(f64::NAN);
-        let std = arr.std(1.0);
+        let std = population_std(&arr.view());
+        // tsfresh: a constant series has no complexity
+        if std == 0.0 {
+            return Ok(Column::new("".into(), &[0.0]));
+        }
         (arr - mean) / std
     } else {
         arr
@@ -1512,7 +1517,11 @@ fn _autocorrelation(s: Column, lags: &[usize]) -> Result<Column, PolarsError> {
         Some(m) => m,
         None => return _make_nan_struct_column_int("autocorrelation", "lag", lags),
     };
-    let v = arr.var(1.0);
+    let v = population_var(&arr.view());
+    // tsfresh: autocorrelation is undefined without variance (np.isclose(v, 0))
+    if v.abs() <= 1e-8 {
+        return _make_nan_struct_column_int("autocorrelation", "lag", lags);
+    }
     let mut ss: Vec<Column> = Vec::with_capacity(lags.len());
     for lag in lags {
         let out = if arr.len() < *lag {
