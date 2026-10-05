@@ -1,0 +1,324 @@
+"""Parity tests against tsfresh's own feature calculator test cases.
+
+Input/expected pairs are copied from tsfresh v0.21.2,
+tests/units/feature_extraction/test_feature_calculations.py
+(https://github.com/blue-yonder/tsfresh), used under the MIT licence:
+
+    Copyright (c) 2016 Maximilian Christ, Blue Yonder GmbH
+
+Cases tsfresh runs on an empty series are left out: TSFX computes features
+per group, and a group cannot be empty.
+
+Any deviation from tsfresh is treated as a bug. Cases that still fail are
+marked with ``_bug`` (strict xfail), so the marker must be removed once the
+fix lands.
+"""
+
+import math
+
+import polars as pl
+import pytest
+from tsfx import ExtractionSettings, FeatureSetting, extract_features
+
+CONFIG_PATH = "./python_tests/data/.tsfx-config-tsfresh-parity.toml"
+
+
+def _bug(*case: object, reason: str):
+    """Mark a parity case that fails because of a known TSFX bug."""
+    return pytest.param(
+        *case,
+        marks=pytest.mark.xfail(strict=True, reason=f"parity bug: {reason}"),
+    )
+
+
+_MOMENTS = "biased estimators / NaN on constant series; tsfresh uses pandas"
+_COUNT = "t from config ignored and count returned instead of fraction"
+_LAST_LOC = "uses first occurrence instead of last"
+_DDOF = "variance uses ddof=1; tsfresh uses ddof=0"
+
+
+def _features(values: list[float]) -> dict:
+    """Extract the parity features for a single series."""
+    df = pl.DataFrame(
+        {"id": ["a"] * len(values), "val": [float(v) for v in values]},
+    ).lazy()
+    opts = ExtractionSettings(
+        grouping_cols=["id"],
+        feature_setting=FeatureSetting.Comprehensive,
+        value_cols=["val"],
+        config_path=CONFIG_PATH,
+    )
+    fdf = extract_features(df, opts)
+    assert fdf.shape[0] == 1
+    return fdf.row(0, named=True)
+
+
+def _assert_feature(values: list[float], column: str, expected: float) -> None:
+    features = _features(values)
+    assert column in features, f"column {column!r} not extracted"
+    result = features[column]
+    if math.isnan(expected):
+        assert result is not None and math.isnan(result), result
+    else:
+        # tsfresh uses assertEqual / assertAlmostEqual (7 decimal places)
+        assert result == pytest.approx(expected, abs=1e-7)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, 1, 1, 2, 2, 2], 0),
+        _bug([1, 1, 1, 2, 2], 0.6085806194501855, reason=_MOMENTS),
+        _bug([1, 1, 1], 0, reason=_MOMENTS),
+        ([1, 1], math.nan),
+    ],
+)
+def test_skewness(values, expected):
+    _assert_feature(values, "val__skewness", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        _bug([1, 1, 1, 2, 2], -3.333333333333333, reason=_MOMENTS),
+        _bug([1, 1, 1, 1], 0, reason=_MOMENTS),
+        ([1, 1, 1], math.nan),
+    ],
+)
+def test_kurtosis(values, expected):
+    _assert_feature(values, "val__kurtosis", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([1, 1, 1, 2, 2], 1.4832396974191), ([0], 0), ([1], 1), ([-1], 1)],
+)
+def test_root_mean_square(values, expected):
+    _assert_feature(values, "val__root_mean_square", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([-2, 2, 5], 3.5), ([1, 2, -1], 2)],
+)
+def test_mean_absolute_change(values, expected):
+    # tsfresh name: mean_abs_change
+    _assert_feature(values, "val__mean_absolute_change", expected)
+
+
+_RATIO_X = [0, 1] * 10 + [10, 20, -30]
+
+
+@pytest.mark.parametrize(
+    ("r", "expected"),
+    [
+        ("1.00", 3.0 / len(_RATIO_X)),
+        ("2.00", 2.0 / len(_RATIO_X)),
+        ("3.00", 1.0 / len(_RATIO_X)),
+        ("20.00", 0),
+    ],
+)
+def test_ratio_beyond_r_sigma(r, expected):
+    _assert_feature(_RATIO_X, f"val__ratio_beyond_r_sigma__r_{r}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "normalize", "expected"),
+    [
+        _bug([1, 1, 1], "t", 0, reason=_DDOF),
+        _bug([0, 4], "t", 2, reason=_DDOF),
+        _bug([100, 104], "t", 2, reason=_DDOF),
+        ([1, 1, 1], "f", 0),
+        ([0.5, 3.5, 7.5], "f", 5),
+        ([-4.33, -1.33, 2.67], "f", 5),
+    ],
+)
+def test_cid_ce(values, normalize, expected):
+    _assert_feature(values, f"val__cid_ce__normalize_{normalize}", expected)
+
+
+@pytest.mark.parametrize(("values", "expected"), [([-5, 0, 1], 5), ([0], 0)])
+def test_absolute_maximum(values, expected):
+    _assert_feature(values, "val__absolute_maximum", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([1, 1, 1, 1, 2, 1], 2), ([1, -1, 1, -1], 6), ([1], 0)],
+)
+def test_absolute_sum_of_changes(values, expected):
+    _assert_feature(values, "val__absolute_sum_of_changes", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([1, 2, 1, 2, 1, 2], 3), ([1, 1, 1, 1, 1, 2], 1), ([1, 1, 1, 1, 1], 0)],
+)
+def test_count_above_mean(values, expected):
+    _assert_feature(values, "val__count_above_mean", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([1, 2, 1, 2, 1, 2], 3), ([1, 1, 1, 1, 1, 2], 5), ([1, 1, 1, 1, 1], 0)],
+)
+def test_count_below_mean(values, expected):
+    _assert_feature(values, "val__count_below_mean", expected)
+
+
+# tsfresh also tests t = nan / ±inf, which the config cannot name as a column
+# parameter; those cases are left out.
+@pytest.mark.parametrize(
+    ("values", "t", "expected"),
+    [
+        _bug([1] * 10, "1.0", 1, reason=_COUNT),
+        _bug(list(range(10)), "0.0", 1, reason=_COUNT),
+        _bug(list(range(10)), "5.0", 0.5, reason=_COUNT),
+        _bug([0.1, 0.2, 0.3] * 3, "0.2", 2 / 3, reason=_COUNT),
+        _bug([math.nan, 0, 1] * 3, "0.0", 2 / 3, reason=_COUNT),
+        _bug([-math.inf, 0, 1] * 3, "0.0", 2 / 3, reason=_COUNT),
+        _bug([math.inf, 0, 1] * 3, "0.0", 1, reason=_COUNT),
+    ],
+)
+def test_count_above(values, t, expected):
+    _assert_feature(values, f"val__count_above__t_{t}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "t", "expected"),
+    [
+        _bug([1] * 10, "1.0", 1, reason=_COUNT),
+        _bug(list(range(10)), "0.0", 1 / 10, reason=_COUNT),
+        _bug(list(range(10)), "5.0", 6 / 10, reason=_COUNT),
+        _bug([0.1, 0.2, 0.3] * 3, "0.2", 2 / 3, reason=_COUNT),
+        _bug([math.nan, 0, 1] * 3, "0.0", 1 / 3, reason=_COUNT),
+        _bug([-math.inf, 0, 1] * 3, "0.0", 2 / 3, reason=_COUNT),
+        _bug([math.inf, 0, 1] * 3, "0.0", 1 / 3, reason=_COUNT),
+    ],
+)
+def test_count_below(values, t, expected):
+    _assert_feature(values, f"val__count_below__t_{t}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, 2, 1, 2, 1], 0.2),
+        ([1, 2, 1, 1, 2], 0.2),
+        ([2, 1, 1, 1, 1], 0.0),
+        ([1, 1, 1, 1, 1], 0.0),
+        ([1], 0.0),
+    ],
+)
+def test_first_location_of_maximum(values, expected):
+    _assert_feature(values, "val__first_location_of_maximum", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, 2, 1, 2, 1], 0.0),
+        ([2, 2, 1, 2, 2], 0.4),
+        ([2, 1, 1, 1, 2], 0.2),
+        ([1, 1, 1, 1, 1], 0.0),
+        ([1], 0.0),
+    ],
+)
+def test_first_location_of_minimum(values, expected):
+    _assert_feature(values, "val__first_location_of_minimum", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, 2, 1, 2, 1], 0.8),
+        _bug([1, 2, 1, 1, 2], 1.0, reason=_LAST_LOC),
+        _bug([2, 1, 1, 1, 1], 0.2, reason=_LAST_LOC),
+        ([1, 1, 1, 1, 1], 1.0),
+        ([1], 1.0),
+    ],
+)
+def test_last_location_of_maximum(values, expected):
+    _assert_feature(values, "val__last_location_of_maximum", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, 2, 1, 2, 1], 1.0),
+        _bug([1, 2, 1, 2, 2], 0.6, reason=_LAST_LOC),
+        ([2, 1, 1, 1, 2], 0.8),
+        ([1, 1, 1, 1, 1], 1.0),
+        ([1], 1.0),
+    ],
+)
+def test_last_location_of_minimum(values, expected):
+    _assert_feature(values, "val__last_location_of_minimum", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, 2, 1, 2, 1, 2, 2, 1], 2),
+        ([1, 2, 3, 4, 5, 6], 3),
+        ([1, 2, 3, 4, 5], 2),
+        ([1, 2, 1], 1),
+    ],
+)
+def test_longest_strike_above_mean(values, expected):
+    _assert_feature(values, "val__longest_strike_above_mean", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, 2, 1, 1, 1, 2, 2, 2], 3),
+        ([1, 2, 3, 4, 5, 6], 3),
+        ([1, 2, 3, 4, 5], 2),
+        ([1, 2, 1], 1),
+    ],
+)
+def test_longest_strike_below_mean(values, expected):
+    _assert_feature(values, "val__longest_strike_below_mean", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "lag", "expected"),
+    [
+        _bug([1, 2, 1, 2, 1, 2], 1, -1, reason=_DDOF),
+        _bug([1, 2, 1, 2, 1, 2], 2, 1, reason=_DDOF),
+        _bug([1, 2, 1, 2, 1, 2], 3, -1, reason=_DDOF),
+        _bug([1, 2, 1, 2, 1, 2], 4, 1, reason=_DDOF),
+        _bug([0, 1, 2, 0, 1, 2], 2, -0.75, reason=_DDOF),
+        ([1, 2, 1, 2, 1, 2], 200, math.nan),
+        ([math.nan], 0, math.nan),
+        ([1], 0, math.nan),
+    ],
+)
+def test_autocorrelation(values, lag, expected):
+    _assert_feature(values, f"val__autocorrelation__lag_{lag}", expected)
+
+
+_SAMPLE_ENTROPY_RANDOM = [
+    1, 4, 5, 1, 7, 3, 1, 2, 5, 8, 9, 7, 3, 7, 9, 5, 4, 3, 9, 1,
+    2, 3, 4, 2, 9, 6, 7, 4, 9, 2, 9, 9, 6, 5, 1, 3, 8, 1, 5, 3,
+    8, 4, 1, 2, 2, 1, 6, 5, 3, 6, 5, 4, 8, 9, 6, 7, 5, 3, 2, 5,
+    4, 2, 5, 1, 6, 5, 3, 5, 6, 7, 8, 5, 2, 8, 6, 3, 8, 2, 7, 1,
+    7, 3, 5, 6, 2, 1, 3, 7, 3, 5, 3, 7, 6, 7, 7, 2, 3, 1, 7, 8,
+]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        (_SAMPLE_ENTROPY_RANDOM, 2.38262780),
+        _bug([1] * 10, 0.25131442, reason="NaN for constant series"),
+        ([1, 1, 2, 1, 1, 1, 1, 1, 1, 1], 0.74193734),
+        ([1, 1, 1, 2, 1, 1, 1, 1, 1, 1], 0.74193734),
+        ([1, -1, 1, -1, 1, -1], 0.69314718),
+        ([1, -1, 1, math.nan, 1, -1], math.nan),
+        (list(range(1000)), 0.0010314596066622707),
+    ],
+)
+def test_sample_entropy(values, expected):
+    _assert_feature(values, "val__sample_entropy", expected)
