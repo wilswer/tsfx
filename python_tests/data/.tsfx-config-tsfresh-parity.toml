@@ -11,7 +11,7 @@
 [mean_absolute_change]
 
 [ratio_beyond_r_sigma]
-parameters = [{ r = 1.0 }, { r = 2.0 }, { r = 3.0 }, { r = 20.0 }]
+parameters = [{ r = 1.0 }, { r = 1.5 }, { r = 2.0 }, { r = 3.0 }, { r = 20.0 }]
 
 [cid_ce]
 parameters = [{ normalize = true }, { normalize = false }]
@@ -62,3 +62,6 @@ parameters = [
 
 [large_standard_deviation]
 parameters = [{ r = 0.0 }, { r = 0.25 }, { r = 0.3 }, { r = 0.5 }]
+
+[agg_linear_trend]
+parameters = [{ chunk_size = 3, aggregator = "var" }]
