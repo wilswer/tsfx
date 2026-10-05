@@ -124,11 +124,15 @@ pub fn extra_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
         if config.count_below_mean.is_some() {
             aggregators.push(count_below_mean(col));
         }
-        if config.count_above.is_some() {
-            aggregators.push(count_above(col, 0.0));
+        if let Some(feature) = &config.count_above {
+            for p in &feature.parameters {
+                aggregators.push(count_above(col, p.t));
+            }
         }
-        if config.count_below.is_some() {
-            aggregators.push(count_below(col, 0.0));
+        if let Some(feature) = &config.count_below {
+            for p in &feature.parameters {
+                aggregators.push(count_below(col, p.t));
+            }
         }
         if config.first_location_of_maximum.is_some() {
             aggregators.push(first_location_of_maximum(col));
@@ -903,7 +907,8 @@ fn _count_above(s: Column, t: f64) -> Result<Column, PolarsError> {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let out = arr.mapv(|x| if x > t { 1.0 } else { 0.0 }).sum();
+    // fraction of values >= t, as in tsfresh
+    let out = arr.mapv(|x| if x >= t { 1.0 } else { 0.0 }).sum() / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
     Ok(s)
 }
@@ -924,7 +929,8 @@ fn _count_below(s: Column, t: f64) -> Result<Column, PolarsError> {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let out = arr.mapv(|x| if x > t { 1.0 } else { 0.0 }).sum();
+    // fraction of values <= t, as in tsfresh
+    let out = arr.mapv(|x| if x <= t { 1.0 } else { 0.0 }).sum() / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
     Ok(s)
 }

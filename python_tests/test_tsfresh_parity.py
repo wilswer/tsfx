@@ -32,7 +32,6 @@ def _bug(*case: object, reason: str):
 
 
 _MOMENTS = "biased estimators / NaN on constant series; tsfresh uses pandas"
-_COUNT = "t from config ignored and count returned instead of fraction"
 _DDOF = "variance uses ddof=1; tsfresh uses ddof=0"
 
 
@@ -170,13 +169,13 @@ def test_count_below_mean(values, expected):
 @pytest.mark.parametrize(
     ("values", "t", "expected"),
     [
-        _bug([1] * 10, "1.0", 1, reason=_COUNT),
-        _bug(list(range(10)), "0.0", 1, reason=_COUNT),
-        _bug(list(range(10)), "5.0", 0.5, reason=_COUNT),
-        _bug([0.1, 0.2, 0.3] * 3, "0.2", 2 / 3, reason=_COUNT),
-        _bug([math.nan, 0, 1] * 3, "0.0", 2 / 3, reason=_COUNT),
-        _bug([-math.inf, 0, 1] * 3, "0.0", 2 / 3, reason=_COUNT),
-        _bug([math.inf, 0, 1] * 3, "0.0", 1, reason=_COUNT),
+        ([1] * 10, "1.0", 1),
+        (list(range(10)), "0.0", 1),
+        (list(range(10)), "5.0", 0.5),
+        ([0.1, 0.2, 0.3] * 3, "0.2", 2 / 3),
+        ([math.nan, 0, 1] * 3, "0.0", 2 / 3),
+        ([-math.inf, 0, 1] * 3, "0.0", 2 / 3),
+        ([math.inf, 0, 1] * 3, "0.0", 1),
     ],
 )
 def test_count_above(values, t, expected):
@@ -186,13 +185,13 @@ def test_count_above(values, t, expected):
 @pytest.mark.parametrize(
     ("values", "t", "expected"),
     [
-        _bug([1] * 10, "1.0", 1, reason=_COUNT),
-        _bug(list(range(10)), "0.0", 1 / 10, reason=_COUNT),
-        _bug(list(range(10)), "5.0", 6 / 10, reason=_COUNT),
-        _bug([0.1, 0.2, 0.3] * 3, "0.2", 2 / 3, reason=_COUNT),
-        _bug([math.nan, 0, 1] * 3, "0.0", 1 / 3, reason=_COUNT),
-        _bug([-math.inf, 0, 1] * 3, "0.0", 2 / 3, reason=_COUNT),
-        _bug([math.inf, 0, 1] * 3, "0.0", 1 / 3, reason=_COUNT),
+        ([1] * 10, "1.0", 1),
+        (list(range(10)), "0.0", 1 / 10),
+        (list(range(10)), "5.0", 6 / 10),
+        ([0.1, 0.2, 0.3] * 3, "0.2", 2 / 3),
+        ([math.nan, 0, 1] * 3, "0.0", 1 / 3),
+        ([-math.inf, 0, 1] * 3, "0.0", 2 / 3),
+        ([math.inf, 0, 1] * 3, "0.0", 1 / 3),
     ],
 )
 def test_count_below(values, t, expected):

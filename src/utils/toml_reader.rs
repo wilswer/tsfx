@@ -323,7 +323,7 @@ impl Default for CountAbove {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct CountAboveParams {
-    t: f64,
+    pub t: f64,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -341,7 +341,7 @@ impl Default for CountBelow {
 
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct CountBelowParams {
-    t: f64,
+    pub t: f64,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
