@@ -26,7 +26,8 @@ fn _get_matches(templates: Vec<Array1<f64>>, r: f64) -> usize {
         let a = combo[0].to_owned();
         let b = combo[1].to_owned();
         let diff = a - b;
-        let dist_check = diff.mapv(|x| if x.abs() < r { 1 } else { 0 }).sum();
+        // tsfresh counts a match at distance <= tolerance
+        let dist_check = diff.mapv(|x| if x.abs() <= r { 1 } else { 0 }).sum();
         if dist_check == diff.len() {
             matches += 1;
         }
