@@ -1,7 +1,7 @@
-use ndarray_stats::{QuantileExt, SummaryStatisticsExt};
+use ndarray_stats::QuantileExt;
 use polars::prelude::*;
 
-use crate::utils::stats::{population_std, population_var};
+use crate::utils::stats::{population_std, population_var, sample_skewness};
 use crate::{extract::ExtractionSettings, utils::toml_reader::load_config};
 
 pub fn minimal_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
@@ -237,17 +237,18 @@ fn _skewness(s: Column) -> Result<Column, PolarsError> {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let skewness = arr.skewness().unwrap_or(f64::NAN);
+    let skewness = sample_skewness(&arr.column(0));
     let s = Column::new("".into(), &[skewness]);
     Ok(s)
 }
 
 /// Skewness feature.
 ///
-/// The skewness of all values in the time series, where the skewness is the third standardized moment:
-/// $$ \text{skewness} = \frac{1}{(n-1) \sigma^3} \sum_{i=1}^{n} (x_i - \mu)^3, $$
-/// where $n$ is the number of values in the time series, $\mu$ is the mean of the time series,
-/// and $\sigma$ is the standard deviation of the time Column
+/// The bias-adjusted sample skewness (Fisher-Pearson $G_1$) of all values in the time series,
+/// matching tsfresh (`pandas.Series.skew`):
+/// $$ G_1 = \frac{n \sqrt{n - 1}}{n - 2} \frac{m_3}{m_2^{3/2}}, \quad m_k = \sum_{i=1}^{n} (x_i - \mu)^k, $$
+/// where $n$ is the number of values in the time series and $\mu$ is its mean.
+/// NaN for fewer than 3 values, 0 for a constant series. See [`crate::utils::stats::sample_skewness`].
 pub fn skewness(name: &str) -> Expr {
     col(name)
         .apply(_skewness, |_, _| {

@@ -31,9 +31,6 @@ def _bug(*case: object, reason: str):
     )
 
 
-_MOMENTS = "biased estimators / NaN on constant series; tsfresh uses pandas"
-
-
 def _features(values: list[float]) -> dict:
     """Extract the parity features for a single series."""
     df = pl.DataFrame(
@@ -125,8 +122,8 @@ def test_large_standard_deviation(values, r, expected):
     ("values", "expected"),
     [
         ([1, 1, 1, 2, 2, 2], 0),
-        _bug([1, 1, 1, 2, 2], 0.6085806194501855, reason=_MOMENTS),
-        _bug([1, 1, 1], 0, reason=_MOMENTS),
+        ([1, 1, 1, 2, 2], 0.6085806194501855),
+        ([1, 1, 1], 0),
         ([1, 1], math.nan),
     ],
 )
@@ -137,8 +134,8 @@ def test_skewness(values, expected):
 @pytest.mark.parametrize(
     ("values", "expected"),
     [
-        _bug([1, 1, 1, 2, 2], -3.333333333333333, reason=_MOMENTS),
-        _bug([1, 1, 1, 1], 0, reason=_MOMENTS),
+        ([1, 1, 1, 2, 2], -3.333333333333333),
+        ([1, 1, 1, 1], 0),
         ([1, 1, 1], math.nan),
     ],
 )
@@ -433,7 +430,7 @@ def test_sample_entropy_generated(values, expected):
 # rounding, which pandas' tolerance treats as 0.
 @pytest.mark.parametrize(
     ("values", "expected"),
-    [_bug([0.1, 0.1, 0.1], 0.0, reason=_MOMENTS)],
+    [([0.1, 0.1, 0.1], 0.0)],
 )
 def test_skewness_near_constant_generated(values, expected):
     _assert_feature(values, "val__skewness", expected)

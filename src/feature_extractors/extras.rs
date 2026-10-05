@@ -8,7 +8,7 @@ use itertools::izip;
 use ndarray::ArrayView1;
 use ndarray::{Array1, Axis, Ix1, s};
 use ndarray_stats::errors::QuantileError;
-use ndarray_stats::{QuantileExt, SummaryStatisticsExt, interpolate::Midpoint};
+use ndarray_stats::{QuantileExt, interpolate::Midpoint};
 use noisy_float::types::n64;
 use num::FromPrimitive;
 use ordered_float::OrderedFloat;
@@ -16,7 +16,7 @@ use polars::lazy::dsl::*;
 use polars::prelude::*;
 
 use crate::extract::ExtractionSettings;
-use crate::utils::stats::{population_std, population_var};
+use crate::utils::stats::{population_std, population_var, sample_excess_kurtosis};
 use crate::utils::toml_reader::load_config;
 
 /// Calculates the Ordinary Least Squares (OLS) slope and intercept
@@ -435,17 +435,19 @@ fn _kurtosis(s: Column) -> Result<Column, PolarsError> {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let kurtosis = arr.kurtosis().unwrap_or(f64::NAN);
+    let kurtosis = sample_excess_kurtosis(&arr.column(0));
     let s = Column::new("".into(), &[kurtosis]);
     Ok(s)
 }
 
 /// Kurtosis feature.
 ///
-/// The kurtosis of all values in the time series, where the kurtosis is the fourth standardized moment:
-/// $$ \text{kurtosis} = \frac{1}{(n-1) \sigma^4} \sum_{i=1}^{n} (x_i - \mu)^4, $$
-/// where $n$ is the number of values in the time series, $\mu$ is the mean of the time series,
-/// and $\sigma$ is the standard deviation of the time series
+/// The bias-adjusted sample excess kurtosis $G_2$ of all values in the time series,
+/// matching tsfresh (`pandas.Series.kurtosis`):
+/// $$ G_2 = \frac{n (n + 1) (n - 1) m_4}{(n - 2) (n - 3) m_2^2} - \frac{3 (n - 1)^2}{(n - 2) (n - 3)}, \quad m_k = \sum_{i=1}^{n} (x_i - \mu)^k, $$
+/// where $n$ is the number of values in the time series and $\mu$ is its mean. A normal distribution
+/// scores 0. NaN for fewer than 4 values, 0 for a constant series.
+/// See [`crate::utils::stats::sample_excess_kurtosis`].
 pub fn kurtosis(name: &str) -> Expr {
     col(name)
         .apply(_kurtosis, |_, _| {
