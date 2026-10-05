@@ -51,3 +51,14 @@ parameters = [
     { lag = 4 },
     { lag = 200 },
 ]
+
+[standard_deviation]
+
+[variance]
+
+[variation_coefficient]
+
+[variance_larger_than_standard_deviation]
+
+[large_standard_deviation]
+parameters = [{ r = 0.0 }, { r = 0.25 }, { r = 0.3 }, { r = 0.5 }]

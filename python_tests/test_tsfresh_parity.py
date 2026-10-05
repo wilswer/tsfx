@@ -32,6 +32,7 @@ def _bug(*case: object, reason: str):
 
 
 _MOMENTS = "biased estimators / NaN on constant series; tsfresh uses pandas"
+_DDOF = "variance uses ddof=1; tsfresh uses ddof=0"
 
 
 def _features(values: list[float]) -> dict:
@@ -59,6 +60,66 @@ def _assert_feature(values: list[float], column: str, expected: float) -> None:
     else:
         # tsfresh uses assertEqual / assertAlmostEqual (7 decimal places)
         assert result == pytest.approx(expected, abs=1e-7)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        _bug([1, 1, -1, -1], 1, reason=_DDOF),
+        _bug([1, 2, -2, -1], 1.58113883008, reason=_DDOF),
+    ],
+)
+def test_standard_deviation(values, expected):
+    _assert_feature(values, "val__standard_deviation", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        _bug([1, 1, -1, -1], 1, reason=_DDOF),
+        _bug([1, 2, -2, -1], 2.5, reason=_DDOF),
+    ],
+)
+def test_variance(values, expected):
+    _assert_feature(values, "val__variance", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, 1, -1, -1], math.nan),
+        _bug([1, 2, -3, -1], -7.681145747868608, reason=_DDOF),
+        _bug([1, 2, 4, -1], 1.2018504251546631, reason=_DDOF),
+    ],
+)
+def test_variation_coefficient(values, expected):
+    _assert_feature(values, "val__variation_coefficient", expected)
+
+
+# tsfresh returns booleans for the next two features; TSFX returns 1.0 / 0.0.
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        _bug([-1, -1, 1, 1, 1], 0, reason=_DDOF),
+        ([-1, -1, 1, 1, 2], 1),
+    ],
+)
+def test_variance_larger_than_standard_deviation(values, expected):
+    _assert_feature(values, "val__variance_larger_than_standard_deviation", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "r", "expected"),
+    [
+        ([1, 1, 1, 1], "0.00", 0),
+        ([-1, -1, 1, 1], "0.00", 1),
+        ([-1, -1, 1, 1], "0.25", 1),
+        ([-1, -1, 1, 1], "0.30", 1),
+        _bug([-1, -1, 1, 1], "0.50", 0, reason=_DDOF),
+    ],
+)
+def test_large_standard_deviation(values, r, expected):
+    _assert_feature(values, f"val__large_standard_deviation__r_{r}", expected)
 
 
 @pytest.mark.parametrize(
