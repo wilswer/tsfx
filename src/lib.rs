@@ -170,7 +170,7 @@ fn extract_features(
             .map_err(ExtractionError::PolarsError)?
     } else {
         lazy_feature_df(lf, settings)?
-            .with_new_streaming(true)
+            .with_streaming(true)
             .collect()
             .map_err(ExtractionError::PolarsError)?
     };

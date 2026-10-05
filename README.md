@@ -31,8 +31,9 @@ automatically attempt to build the package from the source distribution
 
 Because `tsfx` is built with [Maturin](https://maturin.rs/) and its core
 features are implemented in Rust, you will need a Rust compiler to build it from
-source. **Important: Building from source requires an up-to-date nightly Rust
-toolchain.**
+source. **Important: Building from source requires a nightly Rust toolchain.**
+The exact nightly is pinned in `rust-toolchain.toml` to match the Polars version
+TSFX is built against.
 
 To set up your environment for a source build:
 
@@ -41,13 +42,9 @@ To set up your environment for a source build:
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```
 
-2. **Install and switch to the nightly toolchain**:
-   ```bash
-   rustup toolchain install nightly
-   rustup default nightly
-   ```
-   _(Note: You may also want to run `rustup update nightly` to ensure it is
-   fully up to date)._
+2. **Nightly toolchain**: with rustup, the pinned nightly from
+   `rust-toolchain.toml` is installed and used automatically when building in
+   the source directory. No `rustup default nightly` is needed.
 
 3. **Install the package**:
    ```bash
