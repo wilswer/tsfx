@@ -14,7 +14,6 @@ use num::FromPrimitive;
 use ordered_float::OrderedFloat;
 use polars::lazy::dsl::*;
 use polars::prelude::*;
-use polars::series::ops::NullBehavior;
 
 use crate::extract::ExtractionSettings;
 use crate::utils::toml_reader::load_config;
@@ -399,15 +398,6 @@ pub fn absolute_energy(name: &str) -> Expr {
         .alias(format!("{name}__absolute_energy"))
 }
 
-/// The absolute energy of the time series cf. [`absolute_energy`],
-/// calculated using the native Polars API.
-pub fn expr_abs_energy(name: &str) -> Expr {
-    col(name)
-        .pow(2)
-        .sum()
-        .alias(format!("{name}__absolute_energy"))
-}
-
 fn _mean_absolute_change(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
@@ -438,14 +428,6 @@ pub fn mean_absolute_change(name: &str) -> Expr {
         .alias(format!("{}__mean_absolute_change", name))
 }
 
-/// Mean change implemented using the native Polars API.
-/// See [`mean_change`].
-pub fn expr_mean_change(name: &str) -> Expr {
-    let diffs = col(name).diff(1.into(), NullBehavior::Drop);
-    let n = col(name).count() - lit(1);
-    (diffs.sum() / n).alias(format!("{}__mean_change", name))
-}
-
 fn _kurtosis(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
@@ -470,16 +452,6 @@ pub fn kurtosis(name: &str) -> Expr {
         })
         .get(0, true)
         .alias(format!("{}__kurtosis", name))
-}
-
-/// Kurtosis implemented using the native Polars API.
-/// See [`kurtosis`].
-pub fn expr_kurtosis(name: &str) -> Expr {
-    let n = col(name).count();
-    let mean = col(name).mean();
-    let std = col(name).std(1);
-    let skewness = ((col(name) - mean).pow(4)).sum() / ((n - lit(1.0)) * std.pow(4));
-    skewness.alias(format!("{}__expr_kurtosis", name))
 }
 
 fn _linear_trend(s: Column) -> Result<Column, PolarsError> {

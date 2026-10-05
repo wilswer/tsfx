@@ -78,11 +78,6 @@ pub fn sum_values(name: &str) -> Expr {
         .alias(format!("{}__sum_values", name))
 }
 
-/// The sum of all values of the time series, using the native Polars API
-pub fn expr_sum(name: &str) -> Expr {
-    col(name).sum().alias(format!("{}__sum", name))
-}
-
 fn _mean(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
@@ -106,11 +101,6 @@ pub fn mean(name: &str) -> Expr {
         .alias(format!("{}__mean", name))
 }
 
-/// The mean of all values of the time series, using the native Polars API
-pub fn expr_mean(name: &str) -> Expr {
-    col(name).mean().alias(format!("{}__mean", name))
-}
-
 fn _min(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
@@ -132,11 +122,6 @@ pub fn minimum(name: &str) -> Expr {
         .alias(format!("{}__minimum", name))
 }
 
-/// The minimum value of the time series, using the native Polars API
-pub fn expr_minimum(name: &str) -> Expr {
-    col(name).min().alias(format!("{}__minimum", name))
-}
-
 fn _max(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
@@ -156,11 +141,6 @@ pub fn maximum(name: &str) -> Expr {
         .apply(_max, |_, _| Ok(Field::new("".into(), DataType::Float64)))
         .get(0, true)
         .alias(format!("{}__maximum", name))
-}
-
-/// The maximum value of the time series, using the native Polars API
-pub fn expr_maximum(name: &str) -> Expr {
-    col(name).max().alias(format!("{}__maximum", name))
 }
 
 /// Median feature.
@@ -198,13 +178,6 @@ pub fn standard_deviation(name: &str) -> Expr {
         .alias(format!("{}__standard_deviation", name))
 }
 
-/// The standard deviation of all values of the time series, using the native Polars API
-pub fn expr_standard_deviation(name: &str) -> Expr {
-    col(name)
-        .std(1)
-        .alias(format!("{}__standard_deviation", name))
-}
-
 fn _variance(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
@@ -228,11 +201,6 @@ pub fn variance(name: &str) -> Expr {
         })
         .get(0, true)
         .alias(format!("{}__variance", name))
-}
-
-/// The variance of all values of the time series, using the native Polars API
-pub fn expr_variance(name: &str) -> Expr {
-    col(name).var(1).alias(format!("{}__variance", name))
 }
 
 fn _rms(s: Column) -> Result<Column, PolarsError> {
@@ -260,24 +228,6 @@ pub fn root_mean_square(name: &str) -> Expr {
         .apply(_rms, |_, _| Ok(Field::new("".into(), DataType::Float64)))
         .get(0, true)
         .alias(format!("{}__root_mean_square", name))
-}
-
-/// The root mean square of all values of the time series, using the native Polars API
-pub fn expr_root_mean_square(name: &str) -> Expr {
-    col(name)
-        .pow(2.0)
-        .mean()
-        .pow(0.5)
-        .alias(format!("{}__rms", name))
-}
-
-/// The skewness of all values in the time series, using the native Polars API
-pub fn expr_skewness(name: &str) -> Expr {
-    let n = col(name).count();
-    let mean = col(name).mean();
-    let standard_deviation = col(name).std(1);
-    let skewness = ((col(name) - mean).pow(3)).sum() / ((n - lit(1.0)) * standard_deviation.pow(3));
-    skewness.alias(format!("{}__expr_skewness", name))
 }
 
 fn _skewness(s: Column) -> Result<Column, PolarsError> {
