@@ -1007,7 +1007,8 @@ fn _last_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let max_res = arr.argmax();
+    // argmax of the reversed series gives the last occurrence
+    let max_res = arr.slice(s![..;-1]).argmax();
     let max = match max_res {
         Ok(m) => m,
         Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
@@ -1036,7 +1037,8 @@ fn _last_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let min_res = arr.argmin();
+    // argmin of the reversed series gives the last occurrence
+    let min_res = arr.slice(s![..;-1]).argmin();
     let min = match min_res {
         Ok(m) => m,
         Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),

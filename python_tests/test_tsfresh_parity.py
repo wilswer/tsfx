@@ -33,7 +33,6 @@ def _bug(*case: object, reason: str):
 
 _MOMENTS = "biased estimators / NaN on constant series; tsfresh uses pandas"
 _COUNT = "t from config ignored and count returned instead of fraction"
-_LAST_LOC = "uses first occurrence instead of last"
 _DDOF = "variance uses ddof=1; tsfresh uses ddof=0"
 
 
@@ -232,8 +231,8 @@ def test_first_location_of_minimum(values, expected):
     ("values", "expected"),
     [
         ([1, 2, 1, 2, 1], 0.8),
-        _bug([1, 2, 1, 1, 2], 1.0, reason=_LAST_LOC),
-        _bug([2, 1, 1, 1, 1], 0.2, reason=_LAST_LOC),
+        ([1, 2, 1, 1, 2], 1.0),
+        ([2, 1, 1, 1, 1], 0.2),
         ([1, 1, 1, 1, 1], 1.0),
         ([1], 1.0),
     ],
@@ -246,7 +245,7 @@ def test_last_location_of_maximum(values, expected):
     ("values", "expected"),
     [
         ([1, 2, 1, 2, 1], 1.0),
-        _bug([1, 2, 1, 2, 2], 0.6, reason=_LAST_LOC),
+        ([1, 2, 1, 2, 2], 0.6),
         ([2, 1, 1, 1, 2], 0.8),
         ([1, 1, 1, 1, 1], 1.0),
         ([1], 1.0),
