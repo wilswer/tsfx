@@ -7,7 +7,10 @@ use ndarray::{Axis, Ix1};
 use polars::lazy::dsl::*;
 use polars::prelude::*;
 
-use crate::utils::stats::{aggregate_on_chunks, calculate_sequential_ols, skip_nan_reduce};
+use crate::utils::stats::{
+    aggregate_on_chunks, calculate_sequential_ols, skip_nan_mean, skip_nan_reduce,
+    skip_nan_sample_var,
+};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ChunkAggregator {
@@ -116,7 +119,7 @@ fn _agg_linear_trend(
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let agg_arr = match aggregator {
-        ChunkAggregator::Mean => aggregate_on_chunks(arr, chunk_size, |x| x.mean().unwrap()),
+        ChunkAggregator::Mean => aggregate_on_chunks(arr, chunk_size, |x| skip_nan_mean(&x)),
         ChunkAggregator::Max => {
             aggregate_on_chunks(arr, chunk_size, |x| skip_nan_reduce(&x, f64::max))
         }
@@ -124,7 +127,7 @@ fn _agg_linear_trend(
             aggregate_on_chunks(arr, chunk_size, |x| skip_nan_reduce(&x, f64::min))
         }
         // ddof=1 on purpose: tsfresh aggregates chunks with pandas' Series.var
-        ChunkAggregator::Var => aggregate_on_chunks(arr, chunk_size, |x| x.var(1.0)),
+        ChunkAggregator::Var => aggregate_on_chunks(arr, chunk_size, |x| skip_nan_sample_var(&x)),
     };
     let agg_len = agg_arr.len();
     let (s_i, s_s) = calculate_sequential_ols(agg_arr, agg_len);

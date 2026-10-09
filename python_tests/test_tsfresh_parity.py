@@ -789,7 +789,7 @@ def test_linear_trend(values, attr, expected):
         ],
         *[
             ([math.nan] * 2 + [-3] * 4, agg, attr, expected)
-            for agg in ("max", "min")
+            for agg in ("max", "min", "mean")
             for attr, expected in (("intercept", -3), ("slope", 0))
         ],
     ],
@@ -895,4 +895,24 @@ def test_percentage_of_reoccurring_values_to_all_datapoints_nan_generated():
         [1, 1, math.nan, math.nan, 2],
         "val__percentage_of_reoccurring_values_to_all_datapoints",
         0.4,
+    )
+
+
+# agg_linear_trend(pd.Series(x), [{"attr": a, "chunk_len": 3, "f_agg": "var"}])
+# with pandas 3.0.2: chunk var skips NaN (ddof=1, so a chunk with a single
+# non-NaN value gives NaN).
+@pytest.mark.parametrize(
+    ("values", "attr", "expected"),
+    [
+        ([1, math.nan, 3, 4, 2, 6, 0, 5, 2], "intercept", 1.9444444444444446),
+        ([1, math.nan, 3, 4, 2, 6, 0, 5, 2], "slope", 2.166666666666667),
+        ([1, math.nan, math.nan, 4, 2, 6, 0, 5, 2], "intercept", math.nan),
+        ([1, math.nan, math.nan, 4, 2, 6, 0, 5, 2], "slope", math.nan),
+    ],
+)
+def test_agg_linear_trend_var_nan_generated(values, attr, expected):
+    _assert_feature(
+        values,
+        f"val__agg_linear_trend_{attr}__chunk_size_3__agg_var",
+        expected,
     )

@@ -201,6 +201,27 @@ pub(crate) fn roll(x: &mut [f64], shift: isize) -> &[f64] {
     x
 }
 
+/// Mean of the non-NaN values, like pandas' `mean` (skipna). NaN if every
+/// value is NaN.
+pub(crate) fn skip_nan_mean(x: &Array1<f64>) -> f64 {
+    let (sum, n) = x
+        .iter()
+        .filter(|v| !v.is_nan())
+        .fold((0.0, 0usize), |(s, n), v| (s + v, n + 1));
+    if n == 0 { f64::NAN } else { sum / n as f64 }
+}
+
+/// Sample variance (`ddof = 1`) of the non-NaN values, like pandas' `var`
+/// (skipna). NaN with fewer than 2 non-NaN values.
+pub(crate) fn skip_nan_sample_var(x: &Array1<f64>) -> f64 {
+    let values = Array1::from_iter(x.iter().copied().filter(|v| !v.is_nan()));
+    if values.len() < 2 {
+        f64::NAN
+    } else {
+        values.var(1.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
