@@ -550,3 +550,17 @@ def test_symmetry_looking(values, r, expected):
 )
 def test_symmetry_looking_nan_generated(values, r, expected):
     _assert_feature(values, f"val__symmetry_looking__r_{r}", expected)
+
+
+# kurtosis(np.array(x)) with pandas 3.0.2: NaN values are skipped
+# (skipna=True), so the n >= 4 rule applies to the non-NaN values.
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, math.nan, 3, -4, 2, 6], 1.6264345073209352),
+        ([1, math.nan, 2, math.nan, 3, 4], -1.2),
+        ([1, math.nan, 2, 3], math.nan),
+    ],
+)
+def test_kurtosis_nan_generated(values, expected):
+    _assert_feature(values, "val__kurtosis", expected)

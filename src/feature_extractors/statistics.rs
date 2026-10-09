@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use itertools::Itertools;
-use ndarray::{Axis, Ix1};
+use ndarray::{Array1, Axis, Ix1};
 use ndarray_stats::QuantileExt;
 use noisy_float::types::n64;
 use ordered_float::OrderedFloat;
@@ -369,7 +369,9 @@ fn _kurtosis(s: Column) -> Result<Column, PolarsError> {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let kurtosis = sample_excess_kurtosis(&arr.column(0));
+    // tsfresh calls pandas' kurtosis with skipna=True
+    let arr = Array1::from_iter(arr.iter().copied().filter(|x| !x.is_nan()));
+    let kurtosis = sample_excess_kurtosis(&arr.view());
     let s = Column::new("".into(), &[kurtosis]);
     Ok(s)
 }
