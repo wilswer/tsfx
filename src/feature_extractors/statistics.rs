@@ -347,12 +347,21 @@ fn _absolute_energy(s: Column) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
-/// Abolute energy feature.
+/// Absolute energy feature.
 ///
-/// The absolute energy of the time series,
-/// defined as the sum of the squared values of the time series:
-/// $$ \text{absolute energy} = \sum_{i=1}^{n}x_i^2,$$
+/// The sum of the squared values of the time series:
+/// $$ E = \sum_{i=1}^{n} x_i^2, $$
 /// where $n$ is the number of values in the time series.
+///
+/// # Output column
+/// `{name}__absolute_energy`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.abs_energy` (v0.21.2).
 pub fn absolute_energy(name: &str) -> Expr {
     col(name)
         .apply(_absolute_energy, |_, _| {
@@ -377,12 +386,25 @@ fn _kurtosis(s: Column) -> Result<Column, PolarsError> {
 
 /// Kurtosis feature.
 ///
-/// The bias-adjusted sample excess kurtosis $G_2$ of all values in the time series,
-/// matching tsfresh (`pandas.Series.kurtosis`):
+/// The bias-adjusted sample excess kurtosis $G_2$ of all values in the time
+/// series:
 /// $$ G_2 = \frac{n (n + 1) (n - 1) m_4}{(n - 2) (n - 3) m_2^2} - \frac{3 (n - 1)^2}{(n - 2) (n - 3)}, \quad m_k = \sum_{i=1}^{n} (x_i - \mu)^k, $$
-/// where $n$ is the number of values in the time series and $\mu$ is its mean. A normal distribution
-/// scores 0. NaN for fewer than 4 values, 0 for a constant series.
-/// See [`crate::utils::stats::sample_excess_kurtosis`].
+/// where $n$ is the number of non-NaN values and $\mu$ is their mean. A
+/// normal distribution scores 0. See
+/// [`crate::utils::stats::sample_excess_kurtosis`].
+///
+/// # Output column
+/// `{name}__kurtosis`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are skipped, like pandas' `skipna=True`.
+/// - Fewer than 4 (non-NaN) values give NaN.
+/// - A constant series gives 0. Near-constant series are treated as constant
+///   using pandas 3's floating-point tolerance.
+///
+/// # tsfresh
+/// `feature_calculators.kurtosis` (v0.21.2), i.e. `pandas.Series.kurtosis`.
 pub fn kurtosis(name: &str) -> Expr {
     col(name)
         .apply(_kurtosis, |_, _| {
@@ -404,6 +426,21 @@ fn _variance_larger_than_standard_deviation(s: Column) -> Result<Column, PolarsE
     Ok(s)
 }
 
+/// Variance larger than standard deviation feature.
+///
+/// Whether the population variance exceeds the population standard
+/// deviation, $\sigma^2 > \sigma$, which holds exactly when $\sigma^2 > 1$.
+/// Returns 1.0 for true and 0.0 for false.
+///
+/// # Output column
+/// `{name}__variance_larger_than_standard_deviation`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - A series containing NaN gives 0 (comparisons with NaN are false).
+///
+/// # tsfresh
+/// `feature_calculators.variance_larger_than_standard_deviation` (v0.21.2).
 pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
     col(name)
         .apply(_variance_larger_than_standard_deviation, |_, _| {
@@ -442,6 +479,28 @@ fn _ratio_beyond_r_sigma(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
+/// Ratio beyond r sigma feature.
+///
+/// The fraction of values more than $r$ population standard deviations away
+/// from the mean:
+/// $$ \frac{1}{n} \sum_{i=1}^{n} \mathbb{1}\left[\,|x_i - \mu| > r \sigma\,\right], $$
+/// where $n$ is the number of values, $\mu$ the mean and $\sigma$ the
+/// population standard deviation.
+///
+/// # Parameters
+/// - `r`: number of standard deviations. Config:
+///   `[ratio_beyond_r_sigma] parameters = [{ r = 1.0 }, ...]`; one column per
+///   entry.
+///
+/// # Output column
+/// `{name}__ratio_beyond_r_sigma__r_{r:.2}`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - A series containing NaN gives 0 (comparisons with NaN are false).
+///
+/// # tsfresh
+/// `feature_calculators.ratio_beyond_r_sigma` (v0.21.2).
 pub fn ratio_beyond_r_sigma(name: &str, rs: Vec<f64>) -> Expr {
     let name = name.to_string();
     let mut new_field_names = Vec::with_capacity(rs.len());
@@ -492,6 +551,26 @@ fn _large_standard_deviation(s: Column, rs: &[f64]) -> Result<Column, PolarsErro
     Ok(s)
 }
 
+/// Large standard deviation feature.
+///
+/// Whether the population standard deviation is larger than $r$ times the
+/// range of the series, $\sigma > r\,(\max_i x_i - \min_i x_i)$. Returns
+/// 1.0 for true and 0.0 for false.
+///
+/// # Parameters
+/// - `r`: fraction of the range. Config:
+///   `[large_standard_deviation] parameters = [{ r = 0.05 }, ...]`; one column
+///   per entry.
+///
+/// # Output column
+/// `{name}__large_standard_deviation__r_{r:.2}`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - A series containing NaN gives 0 (comparisons with NaN are false).
+///
+/// # tsfresh
+/// `feature_calculators.large_standard_deviation` (v0.21.2).
 pub fn large_standard_deviation(name: &str, rs: Vec<f64>) -> Expr {
     let mut new_field_names = Vec::with_capacity(rs.len());
     let mut struct_names = Vec::with_capacity(rs.len());
@@ -575,6 +654,29 @@ fn _symmetry_looking(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
+/// Symmetry looking feature.
+///
+/// Whether the distribution looks symmetric: the distance between mean and
+/// median is less than $r$ times the range,
+/// $|\mu - \tilde{x}| < r\,(\max_i x_i - \min_i x_i)$, where $\mu$ is the
+/// mean and $\tilde{x}$ the median. Returns 1.0 for true and 0.0 for false.
+///
+/// # Parameters
+/// - `r`: fraction of the range. Config:
+///   `[symmetry_looking] parameters = [{ r = 0.05 }, ...]`; one column per
+///   entry.
+///
+/// # Output column
+/// `{name}__symmetry_looking__r_{r:.2}`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - A series containing NaN gives 0 for every `r` (comparisons with NaN are
+///   false).
+/// - A constant series gives 0 (the range is 0, and `<` is strict).
+///
+/// # tsfresh
+/// `feature_calculators.symmetry_looking` (v0.21.2).
 pub fn symmetry_looking(name: &str, rs: Vec<f64>) -> Expr {
     let mut new_field_names = Vec::with_capacity(rs.len());
     let mut struct_names = Vec::with_capacity(rs.len());
@@ -617,6 +719,19 @@ fn _absolute_maximum(s: Column) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
+/// Absolute maximum feature.
+///
+/// The largest absolute value in the time series, $\max_i |x_i|$.
+///
+/// # Output column
+/// `{name}__absolute_maximum`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.absolute_maximum` (v0.21.2).
 pub fn absolute_maximum(name: &str) -> Expr {
     col(name)
         .apply(_absolute_maximum, |_, _| {
@@ -643,6 +758,20 @@ fn _variation_coefficient(s: Column) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
+/// Variation coefficient feature.
+///
+/// The population standard deviation relative to the mean, $\sigma / \mu$.
+///
+/// # Output column
+/// `{name}__variation_coefficient`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+/// - A mean of exactly 0 gives NaN.
+///
+/// # tsfresh
+/// `feature_calculators.variation_coefficient` (v0.21.2).
 pub fn variation_coefficient(name: &str) -> Expr {
     col(name)
         .apply(_variation_coefficient, |_, _| {
@@ -689,6 +818,23 @@ fn _mean_n_absolute_max(s: Column, ns: &[usize]) -> Result<Column, PolarsError> 
     Ok(s)
 }
 
+/// Mean of the n absolute maxima feature.
+///
+/// The arithmetic mean of the $n$ largest absolute values in the time series.
+///
+/// # Parameters
+/// - `n`: number of maxima. Config:
+///   `[mean_n_absolute_max] parameters = [{ n = 7 }]`; one column per entry.
+///
+/// # Output column
+/// `{name}__mean_n_absolute_max__n_{n}`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - A series with fewer than $n$ values gives NaN.
+///
+/// # tsfresh
+/// `feature_calculators.mean_n_absolute_max` (v0.21.2).
 pub fn mean_n_absolute_max(name: &str, ns: Vec<usize>) -> Expr {
     let mut new_field_names = Vec::with_capacity(ns.len());
     let mut struct_names = Vec::with_capacity(ns.len());
@@ -715,6 +861,29 @@ pub fn mean_n_absolute_max(name: &str, ns: Vec<usize>) -> Expr {
         .alias(format!("{}__mean_n_absolute_max", name))
 }
 
+/// Quantile feature.
+///
+/// The $q$-quantile of the values, with linear interpolation between the two
+/// nearest order statistics (`np.quantile`'s default): for sorted values
+/// $x_{(0)} \le \dots \le x_{(n-1)}$ and $h = (n - 1)\,q$,
+/// $$ Q(q) = x_{(\lfloor h \rfloor)} + (h - \lfloor h \rfloor)\left(x_{(\lceil h \rceil)} - x_{(\lfloor h \rfloor)}\right). $$
+/// Computed with the native Polars API.
+///
+/// # Parameters
+/// - `q`: quantile in $[0, 1]$. Config: `[quantile] parameters = [{ q = 0.1 }, ...]`;
+///   one column per entry.
+///
+/// # Output column
+/// `{name}__quantile__q_{q:.1}`
+///
+/// # Edge cases
+/// - Nulls are ignored; a group with no non-null values gives null (not NaN).
+/// - A series containing NaN gives NaN.
+/// - The column name rounds `q` to one decimal, so e.g. 0.25 and 0.2 would
+///   share a name.
+///
+/// # tsfresh
+/// `feature_calculators.quantile` (v0.21.2), i.e. `np.quantile`.
 pub fn expr_quantile(name: &str, q: f64) -> Expr {
     // Linear interpolation and NaN propagation, as np.quantile in tsfresh
     when(col(name).is_nan().any(true))
