@@ -787,7 +787,6 @@ def test_linear_trend(values, attr, expected):
     _assert_feature(values, f"val__linear_trend_{attr}", expected)
 
 
-# TSFX has no "median" chunk aggregator; tsfresh's max/min/mean cases only.
 @pytest.mark.parametrize(
     ("values", "agg", "attr", "expected"),
     [
@@ -797,14 +796,16 @@ def test_linear_trend(values, attr, expected):
         (list(range(9)), "min", "slope", 3),
         (list(range(9)), "mean", "intercept", 1),
         (list(range(9)), "mean", "slope", 3),
+        (list(range(9)), "median", "intercept", 1),
+        (list(range(9)), "median", "slope", 3),
         *[
             ([math.nan] * 3 + [-3] * 3, agg, attr, math.nan)
-            for agg in ("max", "min", "mean")
+            for agg in ("max", "min", "mean", "median")
             for attr in ("intercept", "slope")
         ],
         *[
             ([math.nan] * 2 + [-3] * 4, agg, attr, expected)
-            for agg in ("max", "min", "mean")
+            for agg in ("max", "min", "mean", "median")
             for attr, expected in (("intercept", -3), ("slope", 0))
         ],
     ],
@@ -1016,3 +1017,17 @@ def test_has_duplicate_extreme_nan_generated(values, extreme):
 )
 def test_sum_of_reoccurring_deviation(values, kind, expected):
     _assert_feature(values, f"val__sum_of_reoccurring_{kind}", expected)
+
+
+# agg_linear_trend(pd.Series(x), [{"attr": a, "chunk_len": 3, "f_agg":
+# "median"}]) with pandas 3.0.2: chunk median skips NaN.
+@pytest.mark.parametrize(
+    ("attr", "expected"),
+    [("intercept", 3.0), ("slope", 0.0)],
+)
+def test_agg_linear_trend_median_nan_generated(attr, expected):
+    _assert_feature(
+        [1, math.nan, 3, 4, math.nan, 6, 0, 5, 2],
+        f"val__agg_linear_trend_{attr}__chunk_size_3__agg_median",
+        expected,
+    )

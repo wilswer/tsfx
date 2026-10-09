@@ -464,6 +464,7 @@ pub struct AggLinearTrendParams {
 pub enum ChunkAggregator {
     #[default]
     Mean,
+    Median,
     Min,
     Max,
     Var,
@@ -473,6 +474,7 @@ impl Display for ChunkAggregator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
             ChunkAggregator::Mean => write!(f, "mean"),
+            ChunkAggregator::Median => write!(f, "median"),
             ChunkAggregator::Max => write!(f, "max"),
             ChunkAggregator::Min => write!(f, "min"),
             ChunkAggregator::Var => write!(f, "var"),

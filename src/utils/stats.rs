@@ -248,6 +248,26 @@ fn np_arg_extreme(x: &ArrayView1<f64>, better: fn(f64, f64) -> bool) -> Option<u
     best.map(|(i, _)| i)
 }
 
+/// Median of the non-NaN values, like pandas' `median` (skipna). NaN if
+/// every value is NaN.
+pub(crate) fn skip_nan_median(x: &Array1<f64>) -> f64 {
+    let mut values = x
+        .iter()
+        .copied()
+        .filter(|v| !v.is_nan())
+        .collect::<Vec<_>>();
+    if values.is_empty() {
+        return f64::NAN;
+    }
+    values.sort_by(|a, b| a.total_cmp(b));
+    let mid = values.len() / 2;
+    if values.len() % 2 == 0 {
+        (values[mid - 1] + values[mid]) / 2.0
+    } else {
+        values[mid]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

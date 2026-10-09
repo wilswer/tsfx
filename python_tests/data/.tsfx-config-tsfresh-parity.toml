@@ -69,6 +69,7 @@ parameters = [
     { chunk_size = 3, aggregator = "max" },
     { chunk_size = 3, aggregator = "min" },
     { chunk_size = 3, aggregator = "mean" },
+    { chunk_size = 3, aggregator = "median" },
 ]
 
 [has_duplicate]

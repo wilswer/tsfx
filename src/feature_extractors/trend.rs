@@ -6,7 +6,7 @@ use polars::lazy::dsl::*;
 use polars::prelude::*;
 
 use crate::utils::stats::{
-    aggregate_on_chunks, calculate_sequential_ols, skip_nan_mean, skip_nan_reduce,
+    aggregate_on_chunks, calculate_sequential_ols, skip_nan_mean, skip_nan_median, skip_nan_reduce,
     skip_nan_sample_var,
 };
 use crate::utils::toml_reader::ChunkAggregator;
@@ -86,6 +86,7 @@ fn _agg_linear_trend(
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let agg_arr = match aggregator {
         ChunkAggregator::Mean => aggregate_on_chunks(arr, chunk_size, |x| skip_nan_mean(&x)),
+        ChunkAggregator::Median => aggregate_on_chunks(arr, chunk_size, |x| skip_nan_median(&x)),
         ChunkAggregator::Max => {
             aggregate_on_chunks(arr, chunk_size, |x| skip_nan_reduce(&x, f64::max))
         }
