@@ -434,3 +434,16 @@ def test_sample_entropy_generated(values, expected):
 )
 def test_skewness_near_constant_generated(values, expected):
     _assert_feature(values, "val__skewness", expected)
+
+
+# has_duplicate(np.array(x)) with numpy 2.4.4; np.unique merges all NaNs into
+# one value (numpy >= 1.21).
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, math.nan, 3, 4, 2, 6], 0),
+        ([1, math.nan, math.nan, 2], 1),
+    ],
+)
+def test_has_duplicate_nan_generated(values, expected):
+    _assert_feature(values, "val__has_duplicate", expected)

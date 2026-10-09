@@ -1120,6 +1120,22 @@ pub fn longest_strike_above_mean(name: &str) -> Expr {
         .alias(format!("{}__longest_strike_above_mean", name))
 }
 
+/// Number of distinct values, counting all NaNs as one value like `np.unique`.
+fn _count_unique(arr: &ArrayView1<f64>) -> usize {
+    let sorted = arr
+        .iter()
+        .filter(|x| !x.is_nan())
+        .sorted_by(|a, b| a.total_cmp(b))
+        .collect::<Vec<_>>();
+    let distinct = if sorted.is_empty() {
+        0
+    } else {
+        1 + sorted.windows(2).filter(|win| win[0] != win[1]).count()
+    };
+    let has_nan = arr.iter().any(|x| x.is_nan());
+    distinct + has_nan as usize
+}
+
 fn _has_duplicate(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
@@ -1130,18 +1146,7 @@ fn _has_duplicate(s: Column) -> Result<Column, PolarsError> {
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let sarr = arr
-        .as_slice()
-        .unwrap()
-        .iter()
-        .sorted_by(|a, b| a.partial_cmp(b).unwrap())
-        .collect::<Vec<_>>();
-    let len = if sarr.is_empty() {
-        0
-    } else {
-        1 + sarr.windows(2).filter(|win| win[0] != win[1]).count()
-    };
-    let out = len < arr.len();
+    let out = _count_unique(&arr.view()) < arr.len();
     let s = Column::new("".into(), &[out as u8 as f64]);
     Ok(s)
 }
