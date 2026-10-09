@@ -522,3 +522,31 @@ _QUANTILE_X = [0.3, -1.2, 2.5, 0.7, -0.4, 1.9, 0.1, -2.2, 1.1, 0.6]
 )
 def test_quantile_generated(values, q, expected):
     _assert_feature(values, f"val__quantile__q_{q}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "r", "expected"),
+    [
+        ([-1, -1, 1, 1], "0.05", 1),
+        ([-1, -1, 1, 1], "0.75", 1),
+        ([-1, -1, 1, 1], "0.00", 0),
+        ([-1, -1, -1, -1, 1], "0.05", 0),
+        ([-2, -2, -2, -1, -1, -1], "0.05", 1),
+        ([-0.9, -0.900001], "0.05", 1),
+    ],
+)
+def test_symmetry_looking(values, r, expected):
+    _assert_feature(values, f"val__symmetry_looking__r_{r}", expected)
+
+
+# symmetry_looking(np.array(x), [{"r": r}]) with numpy 2.4.4: comparisons
+# with NaN are False.
+@pytest.mark.parametrize(
+    ("values", "r", "expected"),
+    [
+        ([1, math.nan, 3, -4, 2, 6], "0.05", 0),
+        ([1, math.nan, 3, -4, 2, 6], "0.75", 0),
+    ],
+)
+def test_symmetry_looking_nan_generated(values, r, expected):
+    _assert_feature(values, f"val__symmetry_looking__r_{r}", expected)

@@ -76,3 +76,6 @@ parameters = [
 
 [quantile]
 parameters = [{ q = 0.1 }, { q = 0.2 }, { q = 0.5 }, { q = 0.8 }, { q = 0.9 }, { q = 1.0 }]
+
+[symmetry_looking]
+parameters = [{ r = 0.0 }, { r = 0.05 }, { r = 0.75 }]

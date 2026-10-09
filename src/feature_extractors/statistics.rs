@@ -527,6 +527,16 @@ fn _symmetry_looking(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    // tsfresh: every comparison with a NaN mean/median is False
+    if arr.iter().any(|x| x.is_nan()) {
+        let ss = rs
+            .iter()
+            .map(|r| Column::new(format!("symmetry_looking__r_{:2}", r).into(), &[0.0]))
+            .collect::<Vec<_>>();
+        return Ok(DataFrame::new(1, ss)?
+            .into_struct("symmetry_looking".into())
+            .into_column());
+    }
     let mut arr = arr.mapv(n64);
     let median_res = median_mut(&mut arr);
     let median = match median_res {
