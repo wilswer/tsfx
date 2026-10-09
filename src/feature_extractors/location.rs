@@ -2,11 +2,11 @@
 
 use anyhow::Result;
 use ndarray::{Axis, Ix1, s};
-use ndarray_stats::QuantileExt;
 use polars::lazy::dsl::*;
 use polars::prelude::*;
 
 use super::_make_nan_struct_column;
+use crate::utils::stats::{np_argmax, np_argmin};
 
 fn _first_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
@@ -18,10 +18,10 @@ fn _first_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let max_res = arr.argmax();
+    let max_res = np_argmax(&arr.view());
     let max = match max_res {
-        Ok(m) => m,
-        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
+        Some(m) => m,
+        None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let out = max as f64 / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
@@ -47,10 +47,10 @@ fn _first_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let min_res = arr.argmin();
+    let min_res = np_argmin(&arr.view());
     let min = match min_res {
-        Ok(m) => m,
-        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
+        Some(m) => m,
+        None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let out = min as f64 / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
@@ -77,10 +77,10 @@ fn _last_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     // argmax of the reversed series gives the last occurrence
-    let max_res = arr.slice(s![..;-1]).argmax();
+    let max_res = np_argmax(&arr.slice(s![..;-1]));
     let max = match max_res {
-        Ok(m) => m,
-        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
+        Some(m) => m,
+        None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let out = 1.0 - (max as f64 / arr.len() as f64);
     let s = Column::new("".into(), &[out]);
@@ -107,10 +107,10 @@ fn _last_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     // argmin of the reversed series gives the last occurrence
-    let min_res = arr.slice(s![..;-1]).argmin();
+    let min_res = np_argmin(&arr.slice(s![..;-1]));
     let min = match min_res {
-        Ok(m) => m,
-        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
+        Some(m) => m,
+        None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let out = 1.0 - (min as f64 / arr.len() as f64);
     let s = Column::new("".into(), &[out]);

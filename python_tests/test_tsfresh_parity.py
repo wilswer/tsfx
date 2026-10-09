@@ -954,3 +954,20 @@ def test_sample_entropy_inf_is_nan():
         "val__sample_entropy",
         math.nan,
     )
+
+
+# first/last_location_of_maximum/minimum(np.array(x)) with numpy 2.4.4:
+# np.argmax/np.argmin return the index of the first NaN, so with NaN present
+# both "maximum" and "minimum" locate the first (or, reversed, last) NaN.
+_LOC_NAN = [
+    ([1, math.nan, 3, -4, 2, 6], 0.16666666666666666, 0.33333333333333337),
+    ([math.nan, 1, 2], 0.0, 0.33333333333333337),
+    ([1, math.nan, 3, math.nan, 2], 0.2, 0.8),
+]
+
+
+@pytest.mark.parametrize(("values", "first", "last"), _LOC_NAN)
+@pytest.mark.parametrize("extreme", ["maximum", "minimum"])
+def test_location_nan_generated(values, first, last, extreme):
+    _assert_feature(values, f"val__first_location_of_{extreme}", first)
+    _assert_feature(values, f"val__last_location_of_{extreme}", last)

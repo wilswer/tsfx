@@ -222,6 +222,32 @@ pub(crate) fn skip_nan_sample_var(x: &Array1<f64>) -> f64 {
     }
 }
 
+/// Index of the first maximum, like `np.argmax`: if the series contains NaN,
+/// the index of the first NaN. `None` for an empty series.
+pub(crate) fn np_argmax(x: &ArrayView1<f64>) -> Option<usize> {
+    np_arg_extreme(x, |a, b| a > b)
+}
+
+/// Index of the first minimum, like `np.argmin`: if the series contains NaN,
+/// the index of the first NaN. `None` for an empty series.
+pub(crate) fn np_argmin(x: &ArrayView1<f64>) -> Option<usize> {
+    np_arg_extreme(x, |a, b| a < b)
+}
+
+fn np_arg_extreme(x: &ArrayView1<f64>, better: fn(f64, f64) -> bool) -> Option<usize> {
+    if let Some(i) = x.iter().position(|v| v.is_nan()) {
+        return Some(i);
+    }
+    let mut best: Option<(usize, f64)> = None;
+    for (i, &v) in x.iter().enumerate() {
+        match best {
+            Some((_, b)) if !better(v, b) => {}
+            _ => best = Some((i, v)),
+        }
+    }
+    best.map(|(i, _)| i)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
