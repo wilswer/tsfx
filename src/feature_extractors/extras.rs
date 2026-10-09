@@ -359,6 +359,16 @@ fn _aggregate_on_chunks(
     Array1::from_vec(agg_arr)
 }
 
+/// Reduce the non-NaN values with `f`, like pandas' `max`/`min` (skipna).
+/// NaN if every value is NaN.
+fn _skip_nan_reduce(x: &Array1<f64>, f: fn(f64, f64) -> f64) -> f64 {
+    x.iter()
+        .copied()
+        .filter(|v| !v.is_nan())
+        .reduce(f)
+        .unwrap_or(f64::NAN)
+}
+
 fn _roll(x: &mut [f64], shift: isize) -> &[f64] {
     if shift > 0 {
         x.rotate_right(shift as usize);
@@ -1389,8 +1399,12 @@ fn _agg_linear_trend(
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let agg_arr = match aggregator {
         ChunkAggregator::Mean => _aggregate_on_chunks(arr, chunk_size, |x| x.mean().unwrap()),
-        ChunkAggregator::Max => _aggregate_on_chunks(arr, chunk_size, |x| *x.max().unwrap()),
-        ChunkAggregator::Min => _aggregate_on_chunks(arr, chunk_size, |x| *x.min().unwrap()),
+        ChunkAggregator::Max => {
+            _aggregate_on_chunks(arr, chunk_size, |x| _skip_nan_reduce(&x, f64::max))
+        }
+        ChunkAggregator::Min => {
+            _aggregate_on_chunks(arr, chunk_size, |x| _skip_nan_reduce(&x, f64::min))
+        }
         // ddof=1 on purpose: tsfresh aggregates chunks with pandas' Series.var
         ChunkAggregator::Var => _aggregate_on_chunks(arr, chunk_size, |x| x.var(1.0)),
     };

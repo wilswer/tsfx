@@ -64,7 +64,11 @@ parameters = [
 parameters = [{ r = 0.0 }, { r = 0.25 }, { r = 0.3 }, { r = 0.5 }]
 
 [agg_linear_trend]
-parameters = [{ chunk_size = 3, aggregator = "var" }]
+parameters = [
+    { chunk_size = 3, aggregator = "var" },
+    { chunk_size = 3, aggregator = "max" },
+    { chunk_size = 3, aggregator = "min" },
+]
 
 [has_duplicate]
 

@@ -465,3 +465,30 @@ def test_ratio_value_number_to_time_series_length_nan_generated(values, expected
         "val__ratio_value_number_to_time_series_length",
         expected,
     )
+
+
+# agg_linear_trend(pd.Series(x), [{"attr": a, "chunk_len": 3, "f_agg": f}])
+# with pandas 3.0.2: chunk max/min skip NaN.
+_AGG_NAN_A = [1, math.nan, 3, 4, 2, 6]
+_AGG_NAN_B = [1, math.nan, 3, 4, math.nan, 6, 0, 5, 2]
+
+
+@pytest.mark.parametrize(
+    ("values", "agg", "attr", "expected"),
+    [
+        (_AGG_NAN_A, "max", "intercept", 3.0),
+        (_AGG_NAN_A, "max", "slope", 3.0),
+        (_AGG_NAN_A, "min", "intercept", 1.0),
+        (_AGG_NAN_A, "min", "slope", 1.0),
+        (_AGG_NAN_B, "max", "intercept", 3.666666666666667),
+        (_AGG_NAN_B, "max", "slope", 1.0),
+        (_AGG_NAN_B, "min", "intercept", 2.166666666666667),
+        (_AGG_NAN_B, "min", "slope", -0.5),
+    ],
+)
+def test_agg_linear_trend_nan_generated(values, agg, attr, expected):
+    _assert_feature(
+        values,
+        f"val__agg_linear_trend_{attr}__chunk_size_3__agg_{agg}",
+        expected,
+    )
