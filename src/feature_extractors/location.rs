@@ -28,6 +28,23 @@ fn _first_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
+/// First location of maximum feature.
+///
+/// The relative position of the first occurrence of the maximum value, as a
+/// fraction of the series length $n$ (0-based index $i$):
+/// $$ \frac{i}{n}, \quad i = \min\{\,j : x_j = \max_k x_k\,\}. $$
+///
+/// # Output column
+/// `{name}__first_location_of_maximum`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - If the series contains NaN, NaN counts as the maximum (numpy's `np.argmax`
+///   rule), so the result is the position of the first NaN.
+/// - Ties resolve to the first occurrence.
+///
+/// # tsfresh
+/// `feature_calculators.first_location_of_maximum` (v0.21.2).
 pub fn first_location_of_maximum(name: &str) -> Expr {
     col(name)
         .apply(_first_location_of_maximum, |_, _| {
@@ -57,6 +74,23 @@ fn _first_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
+/// First location of minimum feature.
+///
+/// The relative position of the first occurrence of the minimum value, as a
+/// fraction of the series length $n$ (0-based index $i$):
+/// $$ \frac{i}{n}, \quad i = \min\{\,j : x_j = \min_k x_k\,\}. $$
+///
+/// # Output column
+/// `{name}__first_location_of_minimum`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - If the series contains NaN, NaN counts as the minimum (numpy's `np.argmin`
+///   rule), so the result is the position of the first NaN.
+/// - Ties resolve to the first occurrence.
+///
+/// # tsfresh
+/// `feature_calculators.first_location_of_minimum` (v0.21.2).
 pub fn first_location_of_minimum(name: &str) -> Expr {
     col(name)
         .apply(_first_location_of_minimum, |_, _| {
@@ -87,6 +121,23 @@ fn _last_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
+/// Last location of maximum feature.
+///
+/// The relative position of the last occurrence of the maximum value, as a
+/// fraction of the series length $n$ (0-based index $i$):
+/// $$ \frac{i + 1}{n}, \quad i = \max\{\,j : x_j = \max_k x_k\,\}. $$
+///
+/// # Output column
+/// `{name}__last_location_of_maximum`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - If the series contains NaN, NaN counts as the maximum (numpy's `np.argmax`
+///   rule), so the result is the position of the last NaN.
+/// - Ties resolve to the last occurrence.
+///
+/// # tsfresh
+/// `feature_calculators.last_location_of_maximum` (v0.21.2).
 pub fn last_location_of_maximum(name: &str) -> Expr {
     col(name)
         .apply(_last_location_of_maximum, |_, _| {
@@ -117,6 +168,23 @@ fn _last_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
+/// Last location of minimum feature.
+///
+/// The relative position of the last occurrence of the minimum value, as a
+/// fraction of the series length $n$ (0-based index $i$):
+/// $$ \frac{i + 1}{n}, \quad i = \max\{\,j : x_j = \min_k x_k\,\}. $$
+///
+/// # Output column
+/// `{name}__last_location_of_minimum`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - If the series contains NaN, NaN counts as the minimum (numpy's `np.argmin`
+///   rule), so the result is the position of the last NaN.
+/// - Ties resolve to the last occurrence.
+///
+/// # tsfresh
+/// `feature_calculators.last_location_of_minimum` (v0.21.2).
 pub fn last_location_of_minimum(name: &str) -> Expr {
     col(name)
         .apply(_last_location_of_minimum, |_, _| {
@@ -158,6 +226,29 @@ fn _index_mass_quantile(s: Column, qs: &[f64]) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
+/// Index mass quantile feature.
+///
+/// The relative position at which the cumulative absolute "mass" of the
+/// series first reaches the fraction $q$ of its total:
+/// $$ \frac{i + 1}{n}, \quad i = \min\left\{\, j : \frac{\sum_{k=0}^{j} |x_k|}{\sum_{k=0}^{n-1} |x_k|} \geq q \,\right\}, $$
+/// with 0-based indices and $n$ the number of values.
+///
+/// # Parameters
+/// - `q`: mass fraction in $[0, 1]$. Config:
+///   `[index_mass_quantile] parameters = [{ q = 0.1 }, ...]`; one column per
+///   entry.
+///
+/// # Output column
+/// `{name}__index_mass_quantile__q_{q}` (`q` in Rust's default formatting,
+/// e.g. `q_0.3`, `q_0.99`)
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - A series whose values are all 0 has no mass and gives NaN.
+/// - A series containing NaN gives $1/n$, as in tsfresh.
+///
+/// # tsfresh
+/// `feature_calculators.index_mass_quantile` (v0.21.2).
 pub fn index_mass_quantile(name: &str, qs: Vec<f64>) -> Expr {
     let mut new_field_names = Vec::with_capacity(qs.len());
     let mut struct_names = Vec::with_capacity(qs.len());
