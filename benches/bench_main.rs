@@ -7,4 +7,5 @@ criterion_main! {
     benchmarks::extract_minimal::benches,
     benchmarks::extract_efficient_with_time::benches,
     benchmarks::extract_efficient::benches,
+    benchmarks::extract_stocks::benches,
 }
