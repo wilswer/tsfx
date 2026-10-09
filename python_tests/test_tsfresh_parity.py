@@ -827,8 +827,12 @@ def test_number_peaks(n, expected):
 @pytest.mark.parametrize(
     ("values", "bounds", "expected"),
     [
+        ([1] * 10, "min_1.0__max_1.0", 0),
+        ([1] * 10, "min_0.9__max_1.0", 0),
         ([1] * 10, "min_1.0__max_1.1", 10),
+        (list(range(10)), "min_0.0__max_9.0", 9),
         (list(range(10)), "min_0.0__max_10.0", 10),
+        (list(range(0, -10, -1)), "min_-10.0__max_0.0", 9),
         (
             [math.nan, math.inf, -math.inf, *range(10)],
             "min_0.0__max_10.0",
@@ -874,3 +878,9 @@ def test_time_reversal_asymmetry_statistic(values, lag, expected):
         f"val__time_reversal_asymmetry_statistic__lag_{lag}",
         expected,
     )
+
+
+# range_count(np.array([1, 2, 3]), min=3, max=1) with numpy 2.4.4: an empty
+# interval counts nothing.
+def test_range_count_empty_interval_generated():
+    _assert_feature([1, 2, 3], "val__range_count__min_3.0__max_1.0", 0)

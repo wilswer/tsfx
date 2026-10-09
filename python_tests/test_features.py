@@ -954,7 +954,7 @@ def test_range_count():
     fdf = extract_features(df, opts)
     fdf = fdf.sort("id")
 
-    assert fdf.get_column("val__range_count__min_-1.0__max_1.0").to_list() == [1.0, 5.0]
+    assert fdf.get_column("val__range_count__min_-1.0__max_1.0").to_list() == [1.0, 3.0]
 
 
 def test_index_mass_quantile():

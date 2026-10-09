@@ -203,13 +203,11 @@ fn _range_count(s: Column, lower: f64, upper: f64) -> Result<Column, PolarsError
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    if upper < lower {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    // Half-open interval [lower, upper), as tsfresh; empty if upper <= lower
     let count = arr
         .into_iter()
-        .filter(|x| x >= &lower && x <= &upper)
+        .filter(|x| x >= &lower && x < &upper)
         .count();
     let s = Column::new("".into(), &[count as f64]);
     Ok(s)
