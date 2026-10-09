@@ -916,3 +916,12 @@ def test_agg_linear_trend_var_nan_generated(values, attr, expected):
         f"val__agg_linear_trend_{attr}__chunk_size_3__agg_var",
         expected,
     )
+
+
+# median(np.array(x)) with numpy 2.4.4: NaN in the series gives NaN.
+@pytest.mark.parametrize(
+    "values",
+    [[1, math.nan, 3], [1, math.nan, 3, 4, 2, 6]],
+)
+def test_median_nan_generated(values):
+    _assert_feature(values, "val__median", math.nan)

@@ -172,16 +172,15 @@ pub fn maximum(name: &str) -> Expr {
 ///
 /// # Edge cases
 /// - Nulls are ignored; a group with no non-null values gives null (not NaN).
-/// - **Known deviation:** Polars sorts NaN as the largest value, so a series
-///   containing NaN gives a number (e.g. `[1, NaN, 3]` gives 3.0), where
-///   tsfresh gives NaN.
+/// - A series containing NaN gives NaN.
 ///
 /// # tsfresh
 /// `feature_calculators.median` (v0.21.2).
 pub fn expr_median(name: &str) -> Expr {
-    col(name)
-        .median()
-        .cast(DataType::Float64)
+    // NaN propagation, as np.median in tsfresh
+    when(col(name).is_nan().any(true))
+        .then(lit(f64::NAN))
+        .otherwise(col(name).median().cast(DataType::Float64))
         .alias(format!("{}__median", name))
 }
 
