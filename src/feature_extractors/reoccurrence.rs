@@ -16,6 +16,10 @@ fn _has_duplicate_max(s: Column) -> Result<Column, PolarsError> {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    // tsfresh: np.max is NaN and x == NaN is never true, so the answer is 0
+    if arr.iter().any(|x| x.is_nan()) {
+        return Ok(Column::new("".into(), &[0.0]));
+    }
     let max_res = arr.max();
     let max = match max_res {
         Ok(m) => m,
@@ -42,6 +46,10 @@ fn _has_duplicate_min(s: Column) -> Result<Column, PolarsError> {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    // tsfresh: np.min is NaN and x == NaN is never true, so the answer is 0
+    if arr.iter().any(|x| x.is_nan()) {
+        return Ok(Column::new("".into(), &[0.0]));
+    }
     let min_res = arr.min();
     let min = match min_res {
         Ok(m) => m,

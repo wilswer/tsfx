@@ -971,3 +971,15 @@ _LOC_NAN = [
 def test_location_nan_generated(values, first, last, extreme):
     _assert_feature(values, f"val__first_location_of_{extreme}", first)
     _assert_feature(values, f"val__last_location_of_{extreme}", last)
+
+
+# has_duplicate_max/min(np.array(x)) with numpy 2.4.4: np.max/np.min of a
+# series containing NaN is NaN and x == NaN is False everywhere, so the
+# result is False.
+@pytest.mark.parametrize(
+    "values",
+    [[1, math.nan, 3, 1, math.nan, 6], [6, 6, math.nan], [math.nan, 0, 0]],
+)
+@pytest.mark.parametrize("extreme", ["max", "min"])
+def test_has_duplicate_extreme_nan_generated(values, extreme):
+    _assert_feature(values, f"val__has_duplicate_{extreme}", 0)
