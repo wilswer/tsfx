@@ -49,6 +49,29 @@ fn _autocorrelation(s: Column, lags: &[usize]) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
+/// Autocorrelation feature.
+///
+/// The autocorrelation of the series with itself shifted by `lag`, using the
+/// mean $\mu$ and population variance $\sigma^2$ of the whole series:
+/// $$ R(l) = \frac{1}{(n - l)\,\sigma^2} \sum_{t=1}^{n-l} (x_t - \mu)(x_{t+l} - \mu). $$
+/// See [`crate::utils::stats::population_var`].
+///
+/// # Parameters
+/// - `lag`: shift $l$. Config:
+///   `[autocorrelation] parameters = [{ lag = 0 }, ...]`; one column per entry.
+///
+/// # Output column
+/// `{name}__autocorrelation__lag_{lag}`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - `lag` $\geq n$ gives NaN.
+/// - A series with (near-)zero variance, $|\sigma^2| \leq 10^{-8}$ (tsfresh's
+///   `np.isclose(v, 0)`), gives NaN for every lag.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.autocorrelation` (v0.21.2).
 pub fn autocorrelation(name: &str, lags: Vec<usize>) -> Expr {
     let mut new_field_names = Vec::with_capacity(lags.len());
     let mut struct_names = Vec::with_capacity(lags.len());
@@ -109,6 +132,26 @@ fn _c3(s: Column, lag: usize) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
+/// C3 non-linearity feature.
+///
+/// The mean of the product of the series at three points spaced `lag`
+/// apart, a measure of non-linearity (Schreiber & Schmitz, 1997):
+/// $$ \frac{1}{n - 2l} \sum_{i=1}^{n-2l} x_{i+2l}\, x_{i+l}\, x_i. $$
+///
+/// # Parameters
+/// - `lag`: spacing $l$. Config: `[c3] parameters = [{ lag = 1 }, ...]`; one
+///   column per entry.
+///
+/// # Output column
+/// `{name}__c3__lag_{lag}`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - $2l \geq n$ (no complete triple) gives 0, as in tsfresh.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.c3` (v0.21.2).
 pub fn c3(name: &str, lag: usize) -> Expr {
     col(name)
         .apply(
@@ -152,6 +195,28 @@ fn _time_reversal_asymmetry_statistic(s: Column, lag: usize) -> Result<Column, P
     Ok(s)
 }
 
+/// Time reversal asymmetry statistic feature.
+///
+/// A measure of how differently the series behaves forwards and backwards in
+/// time (Fulcher & Jones, 2014):
+/// $$ \frac{1}{n - 2l} \sum_{i=1}^{n-2l} \left( x_{i+2l}^2\, x_{i+l} - x_{i+l}\, x_i^2 \right). $$
+/// A time-reversible series scores close to 0.
+///
+/// # Parameters
+/// - `lag`: spacing $l$. Config:
+///   `[time_reversal_asymmetry_statistic] parameters = [{ lag = 1 }, ...]`; one
+///   column per entry.
+///
+/// # Output column
+/// `{name}__time_reversal_asymmetry_statistic__lag_{lag}`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - $2l \geq n$ (no complete triple) gives 0, as in tsfresh.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.time_reversal_asymmetry_statistic` (v0.21.2).
 pub fn time_reversal_asymmetry_statistic(name: &str, lag: usize) -> Expr {
     col(name)
         .apply(
