@@ -705,7 +705,9 @@ pub fn mean_n_absolute_max(name: &str, ns: Vec<usize>) -> Expr {
 }
 
 pub fn expr_quantile(name: &str, q: f64) -> Expr {
-    quantile(name, lit(q), QuantileMethod::Midpoint)
-        .cast(DataType::Float64)
+    // Linear interpolation and NaN propagation, as np.quantile in tsfresh
+    when(col(name).is_nan().any(true))
+        .then(lit(f64::NAN))
+        .otherwise(quantile(name, lit(q), QuantileMethod::Linear).cast(DataType::Float64))
         .alias(format!("{}__quantile__q_{:.1}", name, q))
 }

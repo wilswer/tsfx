@@ -492,3 +492,33 @@ def test_agg_linear_trend_nan_generated(values, agg, attr, expected):
         f"val__agg_linear_trend_{attr}__chunk_size_3__agg_{agg}",
         expected,
     )
+
+
+@pytest.mark.parametrize(
+    ("values", "q", "expected"),
+    [
+        ([1, 1, 1, 3, 4, 7, 9, 11, 13, 13], "0.2", 1.0),
+        ([1, 1, 1, 3, 4, 7, 9, 11, 13, 13], "0.9", 13),
+        ([1, 1, 1, 3, 4, 7, 9, 11, 13, 13], "1.0", 13),
+        ([1], "0.5", 1),
+    ],
+)
+def test_quantile(values, q, expected):
+    _assert_feature(values, f"val__quantile__q_{q}", expected)
+
+
+# quantile(np.array(x), q) with numpy 2.4.4 (linear interpolation; NaN in
+# the series gives NaN).
+_QUANTILE_X = [0.3, -1.2, 2.5, 0.7, -0.4, 1.9, 0.1, -2.2, 1.1, 0.6]
+
+
+@pytest.mark.parametrize(
+    ("values", "q", "expected"),
+    [
+        (_QUANTILE_X, "0.1", -1.3),
+        (_QUANTILE_X, "0.8", 1.26),
+        ([1, math.nan, 3, -4, 2, 6], "0.5", math.nan),
+    ],
+)
+def test_quantile_generated(values, q, expected):
+    _assert_feature(values, f"val__quantile__q_{q}", expected)

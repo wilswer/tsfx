@@ -73,3 +73,6 @@ parameters = [
 [has_duplicate]
 
 [ratio_value_number_to_time_series_length]
+
+[quantile]
+parameters = [{ q = 0.1 }, { q = 0.2 }, { q = 0.5 }, { q = 0.8 }, { q = 0.9 }, { q = 1.0 }]
