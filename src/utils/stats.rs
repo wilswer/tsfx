@@ -1,6 +1,11 @@
 //! Shared statistical conventions for the feature extractors.
 
-use ndarray::ArrayView1;
+use std::ops::{Add, Div, Mul, Rem, Sub};
+
+use itertools::Itertools;
+use ndarray::{Array1, ArrayView1, Axis};
+use ndarray_stats::errors::QuantileError;
+use num::FromPrimitive;
 
 /// Population variance (`ddof = 0`) of a series.
 ///
@@ -83,6 +88,108 @@ pub fn sample_excess_kurtosis(arr: &ArrayView1<f64>) -> f64 {
     }
     let adj = 3.0 * (n - 1.0).powi(2) / ((n - 2.0) * (n - 3.0));
     n * (n + 1.0) * (n - 1.0) * m4 / denominator - adj
+}
+
+/// Calculates the Ordinary Least Squares (OLS) slope and intercept
+/// for a sequence of y-values where x-values are assumed to be a sequential index (0, 1, 2, ..., N-1).
+/// Returns a tuple of (intercept, slope).
+pub(crate) fn calculate_sequential_ols(
+    y_values: impl IntoIterator<Item = f64>,
+    n: usize,
+) -> (f64, f64) {
+    // Cannot fit a line with fewer than 2 points
+    if n < 2 {
+        return (f64::NAN, f64::NAN);
+    }
+
+    let n_f64 = n as f64;
+    let mut sum_y = 0.0;
+    let mut sum_xy = 0.0;
+
+    // Calculate sums in a single pass
+    for (i, val) in y_values.into_iter().enumerate() {
+        sum_y += val;
+        sum_xy += (i as f64) * val;
+    }
+
+    let mean_x = (n_f64 - 1.0) / 2.0;
+    let mean_y = sum_y / n_f64;
+
+    // Sum of squares of x (SS_xx) for a sequence 0..n-1 has a known closed-form formula
+    let ss_xx = n_f64 * (n_f64 * n_f64 - 1.0) / 12.0;
+
+    // Sum of products (SS_xy)
+    let ss_xy = sum_xy - n_f64 * mean_x * mean_y;
+
+    let slope = ss_xy / ss_xx;
+    let intercept = mean_y - slope * mean_x;
+
+    (intercept, slope)
+}
+
+/// Number of distinct values, counting all NaNs as one value like `np.unique`.
+pub(crate) fn count_unique(arr: &ArrayView1<f64>) -> usize {
+    let sorted = arr
+        .iter()
+        .filter(|x| !x.is_nan())
+        .sorted_by(|a, b| a.total_cmp(b))
+        .collect::<Vec<_>>();
+    let distinct = if sorted.is_empty() {
+        0
+    } else {
+        1 + sorted.windows(2).filter(|win| win[0] != win[1]).count()
+    };
+    let has_nan = arr.iter().any(|x| x.is_nan());
+    distinct + has_nan as usize
+}
+
+/// Reduce the non-NaN values with `f`, like pandas' `max`/`min` (skipna).
+/// NaN if every value is NaN.
+pub(crate) fn skip_nan_reduce(x: &Array1<f64>, f: fn(f64, f64) -> f64) -> f64 {
+    x.iter()
+        .copied()
+        .filter(|v| !v.is_nan())
+        .reduce(f)
+        .unwrap_or(f64::NAN)
+}
+
+pub(crate) fn aggregate_on_chunks(
+    x: Array1<f64>,
+    chunk_size: usize,
+    aggregator: impl Fn(Array1<f64>) -> f64,
+) -> Array1<f64> {
+    let mut agg_arr = Vec::with_capacity(x.len().div_ceil(chunk_size));
+    for chunk in x.axis_chunks_iter(Axis(0), chunk_size) {
+        agg_arr.push(aggregator(chunk.to_owned()));
+    }
+    Array1::from_vec(agg_arr)
+}
+
+pub(crate) fn get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize> {
+    let mut group_lengths = Vec::new();
+    for (key, group) in &x.into_iter().chunk_by(|elt| *elt) {
+        if *key {
+            group_lengths.push(group.count());
+        }
+    }
+    group_lengths
+}
+
+/// Return the median. Sorts its argument in place.
+pub(crate) fn median_mut<T>(xs: &mut Array1<T>) -> Result<T, QuantileError>
+where
+    T: Clone + Copy + Ord + FromPrimitive,
+    T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Div<Output = T> + Rem<Output = T>,
+{
+    if xs.is_empty() {
+        return Err(QuantileError::EmptyInput);
+    }
+    xs.as_slice_mut().unwrap().sort_unstable();
+    Ok(if xs.len().is_multiple_of(2) {
+        (xs[xs.len() / 2] + xs[xs.len() / 2 - 1]) / (T::from_u64(2).unwrap())
+    } else {
+        xs[xs.len() / 2]
+    })
 }
 
 #[cfg(test)]

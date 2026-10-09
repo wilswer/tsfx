@@ -1,4 +1,3 @@
-use std::ops::{Add, Div, Mul, Rem, Sub};
 use std::{fmt::Display, str::FromStr};
 
 use anyhow::Result;
@@ -6,51 +5,18 @@ use itertools::Itertools;
 use itertools::izip;
 use ndarray::ArrayView1;
 use ndarray::{Array1, Axis, Ix1, s};
-use ndarray_stats::errors::QuantileError;
 use ndarray_stats::{QuantileExt, interpolate::Midpoint};
 use noisy_float::types::n64;
-use num::FromPrimitive;
 use ordered_float::OrderedFloat;
 use polars::lazy::dsl::*;
 use polars::prelude::*;
 
 use crate::extract::ExtractionSettings;
-use crate::utils::stats::{population_std, population_var, sample_excess_kurtosis};
+use crate::utils::stats::{
+    aggregate_on_chunks, calculate_sequential_ols, count_unique, get_length_sequences_where,
+    median_mut, population_std, population_var, sample_excess_kurtosis, skip_nan_reduce,
+};
 use crate::utils::toml_reader::load_config;
-
-/// Calculates the Ordinary Least Squares (OLS) slope and intercept
-/// for a sequence of y-values where x-values are assumed to be a sequential index (0, 1, 2, ..., N-1).
-/// Returns a tuple of (intercept, slope).
-pub fn calculate_sequential_ols(y_values: impl IntoIterator<Item = f64>, n: usize) -> (f64, f64) {
-    // Cannot fit a line with fewer than 2 points
-    if n < 2 {
-        return (f64::NAN, f64::NAN);
-    }
-
-    let n_f64 = n as f64;
-    let mut sum_y = 0.0;
-    let mut sum_xy = 0.0;
-
-    // Calculate sums in a single pass
-    for (i, val) in y_values.into_iter().enumerate() {
-        sum_y += val;
-        sum_xy += (i as f64) * val;
-    }
-
-    let mean_x = (n_f64 - 1.0) / 2.0;
-    let mean_y = sum_y / n_f64;
-
-    // Sum of squares of x (SS_xx) for a sequence 0..n-1 has a known closed-form formula
-    let ss_xx = n_f64 * (n_f64 * n_f64 - 1.0) / 12.0;
-
-    // Sum of products (SS_xy)
-    let ss_xy = sum_xy - n_f64 * mean_x * mean_y;
-
-    let slope = ss_xy / ss_xx;
-    let intercept = mean_y - slope * mean_x;
-
-    (intercept, slope)
-}
 
 pub fn extra_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
     let config = match &opts.config_path {
@@ -284,23 +250,6 @@ impl Display for ChunkAggregator {
     }
 }
 
-/// Return the median. Sorts its argument in place.
-fn _median_mut<T>(xs: &mut Array1<T>) -> Result<T, QuantileError>
-where
-    T: Clone + Copy + Ord + FromPrimitive,
-    T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Div<Output = T> + Rem<Output = T>,
-{
-    if xs.is_empty() {
-        return Err(QuantileError::EmptyInput);
-    }
-    xs.as_slice_mut().unwrap().sort_unstable();
-    Ok(if xs.len().is_multiple_of(2) {
-        (xs[xs.len() / 2] + xs[xs.len() / 2 - 1]) / (T::from_u64(2).unwrap())
-    } else {
-        xs[xs.len() / 2]
-    })
-}
-
 fn _make_nan_struct_column(
     name: &str,
     parameter_name: &str,
@@ -335,38 +284,6 @@ fn _make_nan_struct_column_int(
         .into_struct(name.into())
         .into_column();
     Ok(s)
-}
-
-fn _get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize> {
-    let mut group_lengths = Vec::new();
-    for (key, group) in &x.into_iter().chunk_by(|elt| *elt) {
-        if *key {
-            group_lengths.push(group.count());
-        }
-    }
-    group_lengths
-}
-
-fn _aggregate_on_chunks(
-    x: Array1<f64>,
-    chunk_size: usize,
-    aggregator: impl Fn(Array1<f64>) -> f64,
-) -> Array1<f64> {
-    let mut agg_arr = Vec::with_capacity(x.len().div_ceil(chunk_size));
-    for chunk in x.axis_chunks_iter(Axis(0), chunk_size) {
-        agg_arr.push(aggregator(chunk.to_owned()));
-    }
-    Array1::from_vec(agg_arr)
-}
-
-/// Reduce the non-NaN values with `f`, like pandas' `max`/`min` (skipna).
-/// NaN if every value is NaN.
-fn _skip_nan_reduce(x: &Array1<f64>, f: fn(f64, f64) -> f64) -> f64 {
-    x.iter()
-        .copied()
-        .filter(|v| !v.is_nan())
-        .reduce(f)
-        .unwrap_or(f64::NAN)
 }
 
 fn _roll(x: &mut [f64], shift: isize) -> &[f64] {
@@ -651,7 +568,7 @@ fn _symmetry_looking(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let mut arr = arr.mapv(n64);
-    let median_res = _median_mut(&mut arr);
+    let median_res = median_mut(&mut arr);
     let median = match median_res {
         Ok(m) => f64::from(m),
         Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
@@ -1080,7 +997,7 @@ fn _longest_strike_below_mean(s: Column) -> Result<Column, PolarsError> {
         None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let bool_arr = arr.mapv(|x| x < mean);
-    let out = _get_length_sequences_where(&bool_arr)
+    let out = get_length_sequences_where(&bool_arr)
         .into_iter()
         .max()
         .unwrap_or(0);
@@ -1113,7 +1030,7 @@ fn _longest_strike_above_mean(s: Column) -> Result<Column, PolarsError> {
         None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
     let bool_arr = arr.mapv(|x| x > mean);
-    let out = _get_length_sequences_where(&bool_arr)
+    let out = get_length_sequences_where(&bool_arr)
         .into_iter()
         .max()
         .unwrap_or(0);
@@ -1130,22 +1047,6 @@ pub fn longest_strike_above_mean(name: &str) -> Expr {
         .alias(format!("{}__longest_strike_above_mean", name))
 }
 
-/// Number of distinct values, counting all NaNs as one value like `np.unique`.
-fn _count_unique(arr: &ArrayView1<f64>) -> usize {
-    let sorted = arr
-        .iter()
-        .filter(|x| !x.is_nan())
-        .sorted_by(|a, b| a.total_cmp(b))
-        .collect::<Vec<_>>();
-    let distinct = if sorted.is_empty() {
-        0
-    } else {
-        1 + sorted.windows(2).filter(|win| win[0] != win[1]).count()
-    };
-    let has_nan = arr.iter().any(|x| x.is_nan());
-    distinct + has_nan as usize
-}
-
 fn _has_duplicate(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
@@ -1156,7 +1057,7 @@ fn _has_duplicate(s: Column) -> Result<Column, PolarsError> {
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let out = _count_unique(&arr.view()) < arr.len();
+    let out = count_unique(&arr.view()) < arr.len();
     let s = Column::new("".into(), &[out as u8 as f64]);
     Ok(s)
 }
@@ -1236,7 +1137,7 @@ fn _ratio_value_number_to_time_series_length(s: Column) -> Result<Column, Polars
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let out = _count_unique(&arr.view()) as f64 / arr.len() as f64;
+    let out = count_unique(&arr.view()) as f64 / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
     Ok(s)
 }
@@ -1398,15 +1299,15 @@ fn _agg_linear_trend(
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let agg_arr = match aggregator {
-        ChunkAggregator::Mean => _aggregate_on_chunks(arr, chunk_size, |x| x.mean().unwrap()),
+        ChunkAggregator::Mean => aggregate_on_chunks(arr, chunk_size, |x| x.mean().unwrap()),
         ChunkAggregator::Max => {
-            _aggregate_on_chunks(arr, chunk_size, |x| _skip_nan_reduce(&x, f64::max))
+            aggregate_on_chunks(arr, chunk_size, |x| skip_nan_reduce(&x, f64::max))
         }
         ChunkAggregator::Min => {
-            _aggregate_on_chunks(arr, chunk_size, |x| _skip_nan_reduce(&x, f64::min))
+            aggregate_on_chunks(arr, chunk_size, |x| skip_nan_reduce(&x, f64::min))
         }
         // ddof=1 on purpose: tsfresh aggregates chunks with pandas' Series.var
-        ChunkAggregator::Var => _aggregate_on_chunks(arr, chunk_size, |x| x.var(1.0)),
+        ChunkAggregator::Var => aggregate_on_chunks(arr, chunk_size, |x| x.var(1.0)),
     };
     let agg_len = agg_arr.len();
     let (s_i, s_s) = calculate_sequential_ols(agg_arr, agg_len);
