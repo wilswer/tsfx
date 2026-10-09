@@ -2,11 +2,9 @@ use anyhow::Result;
 use polars::prelude::*;
 
 use crate::error::ExtractionError;
-use crate::feature_extractors::extras::extra_aggregators;
-use crate::feature_extractors::high_comp_cost::high_comp_cost_aggregators;
-use crate::feature_extractors::minimal::minimal_aggregators;
+use crate::feature_extractors::aggregators;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FeatureSetting {
     Minimal,
     Efficient,
@@ -31,27 +29,11 @@ pub struct ExtractionSettings {
     pub dynamic_settings: Option<DynamicGroupBySettings>,
 }
 
-fn get_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
-    let mut aggregators = minimal_aggregators(opts);
-    match opts.feature_setting {
-        FeatureSetting::Minimal => aggregators,
-        FeatureSetting::Efficient => {
-            aggregators.append(&mut extra_aggregators(opts));
-            aggregators
-        }
-        FeatureSetting::Comprehensive => {
-            aggregators.append(&mut extra_aggregators(opts));
-            aggregators.append(&mut high_comp_cost_aggregators(&opts.value_cols));
-            aggregators
-        }
-    }
-}
-
 pub fn lazy_feature_df(
     df: LazyFrame,
     opts: ExtractionSettings,
 ) -> Result<LazyFrame, ExtractionError> {
-    let aggregators = get_aggregators(&opts);
+    let aggregators = aggregators(&opts)?;
     let grouping_cols: Vec<Expr> = opts.grouping_cols.into_iter().map(col).collect();
     let mut selected_cols = grouping_cols.clone();
     for val_col in &opts.value_cols {
@@ -215,7 +197,8 @@ mod tests {
                 .unwrap(),
             df!["value__median" => [1.0, 2.0, 3.0]].unwrap()
         );
-        assert!(
+        // tsfresh: the (population) standard deviation of a single value is 0
+        assert_eq!(
             gdf.clone()
                 .sort(
                     ["id"],
@@ -223,17 +206,10 @@ mod tests {
                         ..Default::default()
                     }
                 )
-                .select([col("value__standard_deviation").cast(DataType::Float32)])
+                .select([col("value__standard_deviation")])
                 .collect()
-                .unwrap()
-                .column("value__standard_deviation")
-                .unwrap()
-                .clone()
-                .into_materialized_series()
-                .iter()
-                .next()
-                .unwrap()
-                .is_nan()
+                .unwrap(),
+            df!["value__standard_deviation" => [0.0, 0.0, 0.0]].unwrap()
         );
     }
 }

@@ -13,7 +13,7 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
-dependencies = ["polars==1.40.0", "pyarrow"]
+dependencies = ["polars==1.44.2", "pyarrow"]
 
 [project.optional-dependencies]
 dev = ["maturin", "ruff", "mypy", "pre-commit", "pytest", "bump-my-version", "mkdocs-material", "mkdocstrings[python]"]

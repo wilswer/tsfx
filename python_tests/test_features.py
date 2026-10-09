@@ -574,7 +574,7 @@ def test_standard_deviation():
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__standard_deviation").to_list()[0] == 0
-    assert math.isnan(fdf.get_column("val__standard_deviation").to_list()[-1])
+    assert fdf.get_column("val__standard_deviation").to_list()[-1] == 0
 
 
 def test_variance():
@@ -594,7 +594,7 @@ def test_variance():
     fdf = fdf.sort("id")
 
     assert fdf.get_column("val__variance").to_list()[0] == 0
-    assert math.isnan(fdf.get_column("val__variance").to_list()[-1])
+    assert fdf.get_column("val__variance").to_list()[-1] == 0
 
 
 def test_variance_larger_than_standard_deviation():
@@ -613,7 +613,7 @@ def test_variance_larger_than_standard_deviation():
     fdf = fdf.sort("id")
     assert (
         fdf.get_column("val__variance_larger_than_standard_deviation").to_list()[0]
-        == 1.0
+        == 0.0
     )
     assert (
         fdf.get_column("val__variance_larger_than_standard_deviation").to_list()[1]
@@ -637,7 +637,7 @@ def test_large_standard_deviation():
     fdf = fdf.sort("id")
     assert fdf.get_column("val__large_standard_deviation__r_0.25").to_list()[0] == 1.0
     assert fdf.get_column("val__large_standard_deviation__r_0.30").to_list()[0] == 1.0
-    assert fdf.get_column("val__large_standard_deviation__r_0.50").to_list()[0] == 1.0
+    assert fdf.get_column("val__large_standard_deviation__r_0.50").to_list()[0] == 0.0
     assert fdf.get_column("val__large_standard_deviation__r_0.70").to_list()[0] == 0.0
 
 
@@ -768,7 +768,7 @@ def test_percentage_of_reoccurring_values_to_all_datapoints():
 
     assert fdf.get_column(
         "val__percentage_of_reoccurring_values_to_all_datapoints",
-    ).to_list() == pytest.approx([0.25, 0.2, 0.0, 0.5])
+    ).to_list() == pytest.approx([0.5, 0.4, 0.0, 1.0])
 
 
 def test_agg_linear_trend_intercept():
@@ -935,7 +935,7 @@ def test_number_crossing_m4():
     fdf = extract_features(df, opts)
     fdf = fdf.sort("id")
 
-    assert fdf.get_column("val__number_crossing_m__m_0.0").to_list() == [1.0, 1.0]
+    assert fdf.get_column("val__number_crossing_m__m_0.0").to_list() == [1.0, 3.0]
 
 
 def test_range_count():
@@ -954,7 +954,7 @@ def test_range_count():
     fdf = extract_features(df, opts)
     fdf = fdf.sort("id")
 
-    assert fdf.get_column("val__range_count__min_-1.0__max_1.0").to_list() == [1.0, 5.0]
+    assert fdf.get_column("val__range_count__min_-1.0__max_1.0").to_list() == [1.0, 3.0]
 
 
 def test_index_mass_quantile():
