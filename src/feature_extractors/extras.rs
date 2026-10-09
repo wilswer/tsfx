@@ -1226,18 +1226,7 @@ fn _ratio_value_number_to_time_series_length(s: Column) -> Result<Column, Polars
         .remove_axis(Axis(1))
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let sarr = arr
-        .as_slice()
-        .unwrap()
-        .iter()
-        .sorted_by(|a, b| a.partial_cmp(b).unwrap())
-        .collect::<Vec<_>>();
-    let len_unique = if sarr.is_empty() {
-        0
-    } else {
-        1 + sarr.windows(2).filter(|win| win[0] != win[1]).count()
-    };
-    let out = len_unique as f64 / arr.len() as f64;
+    let out = _count_unique(&arr.view()) as f64 / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
     Ok(s)
 }

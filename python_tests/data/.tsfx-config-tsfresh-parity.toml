@@ -67,3 +67,5 @@ parameters = [{ r = 0.0 }, { r = 0.25 }, { r = 0.3 }, { r = 0.5 }]
 parameters = [{ chunk_size = 3, aggregator = "var" }]
 
 [has_duplicate]
+
+[ratio_value_number_to_time_series_length]

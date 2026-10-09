@@ -447,3 +447,21 @@ def test_skewness_near_constant_generated(values, expected):
 )
 def test_has_duplicate_nan_generated(values, expected):
     _assert_feature(values, "val__has_duplicate", expected)
+
+
+# ratio_value_number_to_time_series_length(np.array(x)) with numpy 2.4.4;
+# np.unique merges all NaNs into one value (numpy >= 1.21).
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, math.nan, 3, 4, 2, 6], 1.0),
+        ([1, math.nan, math.nan, 2], 0.75),
+        ([math.nan, math.nan, 1, 1], 0.5),
+    ],
+)
+def test_ratio_value_number_to_time_series_length_nan_generated(values, expected):
+    _assert_feature(
+        values,
+        "val__ratio_value_number_to_time_series_length",
+        expected,
+    )
