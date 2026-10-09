@@ -4,6 +4,7 @@ use polars::prelude::*;
 use crate::utils::stats::{population_std, population_var, sample_skewness};
 use crate::{extract::ExtractionSettings, utils::toml_reader::load_config};
 
+/// Expressions for the Minimal feature set enabled in the config.
 pub fn minimal_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
     let config = match &opts.config_path {
         Some(file) => load_config(Some(file.as_str())),
@@ -47,7 +48,18 @@ pub fn minimal_aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
 
 /// Length feature.
 ///
-/// The length of the time series
+/// The number of non-null values in the time series. Only the first value
+/// column is counted, since all value columns share the same rows.
+///
+/// # Output column
+/// `length` (no column-name prefix)
+///
+/// # Edge cases
+/// - Nulls are not counted; NaN values are. A group with no non-null values
+///   gives 0.
+///
+/// # tsfresh
+/// `feature_calculators.length` (v0.21.2).
 pub fn count(name: &str) -> Expr {
     col(name).count().alias("length")
 }
@@ -69,7 +81,18 @@ fn _out(_: &Schema, _: &Field) -> Result<Field, PolarsError> {
 
 /// Sum of values feature.
 ///
-/// The sum of all values in the time series
+/// The sum of all values in the time series:
+/// $$ \sum_{i=1}^{n} x_i. $$
+///
+/// # Output column
+/// `{name}__sum_values`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.sum_values` (v0.21.2).
 pub fn sum_values(name: &str) -> Expr {
     col(name)
         .apply(_sum_values, |_, _| {
@@ -92,9 +115,19 @@ fn _mean(s: Column) -> Result<Column, PolarsError> {
 
 /// Mean feature.
 ///
-/// The mean of all values in the time series, where mean $\mu$ is
+/// The arithmetic mean of all values in the time series:
 /// $$ \mu = \frac{1}{n} \sum_{i=1}^{n} x_i, $$
-/// where $n$ is the number of values in the time series
+/// where $n$ is the number of values in the time series.
+///
+/// # Output column
+/// `{name}__mean`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.mean` (v0.21.2).
 pub fn mean(name: &str) -> Expr {
     col(name)
         .apply(_mean, |_, _| Ok(Field::new("".into(), DataType::Float64)))
@@ -115,7 +148,17 @@ fn _min(s: Column) -> Result<Column, PolarsError> {
 
 /// Minimum feature.
 ///
-/// The minimum value in the time series
+/// The smallest value in the time series, $\min_i x_i$.
+///
+/// # Output column
+/// `{name}__minimum`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.minimum` (v0.21.2).
 pub fn minimum(name: &str) -> Expr {
     col(name)
         .apply(_min, |_, _| Ok(Field::new("".into(), DataType::Float64)))
@@ -136,7 +179,17 @@ fn _max(s: Column) -> Result<Column, PolarsError> {
 
 /// Maximum feature.
 ///
-/// The maximum value in the time series
+/// The largest value in the time series, $\max_i x_i$.
+///
+/// # Output column
+/// `{name}__maximum`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.maximum` (v0.21.2).
 pub fn maximum(name: &str) -> Expr {
     col(name)
         .apply(_max, |_, _| Ok(Field::new("".into(), DataType::Float64)))
@@ -146,7 +199,21 @@ pub fn maximum(name: &str) -> Expr {
 
 /// Median feature.
 ///
-/// The median of all values in the time series, using the native Polars API
+/// The median of all values in the time series: the middle value after
+/// sorting, or the mean of the two middle values for an even count. Computed
+/// with the native Polars API.
+///
+/// # Output column
+/// `{name}__median`
+///
+/// # Edge cases
+/// - Nulls are ignored; a group with no non-null values gives null (not NaN).
+/// - **Known deviation:** Polars sorts NaN as the largest value, so a series
+///   containing NaN gives a number (e.g. `[1, NaN, 3]` gives 3.0), where
+///   tsfresh gives NaN.
+///
+/// # tsfresh
+/// `feature_calculators.median` (v0.21.2).
 pub fn expr_median(name: &str) -> Expr {
     col(name)
         .median()
@@ -167,9 +234,22 @@ fn _standard_deviation(s: Column) -> Result<Column, PolarsError> {
 
 /// Standard deviation feature.
 ///
-/// The standard deviation of all values in the time series, where the standard deviation $\sigma$ is
+/// The population standard deviation (`ddof = 0`) of all values in the time
+/// series:
 /// $$ \sigma = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (x_i - \mu)^2}, $$
-/// where $n$ is the number of values in the time series and $\mu$ is the mean of the time series
+/// where $n$ is the number of values in the time series and $\mu$ is its mean.
+/// See [`crate::utils::stats::population_std`].
+///
+/// # Output column
+/// `{name}__standard_deviation`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+/// - A single value gives 0.
+///
+/// # tsfresh
+/// `feature_calculators.standard_deviation` (v0.21.2), i.e. `np.std`.
 pub fn standard_deviation(name: &str) -> Expr {
     col(name)
         .apply(_standard_deviation, |_, _| {
@@ -192,9 +272,21 @@ fn _variance(s: Column) -> Result<Column, PolarsError> {
 
 /// Variance feature.
 ///
-/// The variance of all values in the time series, where the variance $\sigma^2$ is
+/// The population variance (`ddof = 0`) of all values in the time series:
 /// $$ \sigma^2 = \frac{1}{n} \sum_{i=1}^{n} (x_i - \mu)^2, $$
-/// where $n$ is the number of values in the time Column and $\mu$ is the mean of the time Column
+/// where $n$ is the number of values in the time series and $\mu$ is its mean.
+/// See [`crate::utils::stats::population_var`].
+///
+/// # Output column
+/// `{name}__variance`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+/// - A single value gives 0.
+///
+/// # tsfresh
+/// `feature_calculators.variance` (v0.21.2), i.e. `np.var`.
 pub fn variance(name: &str) -> Expr {
     col(name)
         .apply(_variance, |_, _| {
@@ -221,9 +313,19 @@ fn _rms(s: Column) -> Result<Column, PolarsError> {
 
 /// Root mean square feature.
 ///
-/// The root mean square of all values in the time series, where the root mean square (RMS) is
+/// The square root of the mean of the squared values in the time series:
 /// $$ \text{RMS} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} x_i^2}, $$
-/// where $n$ is the number of values in the time Column
+/// where $n$ is the number of values in the time series.
+///
+/// # Output column
+/// `{name}__root_mean_square`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.root_mean_square` (v0.21.2).
 pub fn root_mean_square(name: &str) -> Expr {
     col(name)
         .apply(_rms, |_, _| Ok(Field::new("".into(), DataType::Float64)))
@@ -244,11 +346,24 @@ fn _skewness(s: Column) -> Result<Column, PolarsError> {
 
 /// Skewness feature.
 ///
-/// The bias-adjusted sample skewness (Fisher-Pearson $G_1$) of all values in the time series,
-/// matching tsfresh (`pandas.Series.skew`):
+/// The bias-adjusted sample skewness (Fisher-Pearson $G_1$) of all values in
+/// the time series:
 /// $$ G_1 = \frac{n \sqrt{n - 1}}{n - 2} \frac{m_3}{m_2^{3/2}}, \quad m_k = \sum_{i=1}^{n} (x_i - \mu)^k, $$
 /// where $n$ is the number of values in the time series and $\mu$ is its mean.
-/// NaN for fewer than 3 values, 0 for a constant series. See [`crate::utils::stats::sample_skewness`].
+/// See [`crate::utils::stats::sample_skewness`].
+///
+/// # Output column
+/// `{name}__skewness`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+/// - Fewer than 3 values give NaN.
+/// - A constant series gives 0. Near-constant series are treated as constant
+///   using pandas 3's floating-point tolerance.
+///
+/// # tsfresh
+/// `feature_calculators.skewness` (v0.21.2), i.e. `pandas.Series.skew`.
 pub fn skewness(name: &str) -> Expr {
     col(name)
         .apply(_skewness, |_, _| {
