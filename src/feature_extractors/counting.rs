@@ -288,7 +288,7 @@ fn _number_crossing_m(s: Column, m: f64) -> Result<Column, PolarsError> {
 /// The number of times the series crosses the level $m$. Each value is
 /// classified as above ($x_i > m$) or not, and every change of class between
 /// neighbouring values counts as one crossing:
-/// $$ \sum_{i=1}^{n-1} \mathbb{1}\big[\,\mathbb{1}[x_i > m] \neq \mathbb{1}[x_{i+1} > m]\,\big]. $$
+/// $$ \sum_{i=1}^{n-1} \mathbb{1}\big(\mathbb{1}(x_i > m) \neq \mathbb{1}(x_{i+1} > m)\big). $$
 ///
 /// # Parameters
 /// - `m`: level. Config: `[number_crossing_m] parameters = [{ m = 0.0 }, ...]`;
