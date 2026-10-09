@@ -1,7 +1,6 @@
 //! Counts of values or runs relative to a threshold.
 
 use anyhow::Result;
-use itertools::izip;
 use ndarray::{Array1, ArrayView1, Axis, Ix1, s};
 use polars::lazy::dsl::*;
 use polars::prelude::*;
@@ -174,16 +173,10 @@ fn _number_crossing_m(s: Column, m: f64) -> Result<Column, PolarsError> {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let iarr = arr.into_iter().filter(|x| x != &m).collect::<Vec<_>>();
-    let mut count = 0;
-    for (x1, x2) in izip!(iarr.iter(), iarr.iter().skip(1)) {
-        if x1.is_nan() {
-            return Ok(Column::new("".into(), &[f64::NAN]));
-        }
-        if (x1 < &m && x2 > &m) || (x1 > &m && x2 < &m) {
-            count += 1;
-        }
-    }
+    // tsfresh: binarise as x > m (NaN and x == m are "not above") and count
+    // every change between neighbours
+    let above = arr.iter().map(|x| *x > m).collect::<Vec<_>>();
+    let count = above.windows(2).filter(|w| w[0] != w[1]).count();
     let s = Column::new("".into(), &[count as f64]);
     Ok(s)
 }

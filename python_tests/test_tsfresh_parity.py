@@ -925,3 +925,19 @@ def test_agg_linear_trend_var_nan_generated(values, attr, expected):
 )
 def test_median_nan_generated(values):
     _assert_feature(values, "val__median", math.nan)
+
+
+# number_crossing_m(np.array(x), m) with numpy 2.4.4: values are binarised as
+# x > m (a value equal to m, and NaN, count as "not above") and every change
+# counts as a crossing.
+@pytest.mark.parametrize(
+    ("values", "m", "expected"),
+    [
+        (_PEAKS_X, "0.0", 3),
+        (_PEAKS_X, "1.0", 4),
+        ([1, math.nan, 3, -4, 2, 6, 0, -1], "0.0", 5),
+        ([1, math.inf, -2, 0.5, -math.inf, 3], "1.0", 3),
+    ],
+)
+def test_number_crossing_m_generated(values, m, expected):
+    _assert_feature(values, f"val__number_crossing_m__m_{m}", expected)

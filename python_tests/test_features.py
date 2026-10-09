@@ -935,7 +935,7 @@ def test_number_crossing_m4():
     fdf = extract_features(df, opts)
     fdf = fdf.sort("id")
 
-    assert fdf.get_column("val__number_crossing_m__m_0.0").to_list() == [1.0, 1.0]
+    assert fdf.get_column("val__number_crossing_m__m_0.0").to_list() == [1.0, 3.0]
 
 
 def test_range_count():

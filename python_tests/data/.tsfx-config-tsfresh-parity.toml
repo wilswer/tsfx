@@ -114,7 +114,7 @@ parameters = [{ q = 0.3 }, { q = 0.5 }, { q = 0.6 }, { q = 0.9 }, { q = 0.99 }]
 [linear_trend]
 
 [number_crossing_m]
-parameters = [{ m = 0.0 }, { m = 10.0 }, { m = 15.0 }]
+parameters = [{ m = 0.0 }, { m = 1.0 }, { m = 10.0 }, { m = 15.0 }]
 
 [number_peaks]
 parameters = [{ n = 1 }, { n = 2 }, { n = 3 }, { n = 4 }, { n = 5 }, { n = 6 }]
