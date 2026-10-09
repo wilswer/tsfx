@@ -33,7 +33,7 @@ pub fn lazy_feature_df(
     df: LazyFrame,
     opts: ExtractionSettings,
 ) -> Result<LazyFrame, ExtractionError> {
-    let aggregators = aggregators(&opts);
+    let aggregators = aggregators(&opts)?;
     let grouping_cols: Vec<Expr> = opts.grouping_cols.into_iter().map(col).collect();
     let mut selected_cols = grouping_cols.clone();
     for val_col in &opts.value_cols {

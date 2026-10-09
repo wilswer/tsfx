@@ -1,4 +1,5 @@
 import polars as pl
+import pytest
 from tsfx import (
     ExtractionSettings,
     FeatureSetting,
@@ -22,3 +23,15 @@ def test_empty_config():
     gdf = extract_features(df, opts)
     print(gdf.head())
     assert gdf.shape == (4, 1)
+
+
+def test_invalid_aggregator_raises_value_error():
+    df = pl.DataFrame({"id": ["a"] * 6, "val": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]})
+    opts = ExtractionSettings(
+        grouping_cols=["id"],
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+        config_path="./python_tests/data/.tsfx-config-invalid-aggregator.toml",
+    )
+    with pytest.raises(ValueError, match="mena"):
+        extract_features(df.lazy(), opts)

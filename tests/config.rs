@@ -2,7 +2,7 @@ use tsfx::utils::toml_reader::load_config;
 
 #[test]
 fn test_read_config_from_empty_file() {
-    let config = load_config(Some("./tests/data/.tsfx-config-empty.toml"));
+    let config = load_config(Some("./tests/data/.tsfx-config-empty.toml")).unwrap();
     assert!(config.length.is_none());
     assert!(config.sum_values.is_none());
     assert!(config.mean.is_none());

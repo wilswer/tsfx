@@ -1,0 +1,2 @@
+[agg_linear_trend]
+parameters = [{ chunk_size = 3, aggregator = "mena" }]

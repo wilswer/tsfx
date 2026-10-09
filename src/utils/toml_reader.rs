@@ -1,4 +1,7 @@
+use std::fmt::Display;
+
 use serde::Deserialize;
+use thiserror::Error;
 use toml;
 
 #[derive(Deserialize, Clone, Debug)]
@@ -397,51 +400,51 @@ impl Default for AggLinearTrend {
             parameters: vec![
                 AggLinearTrendParams {
                     chunk_size: 5,
-                    aggregator: "mean".to_string(),
+                    aggregator: ChunkAggregator::Mean,
                 },
                 AggLinearTrendParams {
                     chunk_size: 5,
-                    aggregator: "min".to_string(),
+                    aggregator: ChunkAggregator::Min,
                 },
                 AggLinearTrendParams {
                     chunk_size: 5,
-                    aggregator: "max".to_string(),
+                    aggregator: ChunkAggregator::Max,
                 },
                 AggLinearTrendParams {
                     chunk_size: 5,
-                    aggregator: "var".to_string(),
+                    aggregator: ChunkAggregator::Var,
                 },
                 AggLinearTrendParams {
                     chunk_size: 10,
-                    aggregator: "mean".to_string(),
+                    aggregator: ChunkAggregator::Mean,
                 },
                 AggLinearTrendParams {
                     chunk_size: 10,
-                    aggregator: "min".to_string(),
+                    aggregator: ChunkAggregator::Min,
                 },
                 AggLinearTrendParams {
                     chunk_size: 10,
-                    aggregator: "max".to_string(),
+                    aggregator: ChunkAggregator::Max,
                 },
                 AggLinearTrendParams {
                     chunk_size: 10,
-                    aggregator: "var".to_string(),
+                    aggregator: ChunkAggregator::Var,
                 },
                 AggLinearTrendParams {
                     chunk_size: 50,
-                    aggregator: "mean".to_string(),
+                    aggregator: ChunkAggregator::Mean,
                 },
                 AggLinearTrendParams {
                     chunk_size: 50,
-                    aggregator: "min".to_string(),
+                    aggregator: ChunkAggregator::Min,
                 },
                 AggLinearTrendParams {
                     chunk_size: 50,
-                    aggregator: "max".to_string(),
+                    aggregator: ChunkAggregator::Max,
                 },
                 AggLinearTrendParams {
                     chunk_size: 50,
-                    aggregator: "var".to_string(),
+                    aggregator: ChunkAggregator::Var,
                 },
             ],
         }
@@ -451,7 +454,30 @@ impl Default for AggLinearTrend {
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct AggLinearTrendParams {
     pub chunk_size: usize,
-    pub aggregator: String,
+    pub aggregator: ChunkAggregator,
+}
+
+/// How `agg_linear_trend` aggregates each chunk. Unknown names are rejected
+/// when the config is loaded.
+#[derive(Deserialize, Debug, PartialEq, Clone, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ChunkAggregator {
+    #[default]
+    Mean,
+    Min,
+    Max,
+    Var,
+}
+
+impl Display for ChunkAggregator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            ChunkAggregator::Mean => write!(f, "mean"),
+            ChunkAggregator::Max => write!(f, "max"),
+            ChunkAggregator::Min => write!(f, "min"),
+            ChunkAggregator::Var => write!(f, "var"),
+        }
+    }
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -678,22 +704,37 @@ pub struct NumberPeaksParams {
     pub n: usize,
 }
 
-pub fn load_config(file_path: Option<&str>) -> Config {
+/// A config file that could not be read or parsed.
+#[derive(Error, Debug)]
+pub enum ConfigError {
+    #[error("could not read config file {path}: {source}")]
+    Read {
+        path: String,
+        source: std::io::Error,
+    },
+    #[error("invalid config file {path}: {source}")]
+    Parse {
+        path: String,
+        source: toml::de::Error,
+    },
+}
+
+/// Load the feature config from `file_path` (default `.tsfx-config.toml`).
+/// A missing file falls back to the default config.
+pub fn load_config(file_path: Option<&str>) -> Result<Config, ConfigError> {
     let file_path = file_path.unwrap_or(".tsfx-config.toml");
     if !std::path::Path::new(file_path).exists() {
         println!("tsfx: No config file detected. Using default config.");
-        return Config::default();
+        return Ok(Config::default());
     }
-    let config_str = std::fs::read_to_string(file_path);
-    match config_str {
-        Ok(config_str) => toml::from_str(&config_str).unwrap(),
-        Err(_) => {
-            panic!(
-                "Error reading config file.
-                Please create a .tsfx-config.toml file in the root of your project."
-            )
-        }
-    }
+    let config_str = std::fs::read_to_string(file_path).map_err(|source| ConfigError::Read {
+        path: file_path.to_string(),
+        source,
+    })?;
+    toml::from_str(&config_str).map_err(|source| ConfigError::Parse {
+        path: file_path.to_string(),
+        source,
+    })
 }
 
 // cargo test toml file
@@ -703,7 +744,7 @@ mod tests {
 
     #[test]
     fn test_read_config_from_file() {
-        let config = load_config(None);
+        let config = load_config(None).unwrap();
         assert!(config.length.is_some());
         assert!(config.sum_values.is_some());
         assert!(config.mean.is_some());
@@ -865,51 +906,51 @@ mod tests {
             [
                 AggLinearTrendParams {
                     chunk_size: 5,
-                    aggregator: "mean".to_string(),
+                    aggregator: ChunkAggregator::Mean,
                 },
                 AggLinearTrendParams {
                     chunk_size: 5,
-                    aggregator: "min".to_string(),
+                    aggregator: ChunkAggregator::Min,
                 },
                 AggLinearTrendParams {
                     chunk_size: 5,
-                    aggregator: "max".to_string(),
+                    aggregator: ChunkAggregator::Max,
                 },
                 AggLinearTrendParams {
                     chunk_size: 5,
-                    aggregator: "var".to_string(),
+                    aggregator: ChunkAggregator::Var,
                 },
                 AggLinearTrendParams {
                     chunk_size: 10,
-                    aggregator: "mean".to_string(),
+                    aggregator: ChunkAggregator::Mean,
                 },
                 AggLinearTrendParams {
                     chunk_size: 10,
-                    aggregator: "min".to_string(),
+                    aggregator: ChunkAggregator::Min,
                 },
                 AggLinearTrendParams {
                     chunk_size: 10,
-                    aggregator: "max".to_string(),
+                    aggregator: ChunkAggregator::Max,
                 },
                 AggLinearTrendParams {
                     chunk_size: 10,
-                    aggregator: "var".to_string(),
+                    aggregator: ChunkAggregator::Var,
                 },
                 AggLinearTrendParams {
                     chunk_size: 50,
-                    aggregator: "mean".to_string(),
+                    aggregator: ChunkAggregator::Mean,
                 },
                 AggLinearTrendParams {
                     chunk_size: 50,
-                    aggregator: "min".to_string(),
+                    aggregator: ChunkAggregator::Min,
                 },
                 AggLinearTrendParams {
                     chunk_size: 50,
-                    aggregator: "max".to_string(),
+                    aggregator: ChunkAggregator::Max,
                 },
                 AggLinearTrendParams {
                     chunk_size: 50,
-                    aggregator: "var".to_string(),
+                    aggregator: ChunkAggregator::Var,
                 },
             ]
         );

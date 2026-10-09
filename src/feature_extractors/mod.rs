@@ -15,7 +15,7 @@ pub mod trend;
 use polars::prelude::*;
 
 use crate::extract::{ExtractionSettings, FeatureSetting};
-use crate::utils::toml_reader::load_config;
+use crate::utils::toml_reader::{ConfigError, load_config};
 use autocorrelation::{autocorrelation, c3, time_reversal_asymmetry_statistic};
 use change::{absolute_sum_of_changes, cid_ce, mean_absolute_change, mean_change};
 use counting::{
@@ -45,8 +45,8 @@ use trend::{agg_linear_trend, linear_trend};
 ///
 /// Columns come out tier by tier (Minimal, then Efficient, then
 /// Comprehensive), each tier looping over all value columns.
-pub fn aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
-    let config = load_config(opts.config_path.as_deref());
+pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> {
+    let config = load_config(opts.config_path.as_deref())?;
     let tier = &opts.feature_setting;
     let mut aggregators = Vec::new();
 
@@ -212,7 +212,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
             if let Some(feature) = &config.agg_linear_trend {
                 let params = &feature.parameters;
                 for p in params {
-                    aggregators.push(agg_linear_trend(col, p.chunk_size, &p.aggregator));
+                    aggregators.push(agg_linear_trend(col, p.chunk_size, p.aggregator.clone()));
                 }
             }
             if let Some(feature) = &config.mean_n_absolute_max {
@@ -284,7 +284,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Vec<Expr> {
             aggregators.push(sample_entropy(col));
         }
     }
-    aggregators
+    Ok(aggregators)
 }
 
 pub(super) fn _make_nan_struct_column(

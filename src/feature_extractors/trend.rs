@@ -1,7 +1,5 @@
 //! Linear fits over time.
 
-use std::{fmt::Display, str::FromStr};
-
 use anyhow::Result;
 use ndarray::{Axis, Ix1};
 use polars::lazy::dsl::*;
@@ -11,39 +9,7 @@ use crate::utils::stats::{
     aggregate_on_chunks, calculate_sequential_ols, skip_nan_mean, skip_nan_reduce,
     skip_nan_sample_var,
 };
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum ChunkAggregator {
-    Mean,
-    Min,
-    Max,
-    Var,
-}
-
-impl FromStr for ChunkAggregator {
-    type Err = ();
-
-    fn from_str(input: &str) -> Result<ChunkAggregator, Self::Err> {
-        match input {
-            "mean" => Ok(ChunkAggregator::Mean),
-            "min" => Ok(ChunkAggregator::Min),
-            "max" => Ok(ChunkAggregator::Max),
-            "var" => Ok(ChunkAggregator::Var),
-            _ => Err(()),
-        }
-    }
-}
-
-impl Display for ChunkAggregator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {
-            ChunkAggregator::Mean => write!(f, "mean"),
-            ChunkAggregator::Max => write!(f, "max"),
-            ChunkAggregator::Min => write!(f, "min"),
-            ChunkAggregator::Var => write!(f, "var"),
-        }
-    }
-}
+use crate::utils::toml_reader::ChunkAggregator;
 
 fn _linear_trend(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
@@ -145,9 +111,9 @@ fn _agg_linear_trend(
     Ok(s)
 }
 
-pub fn agg_linear_trend(name: &str, chunk_size: usize, aggregator: impl Into<String>) -> Expr {
-    let agg_str = aggregator.into();
-    let agg_enum = ChunkAggregator::from_str(&agg_str).unwrap();
+pub fn agg_linear_trend(name: &str, chunk_size: usize, aggregator: ChunkAggregator) -> Expr {
+    let agg_str = aggregator.to_string();
+    let agg_enum = aggregator;
     let name = name.to_string();
     col(&name)
         .apply(
