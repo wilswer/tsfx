@@ -30,3 +30,6 @@ All notable changes to TSFX are documented here.
   Efficient extraction.
 - `number_peaks` computes all configured `n` in one pass instead of copying
   and rotating the series per shift: about 16% faster Efficient extraction.
+- `agg_linear_trend` aggregates chunks through views instead of copying each
+  chunk, and computes the chunk variance without allocating: about 14%
+  faster Efficient extraction.

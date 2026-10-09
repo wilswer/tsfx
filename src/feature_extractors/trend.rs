@@ -104,16 +104,16 @@ fn _agg_linear_trend(
         .into_dimensionality::<Ix1>()
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
     let agg_arr = match aggregator {
-        ChunkAggregator::Mean => aggregate_on_chunks(arr, chunk_size, |x| skip_nan_mean(&x)),
-        ChunkAggregator::Median => aggregate_on_chunks(arr, chunk_size, |x| skip_nan_median(&x)),
+        ChunkAggregator::Mean => aggregate_on_chunks(&arr.view(), chunk_size, skip_nan_mean),
+        ChunkAggregator::Median => aggregate_on_chunks(&arr.view(), chunk_size, skip_nan_median),
         ChunkAggregator::Max => {
-            aggregate_on_chunks(arr, chunk_size, |x| skip_nan_reduce(&x, f64::max))
+            aggregate_on_chunks(&arr.view(), chunk_size, |x| skip_nan_reduce(x, f64::max))
         }
         ChunkAggregator::Min => {
-            aggregate_on_chunks(arr, chunk_size, |x| skip_nan_reduce(&x, f64::min))
+            aggregate_on_chunks(&arr.view(), chunk_size, |x| skip_nan_reduce(x, f64::min))
         }
         // ddof=1 on purpose: tsfresh aggregates chunks with pandas' Series.var
-        ChunkAggregator::Var => aggregate_on_chunks(arr, chunk_size, |x| skip_nan_sample_var(&x)),
+        ChunkAggregator::Var => aggregate_on_chunks(&arr.view(), chunk_size, skip_nan_sample_var),
     };
     let agg_len = agg_arr.len();
     let (s_i, s_s) = calculate_sequential_ols(agg_arr, agg_len);

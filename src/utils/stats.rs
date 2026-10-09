@@ -129,7 +129,7 @@ pub(crate) fn calculate_sequential_ols(
 
 /// Reduce the non-NaN values with `f`, like pandas' `max`/`min` (skipna).
 /// NaN if every value is NaN.
-pub(crate) fn skip_nan_reduce(x: &Array1<f64>, f: fn(f64, f64) -> f64) -> f64 {
+pub(crate) fn skip_nan_reduce(x: &ArrayView1<f64>, f: fn(f64, f64) -> f64) -> f64 {
     x.iter()
         .copied()
         .filter(|v| !v.is_nan())
@@ -137,16 +137,16 @@ pub(crate) fn skip_nan_reduce(x: &Array1<f64>, f: fn(f64, f64) -> f64) -> f64 {
         .unwrap_or(f64::NAN)
 }
 
+/// Apply `aggregator` to consecutive chunks of `chunk_size` values (the last
+/// chunk may be shorter). Chunks are passed as views, without copying.
 pub(crate) fn aggregate_on_chunks(
-    x: Array1<f64>,
+    x: &ArrayView1<f64>,
     chunk_size: usize,
-    aggregator: impl Fn(Array1<f64>) -> f64,
+    aggregator: impl Fn(&ArrayView1<f64>) -> f64,
 ) -> Array1<f64> {
-    let mut agg_arr = Vec::with_capacity(x.len().div_ceil(chunk_size));
-    for chunk in x.axis_chunks_iter(Axis(0), chunk_size) {
-        agg_arr.push(aggregator(chunk.to_owned()));
-    }
-    Array1::from_vec(agg_arr)
+    x.axis_chunks_iter(Axis(0), chunk_size)
+        .map(|chunk| aggregator(&chunk))
+        .collect()
 }
 
 pub(crate) fn get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize> {
@@ -187,7 +187,7 @@ pub(crate) fn roll(x: &mut [f64], shift: isize) -> &[f64] {
 
 /// Mean of the non-NaN values, like pandas' `mean` (skipna). NaN if every
 /// value is NaN.
-pub(crate) fn skip_nan_mean(x: &Array1<f64>) -> f64 {
+pub(crate) fn skip_nan_mean(x: &ArrayView1<f64>) -> f64 {
     let (sum, n) = x
         .iter()
         .filter(|v| !v.is_nan())
@@ -197,12 +197,22 @@ pub(crate) fn skip_nan_mean(x: &Array1<f64>) -> f64 {
 
 /// Sample variance (`ddof = 1`) of the non-NaN values, like pandas' `var`
 /// (skipna). NaN with fewer than 2 non-NaN values.
-pub(crate) fn skip_nan_sample_var(x: &Array1<f64>) -> f64 {
-    let values = Array1::from_iter(x.iter().copied().filter(|v| !v.is_nan()));
-    if values.len() < 2 {
+pub(crate) fn skip_nan_sample_var(x: &ArrayView1<f64>) -> f64 {
+    // Welford's algorithm with exactly the operations of ndarray's `var`, run
+    // over the non-NaN values without collecting them first (bit-identical).
+    let mut mean = 0.0;
+    let mut sum_sq = 0.0;
+    let mut count = 0usize;
+    for &v in x.iter().filter(|v| !v.is_nan()) {
+        count += 1;
+        let delta = v - mean;
+        mean += delta / count as f64;
+        sum_sq = (v - mean).mul_add(delta, sum_sq);
+    }
+    if count < 2 {
         f64::NAN
     } else {
-        values.var(1.0)
+        sum_sq / (count as f64 - 1.0)
     }
 }
 
@@ -234,7 +244,7 @@ fn np_arg_extreme(x: &ArrayView1<f64>, better: fn(f64, f64) -> bool) -> Option<u
 
 /// Median of the non-NaN values, like pandas' `median` (skipna). NaN if
 /// every value is NaN.
-pub(crate) fn skip_nan_median(x: &Array1<f64>) -> f64 {
+pub(crate) fn skip_nan_median(x: &ArrayView1<f64>) -> f64 {
     let mut values = x
         .iter()
         .copied()
