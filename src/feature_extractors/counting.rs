@@ -1,11 +1,11 @@
 //! Counts of values or runs relative to a threshold.
 
 use anyhow::Result;
-use ndarray::{Array1, ArrayView1, Axis, Ix1, s};
+use ndarray::{Axis, Ix1};
 use polars::lazy::dsl::*;
 use polars::prelude::*;
 
-use crate::utils::stats::{get_length_sequences_where, roll};
+use crate::utils::stats::get_length_sequences_where;
 
 fn _count_above_mean(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
@@ -361,44 +361,6 @@ pub fn range_count(name: &str, lower: f64, upper: f64) -> Expr {
         ))
 }
 
-fn _number_peaks(s: Column, n: usize) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    if s.len() < n {
-        return Ok(Column::new("".into(), &[0 as f64]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let arr_reduced = arr.slice(s![n..arr.len() - n]);
-    let mut res: Option<Array1<bool>> = None;
-    for i in 1..n + 1 {
-        let slice = &mut arr.to_vec()[..];
-        let rolled = roll(slice, i as isize);
-        let rolled = ArrayView1::from(rolled);
-        let rolled = rolled.slice(s![n..arr.len() - n]);
-        let result_first = (&arr_reduced - &rolled).mapv(|x| x > 0.0);
-        if res.is_none() {
-            res = Some(result_first);
-        } else {
-            res = Some(res.unwrap() & result_first);
-        }
-        let slice = &mut arr.to_vec()[..];
-        let rolled = roll(slice, -(i as isize));
-        let rolled = ArrayView1::from(rolled);
-        let rolled = rolled.slice(s![n..arr.len() - n]);
-        let result_second = (&arr_reduced - &rolled).mapv(|x| x > 0.0);
-        res = Some(res.unwrap() & result_second);
-    }
-    let count = res.unwrap().into_iter().filter(|x| *x).count();
-    let s = Column::new("".into(), &[count as f64]);
-    Ok(s)
-}
-
 /// Number of peaks feature.
 ///
 /// The number of peaks of support $n$: values strictly greater than the $n$
@@ -421,11 +383,82 @@ fn _number_peaks(s: Column, n: usize) -> Result<Column, PolarsError> {
 /// # tsfresh
 /// `feature_calculators.number_peaks` (v0.21.2).
 pub fn number_peaks(name: &str, n: usize) -> Expr {
+    number_peaks_multi(name, vec![n])
+}
+
+/// For each `n` in `ns`, the number of positions `j` with `n <= j < len - n`
+/// whose value is strictly greater than its `n` neighbours on each side.
+///
+/// One pass computes each position's support (how many neighbours it beats on
+/// both sides, capped at the largest `n`); the scan stops at the first
+/// neighbour that is not smaller. Comparisons with NaN are false, as in
+/// tsfresh.
+fn peak_counts(x: &[f64], ns: &[usize]) -> Vec<usize> {
+    let len = x.len();
+    let cap = ns.iter().copied().max().unwrap_or(0);
+    let mut counts = vec![0; ns.len()];
+    for j in 0..len {
+        let mut left = 0;
+        while left < cap && left < j && x[j] > x[j - 1 - left] {
+            left += 1;
+        }
+        if left == 0 {
+            continue;
+        }
+        let mut right = 0;
+        while right < left && j + 1 + right < len && x[j] > x[j + 1 + right] {
+            right += 1;
+        }
+        let support = left.min(right);
+        for (count, &n) in counts.iter_mut().zip(ns) {
+            if n <= support && j >= n && j + n < len {
+                *count += 1;
+            }
+        }
+    }
+    counts
+}
+
+fn _number_peaks_all(s: Column, ns: &[usize]) -> Result<Column, PolarsError> {
+    let s = s.drop_nulls().cast(&DataType::Float64)?;
+    let x: Vec<f64> = s
+        .as_materialized_series()
+        .f64()?
+        .into_no_null_iter()
+        .collect();
+    let counts: Vec<f64> = if x.is_empty() {
+        vec![f64::NAN; ns.len()]
+    } else {
+        peak_counts(&x, ns).into_iter().map(|c| c as f64).collect()
+    };
+    let columns = ns
+        .iter()
+        .zip(counts)
+        .map(|(n, c)| Column::new(format!("number_peaks__n_{n}").into(), &[c]))
+        .collect::<Vec<_>>();
+    Ok(DataFrame::new(1, columns)?
+        .into_struct("number_peaks".into())
+        .into_column())
+}
+
+/// Number of peaks for several supports `ns` at once, sharing one pass over
+/// each group. See [`number_peaks`].
+pub fn number_peaks_multi(name: &str, ns: Vec<usize>) -> Expr {
+    let fields = ns
+        .iter()
+        .map(|n| Field::new(format!("number_peaks__n_{n}").into(), DataType::Float64))
+        .collect::<Vec<_>>();
+    let new_names = ns
+        .iter()
+        .map(|n| format!("{name}__number_peaks__n_{n}"))
+        .collect::<Vec<_>>();
     col(name)
         .apply(
-            move |s| _number_peaks(s, n),
-            |_, _| Ok(Field::new("".into(), DataType::Float64)),
+            move |s| _number_peaks_all(s, &ns),
+            move |_, _| Ok(Field::new("".into(), DataType::Struct(fields.clone()))),
         )
+        .struct_()
+        .rename_fields(new_names)
         .get(0, true)
-        .alias(format!("{}__number_peaks__n_{:.0}", name, n))
+        .alias(format!("{name}__number_peaks"))
 }

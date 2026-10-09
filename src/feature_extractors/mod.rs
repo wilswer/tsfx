@@ -20,7 +20,7 @@ use autocorrelation::{autocorrelation, c3, time_reversal_asymmetry_statistic};
 use change::{absolute_sum_of_changes, cid_ce, mean_absolute_change, mean_change};
 use counting::{
     count_above, count_above_mean, count_below, count_below_mean, longest_strike_above_mean,
-    longest_strike_below_mean, number_crossing_m, number_peaks, range_count,
+    longest_strike_below_mean, number_crossing_m, number_peaks_multi, range_count,
 };
 use entropy::sample_entropy;
 use location::{
@@ -259,10 +259,8 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> 
                 }
             }
             if let Some(feature) = &config.number_peaks {
-                let params = &feature.parameters;
-                for p in params {
-                    aggregators.push(number_peaks(col, p.n));
-                }
+                let ns = feature.parameters.iter().map(|p| p.n).collect::<Vec<_>>();
+                aggregators.push(number_peaks_multi(col, ns));
             }
         }
     }

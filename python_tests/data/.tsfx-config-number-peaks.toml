@@ -1,0 +1,2 @@
+[number_peaks]
+parameters = [{ n = 1 }, { n = 3 }, { n = 5 }, { n = 10 }, { n = 50 }]
