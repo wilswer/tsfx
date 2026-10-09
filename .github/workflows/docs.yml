@@ -43,6 +43,9 @@ jobs:
         run: mkdocs build
 
       - name: Build Cargo Docs (Rust Docs)
+        # Load KaTeX so $$...$$ formulas in doc comments render
+        env:
+          RUSTDOCFLAGS: --html-in-header ${{ github.workspace }}/src/html/docs-header.html
         run: cargo doc --no-deps --document-private-items
 
       - name: Merge Rust docs into MkDocs
