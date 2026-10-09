@@ -941,3 +941,16 @@ def test_median_nan_generated(values):
 )
 def test_number_crossing_m_generated(values, m, expected):
     _assert_feature(values, f"val__number_crossing_m__m_{m}", expected)
+
+
+# Deliberate deviation from tsfresh v0.21.2: with ±inf in the series, tsfresh's
+# tolerance (0.2 * np.std) is NaN, nothing matches (not even a template
+# itself), and subtracting the self-matches yields negative counts whose ratio
+# happens to give a finite value (0.154 here). TSFX returns NaN instead, as
+# tsfresh does for NaN input.
+def test_sample_entropy_inf_is_nan():
+    _assert_feature(
+        [1, math.inf, -2, 0.5, -math.inf, 3, 1, 2],
+        "val__sample_entropy",
+        math.nan,
+    )

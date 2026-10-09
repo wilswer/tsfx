@@ -8,6 +8,7 @@ use polars::prelude::*;
 
 use crate::utils::stats::population_std;
 
+/// All length-`chunk_size` sliding windows of `x`, one step apart.
 fn _into_subchunks(x: &Array1<f64>, chunk_size: usize) -> Vec<Array1<f64>> {
     let mut subchunks = Vec::with_capacity(x.len());
     for chunk in x.axis_windows(Axis(0), chunk_size) {
@@ -16,6 +17,7 @@ fn _into_subchunks(x: &Array1<f64>, chunk_size: usize) -> Vec<Array1<f64>> {
     subchunks
 }
 
+/// Number of unordered pairs of templates within Chebyshev distance `r`.
 fn _get_matches(templates: Vec<Array1<f64>>, r: f64) -> usize {
     let mut matches = 0;
     for combo in templates.into_iter().combinations(2) {
@@ -54,6 +56,36 @@ fn _sample_entropy(s: Column) -> Result<Column, PolarsError> {
     Ok(s)
 }
 
+/// Sample entropy feature.
+///
+/// The sample entropy (SampEn) of the time series, a measure of its
+/// complexity, with embedding dimension $m = 2$ and tolerance
+/// $r = 0.2\,\sigma$, where $\sigma$ is the population standard deviation:
+/// $$ \text{SampEn} = -\ln \frac{A}{B}, $$
+/// where $B$ is the number of pairs of length-$m$ windows and $A$ the number
+/// of pairs of length-$(m+1)$ windows whose Chebyshev (maximum) distance is
+/// at most $r$. A regular series scores low, an irregular one high.
+///
+/// # Output column
+/// `{name}__sample_entropy`
+///
+/// # Edge cases
+/// - Unlike the other features, nulls are **not** dropped; a null or NaN
+///   anywhere in the series gives NaN.
+/// - Fewer than 4 values give NaN (no matching pairs of windows).
+/// - When no length-$(m+1)$ windows match, the result is $+\infty$.
+/// - **Deliberate deviation from tsfresh:** a series containing $\pm\infty$
+///   gives NaN. tsfresh's tolerance becomes NaN, every match count turns
+///   negative after subtracting self-matches, and the ratio of two negative
+///   counts returns a finite but meaningless value.
+///
+/// # Cost
+/// $O(n^2)$ in the series length; only computed for
+/// `FeatureSetting::Comprehensive`, where it is always on (the config file
+/// does not switch it off).
+///
+/// # tsfresh
+/// `feature_calculators.sample_entropy` (v0.21.2).
 pub fn sample_entropy(name: &str) -> Expr {
     col(name)
         .apply(_sample_entropy, |_, _| {
