@@ -768,7 +768,7 @@ def test_percentage_of_reoccurring_values_to_all_datapoints():
 
     assert fdf.get_column(
         "val__percentage_of_reoccurring_values_to_all_datapoints",
-    ).to_list() == pytest.approx([0.25, 0.2, 0.0, 0.5])
+    ).to_list() == pytest.approx([0.5, 0.4, 0.0, 1.0])
 
 
 def test_agg_linear_trend_intercept():

@@ -742,8 +742,10 @@ def test_percentage_of_reoccurring_values_to_all_values(values, expected):
 @pytest.mark.parametrize(
     ("values", "expected"),
     [
+        ([1, 1, 2, 3, 4], 0.4),
         ([1, 1.5, 2, 3], 0),
         ([1], 0),
+        ([1.111, -2.45, 1.111, 2.45], 0.5),
     ],
 )
 def test_percentage_of_reoccurring_values_to_all_datapoints(values, expected):
@@ -884,3 +886,13 @@ def test_time_reversal_asymmetry_statistic(values, lag, expected):
 # interval counts nothing.
 def test_range_count_empty_interval_generated():
     _assert_feature([1, 2, 3], "val__range_count__min_3.0__max_1.0", 0)
+
+
+# percentage_of_reoccurring_datapoints_to_all_datapoints(np.array(x)) with
+# pandas 3.0.2: value_counts() drops NaN, but NaN still counts in x.size.
+def test_percentage_of_reoccurring_values_to_all_datapoints_nan_generated():
+    _assert_feature(
+        [1, 1, math.nan, math.nan, 2],
+        "val__percentage_of_reoccurring_values_to_all_datapoints",
+        0.4,
+    )

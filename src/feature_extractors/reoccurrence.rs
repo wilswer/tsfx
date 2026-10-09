@@ -206,15 +206,15 @@ fn _percentage_of_reoccurring_values_to_all_datapoints(s: Column) -> Result<Colu
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
     let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr.mapv(OrderedFloat);
-    let counts = arr.iter().counts();
-    let mut more_than_once = 0;
-    for v in counts.values() {
-        if *v > 1 {
-            more_than_once += 1;
-        }
-    }
-    let out = (more_than_once as f64) / arr.len() as f64;
+    // tsfresh: datapoints whose value occurs more than once, over all
+    // datapoints; NaN never counts as reoccurring (pandas value_counts)
+    let counts = arr
+        .iter()
+        .filter(|x| !x.is_nan())
+        .map(|x| OrderedFloat(*x))
+        .counts();
+    let reoccurring: usize = counts.values().filter(|&&c| c > 1).sum();
+    let out = reoccurring as f64 / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
     Ok(s)
 }
