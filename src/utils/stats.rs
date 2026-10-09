@@ -127,22 +127,6 @@ pub(crate) fn calculate_sequential_ols(
     (intercept, slope)
 }
 
-/// Number of distinct values, counting all NaNs as one value like `np.unique`.
-pub(crate) fn count_unique(arr: &ArrayView1<f64>) -> usize {
-    let sorted = arr
-        .iter()
-        .filter(|x| !x.is_nan())
-        .sorted_by(|a, b| a.total_cmp(b))
-        .collect::<Vec<_>>();
-    let distinct = if sorted.is_empty() {
-        0
-    } else {
-        1 + sorted.windows(2).filter(|win| win[0] != win[1]).count()
-    };
-    let has_nan = arr.iter().any(|x| x.is_nan());
-    distinct + has_nan as usize
-}
-
 /// Reduce the non-NaN values with `f`, like pandas' `max`/`min` (skipna).
 /// NaN if every value is NaN.
 pub(crate) fn skip_nan_reduce(x: &Array1<f64>, f: fn(f64, f64) -> f64) -> f64 {

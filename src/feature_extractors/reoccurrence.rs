@@ -1,14 +1,9 @@
 //! Features about repeated values.
 
 use anyhow::Result;
-use itertools::Itertools;
-use ndarray::{Axis, Ix1};
 use ndarray_stats::QuantileExt;
-use ordered_float::OrderedFloat;
 use polars::lazy::dsl::*;
 use polars::prelude::*;
-
-use crate::utils::stats::count_unique;
 
 fn _has_duplicate_max(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
@@ -100,19 +95,154 @@ pub fn has_duplicate_min(name: &str) -> Expr {
         .alias(format!("{}__has_duplicate_min", name))
 }
 
-fn _has_duplicate(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+/// Which of the counting-based reoccurrence features to compute. They share
+/// one sort of the series, so computing several together costs about the same
+/// as computing one.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ReoccurrenceFeatures {
+    pub has_duplicate: bool,
+    pub ratio_value_number_to_time_series_length: bool,
+    pub sum_of_reoccurring_values: bool,
+    pub sum_of_reoccurring_data_points: bool,
+    pub percentage_of_reoccurring_values_to_all_values: bool,
+    pub percentage_of_reoccurring_values_to_all_datapoints: bool,
+}
+
+impl ReoccurrenceFeatures {
+    /// Names of the enabled features, in output order.
+    pub fn enabled(&self) -> Vec<&'static str> {
+        [
+            (self.has_duplicate, "has_duplicate"),
+            (
+                self.ratio_value_number_to_time_series_length,
+                "ratio_value_number_to_time_series_length",
+            ),
+            (self.sum_of_reoccurring_values, "sum_of_reoccurring_values"),
+            (
+                self.sum_of_reoccurring_data_points,
+                "sum_of_reoccurring_data_points",
+            ),
+            (
+                self.percentage_of_reoccurring_values_to_all_values,
+                "percentage_of_reoccurring_values_to_all_values",
+            ),
+            (
+                self.percentage_of_reoccurring_values_to_all_datapoints,
+                "percentage_of_reoccurring_values_to_all_datapoints",
+            ),
+        ]
+        .into_iter()
+        .filter(|(on, _)| *on)
+        .map(|(_, name)| name)
+        .collect()
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let out = count_unique(&arr.view()) < arr.len();
-    let s = Column::new("".into(), &[out as u8 as f64]);
-    Ok(s)
+}
+
+/// Runs of equal values in a series (sorted once), plus how many NaNs it has.
+struct ValueCounts {
+    /// (value, count) for each distinct non-NaN value; `-0.0 == 0.0`.
+    runs: Vec<(f64, usize)>,
+    nan_count: usize,
+    n: usize,
+}
+
+impl ValueCounts {
+    fn new(values: Vec<f64>) -> Self {
+        let n = values.len();
+        let mut non_nan: Vec<f64> = values.into_iter().filter(|x| !x.is_nan()).collect();
+        let nan_count = n - non_nan.len();
+        non_nan.sort_unstable_by(|a, b| a.total_cmp(b));
+        let mut runs: Vec<(f64, usize)> = Vec::new();
+        for x in non_nan {
+            match runs.last_mut() {
+                Some((v, c)) if *v == x => *c += 1,
+                _ => runs.push((x, 1)),
+            }
+        }
+        ValueCounts { runs, nan_count, n }
+    }
+
+    /// Distinct values, counting all NaNs as one value (like `np.unique`).
+    fn distinct(&self) -> usize {
+        self.runs.len() + (self.nan_count > 0) as usize
+    }
+
+    fn feature(&self, name: &str) -> f64 {
+        let n = self.n as f64;
+        let recurring = || self.runs.iter().filter(|(_, c)| *c > 1);
+        match name {
+            "has_duplicate" => ((self.distinct() < self.n) as u8).into(),
+            "ratio_value_number_to_time_series_length" => self.distinct() as f64 / n,
+            // A NaN that occurs more than once makes the sums NaN; a single NaN
+            // or ±inf is left out (deliberate deviation from tsfresh).
+            "sum_of_reoccurring_values" => {
+                let nan = if self.nan_count > 1 { f64::NAN } else { 0.0 };
+                recurring().map(|(v, _)| *v).sum::<f64>() + nan
+            }
+            "sum_of_reoccurring_data_points" => {
+                let nan = if self.nan_count > 1 { f64::NAN } else { 0.0 };
+                recurring().map(|(v, c)| *v * *c as f64).sum::<f64>() + nan
+            }
+            // NaN is one distinct value here (np.unique) and may itself recur.
+            "percentage_of_reoccurring_values_to_all_values" => {
+                let recurring_values = recurring().count() + (self.nan_count > 1) as usize;
+                recurring_values as f64 / self.distinct() as f64
+            }
+            // NaN never recurs here (pandas value_counts) but counts in n.
+            "percentage_of_reoccurring_values_to_all_datapoints" => {
+                recurring().map(|(_, c)| *c).sum::<usize>() as f64 / n
+            }
+            _ => unreachable!("unknown reoccurrence feature {name}"),
+        }
+    }
+}
+
+fn _reoccurrence(s: Column, names: &[&'static str]) -> Result<Column, PolarsError> {
+    let s = s.drop_nulls().cast(&DataType::Float64)?;
+    let values: Vec<f64> = s
+        .as_materialized_series()
+        .f64()?
+        .into_no_null_iter()
+        .collect();
+    let counts = if values.is_empty() {
+        None
+    } else {
+        Some(ValueCounts::new(values))
+    };
+    let columns = names
+        .iter()
+        .map(|name| {
+            let value = counts.as_ref().map_or(f64::NAN, |c| c.feature(name));
+            Column::new((*name).into(), &[value])
+        })
+        .collect::<Vec<_>>();
+    Ok(DataFrame::new(1, columns)?
+        .into_struct("reoccurrence".into())
+        .into_column())
+}
+
+/// The enabled counting-based reoccurrence features of `name`, computed from
+/// a single sort per group. Output columns are `{name}__{feature}`, in the
+/// order of [`ReoccurrenceFeatures`].
+pub fn reoccurrence(name: &str, features: ReoccurrenceFeatures) -> Expr {
+    let names = features.enabled();
+    let fields = names
+        .iter()
+        .map(|n| Field::new((*n).into(), DataType::Float64))
+        .collect::<Vec<_>>();
+    let new_names = names
+        .iter()
+        .map(|n| format!("{name}__{n}"))
+        .collect::<Vec<_>>();
+    col(name)
+        .apply(
+            move |s| _reoccurrence(s, &names),
+            move |_, _| Ok(Field::new("".into(), DataType::Struct(fields.clone()))),
+        )
+        .struct_()
+        .rename_fields(new_names)
+        .get(0, true)
+        .alias(format!("{name}__reoccurrence"))
 }
 
 /// Has duplicate feature.
@@ -131,27 +261,13 @@ fn _has_duplicate(s: Column) -> Result<Column, PolarsError> {
 /// # tsfresh
 /// `feature_calculators.has_duplicate` (v0.21.2).
 pub fn has_duplicate(name: &str) -> Expr {
-    col(name)
-        .apply(_has_duplicate, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__has_duplicate", name))
-}
-
-fn _ratio_value_number_to_time_series_length(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let out = count_unique(&arr.view()) as f64 / arr.len() as f64;
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
+    reoccurrence(
+        name,
+        ReoccurrenceFeatures {
+            has_duplicate: true,
+            ..Default::default()
+        },
+    )
 }
 
 /// Ratio of unique values to length feature.
@@ -170,34 +286,13 @@ fn _ratio_value_number_to_time_series_length(s: Column) -> Result<Column, Polars
 /// # tsfresh
 /// `feature_calculators.ratio_value_number_to_time_series_length` (v0.21.2).
 pub fn ratio_value_number_to_time_series_length(name: &str) -> Expr {
-    col(name)
-        .apply(_ratio_value_number_to_time_series_length, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!(
-            "{}__ratio_value_number_to_time_series_length",
-            name
-        ))
-}
-
-fn _sum_of_reoccurring_values(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr.mapv(OrderedFloat);
-    let counts = arr.into_iter().counts();
-    let mut sum: f64 = 0.0;
-    for (k, v) in counts {
-        if v > 1 {
-            let k: f64 = k.into();
-            sum += k;
-        }
-    }
-    let s = Column::new("".into(), &[sum]);
-    Ok(s)
+    reoccurrence(
+        name,
+        ReoccurrenceFeatures {
+            ratio_value_number_to_time_series_length: true,
+            ..Default::default()
+        },
+    )
 }
 
 /// Sum of reoccurring values feature.
@@ -218,31 +313,13 @@ fn _sum_of_reoccurring_values(s: Column) -> Result<Column, PolarsError> {
 /// # tsfresh
 /// `feature_calculators.sum_of_reoccurring_values` (v0.21.2).
 pub fn sum_of_reoccurring_values(name: &str) -> Expr {
-    col(name)
-        .apply(_sum_of_reoccurring_values, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__sum_of_reoccurring_values", name))
-}
-
-fn _sum_of_reoccurring_data_points(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr.mapv(OrderedFloat);
-    let counts = arr.into_iter().counts();
-    let mut sum: f64 = 0.0;
-    for (k, v) in counts {
-        if v > 1 {
-            let k: f64 = k.into();
-            sum += (v as f64) * k;
-        }
-    }
-    let s = Column::new("".into(), &[sum]);
-    Ok(s)
+    reoccurrence(
+        name,
+        ReoccurrenceFeatures {
+            sum_of_reoccurring_values: true,
+            ..Default::default()
+        },
+    )
 }
 
 /// Sum of reoccurring data points feature.
@@ -263,31 +340,13 @@ fn _sum_of_reoccurring_data_points(s: Column) -> Result<Column, PolarsError> {
 /// # tsfresh
 /// `feature_calculators.sum_of_reoccurring_data_points` (v0.21.2).
 pub fn sum_of_reoccurring_data_points(name: &str) -> Expr {
-    col(name)
-        .apply(_sum_of_reoccurring_data_points, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__sum_of_reoccurring_data_points", name))
-}
-
-fn _percentage_of_reoccurring_values_to_all_values(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr.mapv(OrderedFloat);
-    let counts = arr.into_iter().counts();
-    let mut more_than_once = 0;
-    for v in counts.values() {
-        if *v > 1 {
-            more_than_once += 1;
-        }
-    }
-    let out = (more_than_once as f64) / counts.keys().len() as f64;
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
+    reoccurrence(
+        name,
+        ReoccurrenceFeatures {
+            sum_of_reoccurring_data_points: true,
+            ..Default::default()
+        },
+    )
 }
 
 /// Percentage of reoccurring values to all values feature.
@@ -306,34 +365,13 @@ fn _percentage_of_reoccurring_values_to_all_values(s: Column) -> Result<Column, 
 /// # tsfresh
 /// `feature_calculators.percentage_of_reoccurring_values_to_all_values` (v0.21.2).
 pub fn percentage_of_reoccurring_values_to_all_values(name: &str) -> Expr {
-    col(name)
-        .apply(_percentage_of_reoccurring_values_to_all_values, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!(
-            "{}__percentage_of_reoccurring_values_to_all_values",
-            name
-        ))
-}
-
-fn _percentage_of_reoccurring_values_to_all_datapoints(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    // tsfresh: datapoints whose value occurs more than once, over all
-    // datapoints; NaN never counts as reoccurring (pandas value_counts)
-    let counts = arr
-        .iter()
-        .filter(|x| !x.is_nan())
-        .map(|x| OrderedFloat(*x))
-        .counts();
-    let reoccurring: usize = counts.values().filter(|&&c| c > 1).sum();
-    let out = reoccurring as f64 / arr.len() as f64;
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
+    reoccurrence(
+        name,
+        ReoccurrenceFeatures {
+            percentage_of_reoccurring_values_to_all_values: true,
+            ..Default::default()
+        },
+    )
 }
 
 /// Percentage of reoccurring data points to all data points feature.
@@ -353,14 +391,11 @@ fn _percentage_of_reoccurring_values_to_all_datapoints(s: Column) -> Result<Colu
 /// # tsfresh
 /// `feature_calculators.percentage_of_reoccurring_datapoints_to_all_datapoints` (v0.21.2).
 pub fn percentage_of_reoccurring_values_to_all_datapoints(name: &str) -> Expr {
-    col(name)
-        .apply(
-            _percentage_of_reoccurring_values_to_all_datapoints,
-            |_, _| Ok(Field::new("".into(), DataType::Float64)),
-        )
-        .get(0, true)
-        .alias(format!(
-            "{}__percentage_of_reoccurring_values_to_all_datapoints",
-            name
-        ))
+    reoccurrence(
+        name,
+        ReoccurrenceFeatures {
+            percentage_of_reoccurring_values_to_all_datapoints: true,
+            ..Default::default()
+        },
+    )
 }

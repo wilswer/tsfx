@@ -27,12 +27,7 @@ use location::{
     first_location_of_maximum, first_location_of_minimum, index_mass_quantile,
     last_location_of_maximum, last_location_of_minimum,
 };
-use reoccurrence::{
-    has_duplicate, has_duplicate_max, has_duplicate_min,
-    percentage_of_reoccurring_values_to_all_datapoints,
-    percentage_of_reoccurring_values_to_all_values, ratio_value_number_to_time_series_length,
-    sum_of_reoccurring_data_points, sum_of_reoccurring_values,
-};
+use reoccurrence::{ReoccurrenceFeatures, has_duplicate_max, has_duplicate_min, reoccurrence};
 use statistics::{
     absolute_energy, absolute_maximum, count, expr_median, expr_quantile, kurtosis,
     large_standard_deviation, maximum, mean, mean_n_absolute_max, minimum, ratio_beyond_r_sigma,
@@ -179,35 +174,29 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> 
             if config.longest_strike_below_mean.is_some() {
                 aggregators.push(longest_strike_below_mean(col));
             }
-            if config.has_duplicate.is_some() {
-                aggregators.push(has_duplicate(col));
+            // The counting-based reoccurrence features share one sort per group
+            let reoccurring = ReoccurrenceFeatures {
+                has_duplicate: config.has_duplicate.is_some(),
+                ratio_value_number_to_time_series_length: config
+                    .ratio_value_number_to_time_series_length
+                    .is_some(),
+                sum_of_reoccurring_values: config.sum_of_reoccurring_values.is_some(),
+                sum_of_reoccurring_data_points: config.sum_of_reoccurring_data_points.is_some(),
+                percentage_of_reoccurring_values_to_all_values: config
+                    .percentage_of_reoccurring_values_to_all_values
+                    .is_some(),
+                percentage_of_reoccurring_values_to_all_datapoints: config
+                    .percentage_of_reoccurring_values_to_all_datapoints
+                    .is_some(),
+            };
+            if reoccurring != ReoccurrenceFeatures::default() {
+                aggregators.push(reoccurrence(col, reoccurring));
             }
             if config.variation_coefficient.is_some() {
                 aggregators.push(variation_coefficient(col));
             }
             if config.mean_change.is_some() {
                 aggregators.push(mean_change(col));
-            }
-            if config.ratio_value_number_to_time_series_length.is_some() {
-                aggregators.push(ratio_value_number_to_time_series_length(col));
-            }
-            if config.sum_of_reoccurring_values.is_some() {
-                aggregators.push(sum_of_reoccurring_values(col));
-            }
-            if config.sum_of_reoccurring_data_points.is_some() {
-                aggregators.push(sum_of_reoccurring_data_points(col));
-            }
-            if config
-                .percentage_of_reoccurring_values_to_all_values
-                .is_some()
-            {
-                aggregators.push(percentage_of_reoccurring_values_to_all_values(col));
-            }
-            if config
-                .percentage_of_reoccurring_values_to_all_datapoints
-                .is_some()
-            {
-                aggregators.push(percentage_of_reoccurring_values_to_all_datapoints(col));
             }
             if let Some(feature) = &config.agg_linear_trend {
                 let params = &feature.parameters;
