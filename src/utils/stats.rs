@@ -192,6 +192,15 @@ where
     })
 }
 
+pub(crate) fn roll(x: &mut [f64], shift: isize) -> &[f64] {
+    if shift > 0 {
+        x.rotate_right(shift as usize);
+    } else {
+        x.rotate_left(shift.unsigned_abs());
+    }
+    x
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,16 +1,12 @@
+//! Complexity and entropy measures.
+
+use anyhow::Result;
 use itertools::Itertools;
 use ndarray::{Array1, Axis, Ix1};
+use polars::lazy::dsl::*;
 use polars::prelude::*;
 
 use crate::utils::stats::population_std;
-
-pub fn high_comp_cost_aggregators(value_cols: &[String]) -> Vec<Expr> {
-    let mut aggregators = Vec::new();
-    for col in value_cols {
-        aggregators.push(sample_entropy(col));
-    }
-    aggregators
-}
 
 fn _into_subchunks(x: &Array1<f64>, chunk_size: usize) -> Vec<Array1<f64>> {
     let mut subchunks = Vec::with_capacity(x.len());
@@ -33,10 +29,6 @@ fn _get_matches(templates: Vec<Array1<f64>>, r: f64) -> usize {
         }
     }
     matches
-}
-
-fn _out(_: &Schema, _: &Field) -> Result<Field, PolarsError> {
-    Ok(Field::new("".into(), DataType::Float64))
 }
 
 fn _sample_entropy(s: Column) -> Result<Column, PolarsError> {
