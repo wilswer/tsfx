@@ -5,6 +5,7 @@ pub mod utils;
 
 use error::ExtractionError;
 use extract::{DynamicGroupBySettings, ExtractionSettings, FeatureSetting, lazy_feature_df};
+use polars::prelude::IntoLazy;
 use pyo3::prelude::*;
 use pyo3_polars::{PyDataFrame, PyLazyFrame};
 
@@ -70,6 +71,18 @@ impl PyExtractionSettings {
             config_path,
             dynamic_settings,
         }
+    }
+
+    /// Columns the extraction reads: grouping, value and (if set) time
+    /// column. Internal, used to collect only these before calling Rust.
+    #[getter]
+    fn _input_columns(&self) -> Vec<String> {
+        let mut cols = self.grouping_cols.clone();
+        cols.extend(self.value_cols.iter().cloned());
+        if let Some(dynamic) = &self.dynamic_settings {
+            cols.push(dynamic.time_col.clone());
+        }
+        cols
     }
 }
 
@@ -177,6 +190,20 @@ fn extract_features(
     Ok(PyDataFrame(lf))
 }
 
+/// Extract features from an in-memory DataFrame.
+///
+/// Internal counterpart of `extract_features` for the non-streaming path: a
+/// DataFrame crosses from Python via the Arrow C interface without copying,
+/// while a LazyFrame's plan (and any in-memory data in it) is serialised.
+#[pyfunction]
+#[pyo3(signature = (df, settings))]
+fn extract_features_df(df: PyDataFrame, settings: PyExtractionSettings) -> PyResult<PyDataFrame> {
+    let df = lazy_feature_df(df.0.lazy(), settings.into())?
+        .collect()
+        .map_err(ExtractionError::PolarsError)?;
+    Ok(PyDataFrame(df))
+}
+
 /// Time Series Feature Extraction module.
 ///
 /// This module provides high-performance feature extraction capabilities for
@@ -187,5 +214,6 @@ fn tsfx(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyExtractionSettings>()?;
     m.add_class::<PyDynamicGroupBySettings>()?;
     m.add_function(wrap_pyfunction!(extract_features, m)?)?;
+    m.add_function(wrap_pyfunction!(extract_features_df, m)?)?;
     Ok(())
 }
