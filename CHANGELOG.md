@@ -28,3 +28,5 @@ All notable changes to TSFX are documented here.
   million rows.
 - The reoccurrence features share one sort per group: about 25% faster
   Efficient extraction.
+- `number_peaks` computes all configured `n` in one pass instead of copying
+  and rotating the series per shift: about 16% faster Efficient extraction.
