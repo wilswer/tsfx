@@ -47,15 +47,21 @@ def _features(values: list[float]) -> dict:
     return fdf.row(0, named=True)
 
 
-def _assert_feature(values: list[float], column: str, expected: float) -> None:
+def _assert_feature(
+    values: list[float],
+    column: str,
+    expected: float,
+    abs_tol: float = 1e-7,
+) -> None:
     features = _features(values)
     assert column in features, f"column {column!r} not extracted"
     result = features[column]
     if math.isnan(expected):
         assert result is not None and math.isnan(result), result
     else:
-        # tsfresh uses assertEqual / assertAlmostEqual (7 decimal places)
-        assert result == pytest.approx(expected, abs=1e-7)
+        # tsfresh uses assertEqual / assertAlmostEqual (7 decimal places
+        # unless a test says otherwise)
+        assert result == pytest.approx(expected, abs=abs_tol)
 
 
 @pytest.mark.parametrize(
@@ -564,3 +570,307 @@ def test_symmetry_looking_nan_generated(values, r, expected):
 )
 def test_kurtosis_nan_generated(values, expected):
     _assert_feature(values, "val__kurtosis", expected)
+
+
+# --- Vectors for features previously covered only by hand-written tests ---
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([1, 2, 3, 4.1], 10.1), ([-1.2, -2, -3, -4], -10.2)],
+)
+def test_sum_values(values, expected):
+    _assert_feature(values, "val__sum_values", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([1, 1, 2, 2], 1.5), ([0.5, 0.5, 2, 3.5, 10], 3.3), ([0.5], 0.5)],
+)
+def test_mean(values, expected):
+    _assert_feature(values, "val__mean", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([1, 1, 2, 2], 1.5), ([0.5, 0.5, 2, 3.5, 10], 2), ([0.5], 0.5)],
+)
+def test_median(values, expected):
+    _assert_feature(values, "val__median", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([1, 2, 3, 4], 4), ([1, 2, 3], 3), ([1, 2], 2), ([1, 2, 3, math.nan], 4)],
+)
+def test_length(values, expected):
+    _assert_feature(values, "length", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([1, 1, 1], 3), ([1, 2, 3], 14), ([-1, 2, -3], 14), ([-1, 1.3], 2.69), ([1], 1)],
+)
+def test_absolute_energy(values, expected):
+    # tsfresh name: abs_energy
+    _assert_feature(values, "val__absolute_energy", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([-2, 2, 5], 3.5), ([1, 2, -1], -1), ([10, 20], 10), ([1], math.nan)],
+)
+def test_mean_change(values, expected):
+    _assert_feature(values, "val__mean_change", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "n", "expected"),
+    [
+        ([12, 3], 10, math.nan),
+        ([-1, -5, 4, 10], 3, 6.33333333333),
+        ([0, -5, -9], 2, 7.0),
+        ([0, 0, 0], 1, 0),
+    ],
+)
+def test_mean_n_absolute_max(values, n, expected):
+    _assert_feature(values, f"val__mean_n_absolute_max__n_{n}", expected, 1e-7)
+
+
+# tsfresh checks index_mass_quantile to one decimal place (places=1).
+@pytest.mark.parametrize(
+    ("values", "q", "expected"),
+    [
+        ([1] * 101, "0.5", 0.5),
+        ([0] * 1000 + [1], "0.5", 1),
+        ([0] * 1000 + [1], "0.99", 1),
+        ([0, 1, 1, 0, 0, 1, 0, 0], "0.3", 0.25),
+        ([0, 1, 1, 0, 0, 1, 0, 0], "0.6", 0.375),
+        ([0, 1, 1, 0, 0, 1, 0, 0], "0.9", 0.75),
+        ([0, 0, 0], "0.5", math.nan),
+    ],
+)
+def test_index_mass_quantile(values, q, expected):
+    _assert_feature(values, f"val__index_mass_quantile__q_{q}", expected, 0.05)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([-2.1, 0, 0, -2.1], 1),
+        ([-2.1, 2.1, 2.1, 2.1], 1),
+        ([1.1, 1.2, 1.3, 1.4], 0),
+        ([1], 0),
+    ],
+)
+def test_has_duplicate(values, expected):
+    _assert_feature(values, "val__has_duplicate", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([2.1, 0, 0, 2.1, 1.1], 1),
+        ([2.1, 0, 0, 2, 1.1], 0),
+        ([1, 1, 1, 1], 1),
+        ([0], 0),
+        ([1, 1], 1),
+    ],
+)
+def test_has_duplicate_max(values, expected):
+    _assert_feature(values, "val__has_duplicate_max", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([-2.1, 0, 0, -2.1, 1.1], 1),
+        ([2.1, 0, -1, 2, 1.1], 0),
+        ([1, 1, 1, 1], 1),
+        ([0], 0),
+        ([1, 1], 1),
+    ],
+)
+def test_has_duplicate_min(values, expected):
+    _assert_feature(values, "val__has_duplicate_min", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, 1, 2, 3, 4, 4], 5),
+        ([1, 1.5, 2, 3], 0),
+        ([1], 0),
+        ([1.111, -2.45, 1.111, 2.45], 1.111),
+    ],
+)
+def test_sum_of_reoccurring_values(values, expected):
+    _assert_feature(values, "val__sum_of_reoccurring_values", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, 1, 2, 3, 4, 4], 10),
+        ([1, 1.5, 2, 3], 0),
+        ([1], 0),
+        ([1.111, -2.45, 1.111, 2.45], 2.222),
+    ],
+)
+def test_sum_of_reoccurring_data_points(values, expected):
+    _assert_feature(values, "val__sum_of_reoccurring_data_points", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, 1, 2, 3, 4], 0.25),
+        ([1, 1.5, 2, 3], 0),
+        ([1], 0),
+        ([1.111, -2.45, 1.111, 2.45], 1.0 / 3.0),
+    ],
+)
+def test_percentage_of_reoccurring_values_to_all_values(values, expected):
+    # tsfresh test: test_ratio_of_doubled_values
+    _assert_feature(
+        values,
+        "val__percentage_of_reoccurring_values_to_all_values",
+        expected,
+    )
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([1, 1.5, 2, 3], 0),
+        ([1], 0),
+    ],
+)
+def test_percentage_of_reoccurring_values_to_all_datapoints(values, expected):
+    # tsfresh: percentage_of_reoccurring_datapoints_to_all_datapoints,
+    # test_percentage_of_doubled_datapoints
+    _assert_feature(
+        values,
+        "val__percentage_of_reoccurring_values_to_all_datapoints",
+        expected,
+    )
+
+
+# TSFX only has the intercept and slope attributes of tsfresh's linear_trend.
+@pytest.mark.parametrize(
+    ("values", "attr", "expected"),
+    [
+        (list(range(10)), "intercept", 0),
+        (list(range(10)), "slope", 1.0),
+        ([42 - 2 * x for x in range(10)], "intercept", 42),
+        ([42 - 2 * x for x in range(10)], "slope", -2),
+    ],
+)
+def test_linear_trend(values, attr, expected):
+    _assert_feature(values, f"val__linear_trend_{attr}", expected)
+
+
+# TSFX has no "median" chunk aggregator; tsfresh's max/min/mean cases only.
+@pytest.mark.parametrize(
+    ("values", "agg", "attr", "expected"),
+    [
+        (list(range(9)), "max", "intercept", 2),
+        (list(range(9)), "max", "slope", 3),
+        (list(range(9)), "min", "intercept", 0),
+        (list(range(9)), "min", "slope", 3),
+        (list(range(9)), "mean", "intercept", 1),
+        (list(range(9)), "mean", "slope", 3),
+        *[
+            ([math.nan] * 3 + [-3] * 3, agg, attr, math.nan)
+            for agg in ("max", "min", "mean")
+            for attr in ("intercept", "slope")
+        ],
+        *[
+            ([math.nan] * 2 + [-3] * 4, agg, attr, expected)
+            for agg in ("max", "min")
+            for attr, expected in (("intercept", -3), ("slope", 0))
+        ],
+    ],
+)
+def test_agg_linear_trend(values, agg, attr, expected):
+    _assert_feature(
+        values,
+        f"val__agg_linear_trend_{attr}__chunk_size_3__agg_{agg}",
+        expected,
+    )
+
+
+@pytest.mark.parametrize(
+    ("values", "m", "expected"),
+    [
+        ([10, -10, 10, -10], "0.0", 3),
+        ([10, -10, 10, -10], "10.0", 0),
+        ([10, 20, 20, 30], "0.0", 0),
+        ([10, 20, 20, 30], "15.0", 1),
+    ],
+)
+def test_number_crossing_m(values, m, expected):
+    _assert_feature(values, f"val__number_crossing_m__m_{m}", expected)
+
+
+_PEAKS_X = [0, 1, 2, 1, 0, 1, 2, 3, 4, 5, 4, 3, 2, 1]
+
+
+@pytest.mark.parametrize(
+    ("n", "expected"),
+    [(1, 2), (2, 2), (3, 1), (4, 1), (5, 0), (6, 0)],
+)
+def test_number_peaks(n, expected):
+    _assert_feature(_PEAKS_X, f"val__number_peaks__n_{n}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "bounds", "expected"),
+    [
+        ([1] * 10, "min_1.0__max_1.1", 10),
+        (list(range(10)), "min_0.0__max_10.0", 10),
+        (
+            [math.nan, math.inf, -math.inf, *range(10)],
+            "min_0.0__max_10.0",
+            10,
+        ),
+    ],
+)
+def test_range_count(values, bounds, expected):
+    _assert_feature(values, f"val__range_count__{bounds}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "lag", "expected"),
+    [
+        ([1] * 10, 0, 1),
+        ([1] * 10, 1, 1),
+        ([1] * 10, 2, 1),
+        ([1] * 10, 3, 1),
+        ([1, 2, -3, 4], 1, -15),
+        ([1, 2, -3, 4], 2, 0),
+        ([1, 2, -3, 4], 3, 0),
+    ],
+)
+def test_c3(values, lag, expected):
+    _assert_feature(values, f"val__c3__lag_{lag}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "lag", "expected"),
+    [
+        ([1] * 10, 0, 0),
+        ([1] * 10, 1, 0),
+        ([1] * 10, 2, 0),
+        ([1] * 10, 3, 0),
+        ([1, 2, -3, 4], 1, -10),
+        ([1, 2, -3, 4], 2, 0),
+        ([1, 2, -3, 4], 3, 0),
+    ],
+)
+def test_time_reversal_asymmetry_statistic(values, lag, expected):
+    _assert_feature(
+        values,
+        f"val__time_reversal_asymmetry_statistic__lag_{lag}",
+        expected,
+    )

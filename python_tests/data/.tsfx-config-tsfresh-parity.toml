@@ -68,6 +68,7 @@ parameters = [
     { chunk_size = 3, aggregator = "var" },
     { chunk_size = 3, aggregator = "max" },
     { chunk_size = 3, aggregator = "min" },
+    { chunk_size = 3, aggregator = "mean" },
 ]
 
 [has_duplicate]
@@ -79,3 +80,57 @@ parameters = [{ q = 0.1 }, { q = 0.2 }, { q = 0.5 }, { q = 0.8 }, { q = 0.9 }, {
 
 [symmetry_looking]
 parameters = [{ r = 0.0 }, { r = 0.05 }, { r = 0.75 }]
+
+[length]
+
+[sum_values]
+
+[mean]
+
+[median]
+
+[absolute_energy]
+
+[mean_change]
+
+[mean_n_absolute_max]
+parameters = [{ n = 1 }, { n = 2 }, { n = 3 }, { n = 10 }]
+
+[index_mass_quantile]
+parameters = [{ q = 0.3 }, { q = 0.5 }, { q = 0.6 }, { q = 0.9 }, { q = 0.99 }]
+
+[has_duplicate_max]
+
+[has_duplicate_min]
+
+[sum_of_reoccurring_values]
+
+[sum_of_reoccurring_data_points]
+
+[percentage_of_reoccurring_values_to_all_values]
+
+[percentage_of_reoccurring_values_to_all_datapoints]
+
+[linear_trend]
+
+[number_crossing_m]
+parameters = [{ m = 0.0 }, { m = 10.0 }, { m = 15.0 }]
+
+[number_peaks]
+parameters = [{ n = 1 }, { n = 2 }, { n = 3 }, { n = 4 }, { n = 5 }, { n = 6 }]
+
+[range_count]
+parameters = [
+    { min = 1.0, max = 1.0 },
+    { min = 0.9, max = 1.0 },
+    { min = 1.0, max = 1.1 },
+    { min = 0.0, max = 9.0 },
+    { min = 0.0, max = 10.0 },
+    { min = -10.0, max = 0.0 },
+]
+
+[c3]
+parameters = [{ lag = 0 }, { lag = 1 }, { lag = 2 }, { lag = 3 }]
+
+[time_reversal_asymmetry_statistic]
+parameters = [{ lag = 0 }, { lag = 1 }, { lag = 2 }, { lag = 3 }]
