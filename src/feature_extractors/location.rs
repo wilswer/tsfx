@@ -1,11 +1,11 @@
 //! Relative positions in the series where something happens.
 
 use anyhow::Result;
-use ndarray::{Axis, Ix1, s};
+use ndarray::{ArrayView1, Axis, s};
 use polars::lazy::dsl::*;
 use polars::prelude::*;
 
-use super::_make_nan_struct_column;
+use super::{_make_nan_struct_column, f64_values};
 use crate::utils::stats::{np_argmax, np_argmin};
 
 fn _first_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
@@ -13,12 +13,9 @@ fn _first_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let max_res = np_argmax(&arr.view());
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
+    let max_res = np_argmax(&arr);
     let max = match max_res {
         Some(m) => m,
         None => return Ok(Column::new("".into(), &[f64::NAN])),
@@ -59,12 +56,9 @@ fn _first_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let min_res = np_argmin(&arr.view());
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
+    let min_res = np_argmin(&arr);
     let min = match min_res {
         Some(m) => m,
         None => return Ok(Column::new("".into(), &[f64::NAN])),
@@ -105,11 +99,8 @@ fn _last_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     // argmax of the reversed series gives the last occurrence
     let max_res = np_argmax(&arr.slice(s![..;-1]));
     let max = match max_res {
@@ -152,11 +143,8 @@ fn _last_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     // argmin of the reversed series gives the last occurrence
     let min_res = np_argmin(&arr.slice(s![..;-1]));
     let min = match min_res {
@@ -199,7 +187,8 @@ fn _index_mass_quantile(s: Column, qs: &[f64]) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return _make_nan_struct_column("index_mass_quantile", "q", qs);
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let mut abs_arr = arr.mapv(|x| x.abs());
     let abs_sum = abs_arr.sum();
     if abs_sum == 0.0 {
