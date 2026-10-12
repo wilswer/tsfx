@@ -1,19 +1,12 @@
 //! Summaries of the value distribution, independent of order.
 
-use anyhow::Result;
-use itertools::Itertools;
-use ndarray::{Array1, Axis, Ix1};
-use ndarray_stats::QuantileExt;
-use noisy_float::types::n64;
-use ordered_float::OrderedFloat;
+use ndarray::Array1;
 use polars::lazy::dsl::*;
-use polars::prelude::*;
 
-use super::{_make_nan_struct_column, _make_nan_struct_column_int};
+use super::kernel::{GroupContext, Kernel, extremes, scalar_kernel};
 use crate::utils::stats::{
-    median_mut, population_std, population_var, sample_excess_kurtosis, sample_skewness,
+    numpy_mean, numpy_median, numpy_quantile, numpy_sum, sample_excess_kurtosis, sample_skewness,
 };
-
 /// Length feature.
 ///
 /// The number of non-null values in the time series. Only the first value
@@ -32,17 +25,7 @@ pub fn count(name: &str) -> Expr {
     col(name).count().alias("length")
 }
 
-fn _sum_values(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let sum = arr.sum();
-    let s = Column::new("".into(), &[sum]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Sum of values feature.
 ///
 /// The sum of all values in the time series:
@@ -57,26 +40,10 @@ fn _sum_values(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.sum_values` (v0.21.2).
-pub fn sum_values(name: &str) -> Expr {
-    col(name)
-        .apply(_sum_values, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__sum_values", name))
+    SumValues, "sum_values", |ctx| numpy_sum(ctx.len(), |i| ctx.values()[i])
 }
 
-fn _mean(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let mean = arr.mean().unwrap_or(f64::NAN);
-    let s = Column::new("".into(), &[mean]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Mean feature.
 ///
 /// The arithmetic mean of all values in the time series:
@@ -92,24 +59,10 @@ fn _mean(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.mean` (v0.21.2).
-pub fn mean(name: &str) -> Expr {
-    col(name)
-        .apply(_mean, |_, _| Ok(Field::new("".into(), DataType::Float64)))
-        .get(0, true)
-        .alias(format!("{}__mean", name))
+    Mean, "mean", |ctx| ctx.mean()
 }
 
-fn _min(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let min = arr.min().unwrap_or(&f64::NAN);
-    let s = Column::new("".into(), &[*min]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Minimum feature.
 ///
 /// The smallest value in the time series, $\min_i x_i$.
@@ -123,24 +76,10 @@ fn _min(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.minimum` (v0.21.2).
-pub fn minimum(name: &str) -> Expr {
-    col(name)
-        .apply(_min, |_, _| Ok(Field::new("".into(), DataType::Float64)))
-        .get(0, true)
-        .alias(format!("{}__minimum", name))
+    Minimum, "minimum", |ctx| ctx.min()
 }
 
-fn _max(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let max = arr.max().unwrap_or(&f64::NAN);
-    let s = Column::new("".into(), &[*max]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Maximum feature.
 ///
 /// The largest value in the time series, $\max_i x_i$.
@@ -154,47 +93,10 @@ fn _max(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.maximum` (v0.21.2).
-pub fn maximum(name: &str) -> Expr {
-    col(name)
-        .apply(_max, |_, _| Ok(Field::new("".into(), DataType::Float64)))
-        .get(0, true)
-        .alias(format!("{}__maximum", name))
+    Maximum, "maximum", |ctx| ctx.max()
 }
 
-/// Median feature.
-///
-/// The median of all values in the time series: the middle value after
-/// sorting, or the mean of the two middle values for an even count. Computed
-/// with the native Polars API.
-///
-/// # Output column
-/// `{name}__median`
-///
-/// # Edge cases
-/// - Nulls are ignored; a group with no non-null values gives null (not NaN).
-/// - A series containing NaN gives NaN.
-///
-/// # tsfresh
-/// `feature_calculators.median` (v0.21.2).
-pub fn expr_median(name: &str) -> Expr {
-    // NaN propagation, as np.median in tsfresh
-    when(col(name).is_nan().any(true))
-        .then(lit(f64::NAN))
-        .otherwise(col(name).median().cast(DataType::Float64))
-        .alias(format!("{}__median", name))
-}
-
-fn _standard_deviation(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let standard_deviation = population_std(&arr.column(0));
-    let s = Column::new("".into(), &[standard_deviation]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Standard deviation feature.
 ///
 /// The population standard deviation (`ddof = 0`) of all values in the time
@@ -213,26 +115,10 @@ fn _standard_deviation(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.standard_deviation` (v0.21.2), i.e. `np.std`.
-pub fn standard_deviation(name: &str) -> Expr {
-    col(name)
-        .apply(_standard_deviation, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__standard_deviation", name))
+    StandardDeviation, "standard_deviation", |ctx| ctx.std()
 }
 
-fn _variance(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let variance = population_var(&arr.column(0));
-    let s = Column::new("".into(), &[variance]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Variance feature.
 ///
 /// The population variance (`ddof = 0`) of all values in the time series:
@@ -250,30 +136,10 @@ fn _variance(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.variance` (v0.21.2), i.e. `np.var`.
-pub fn variance(name: &str) -> Expr {
-    col(name)
-        .apply(_variance, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__variance", name))
+    Variance, "variance", |ctx| ctx.var()
 }
 
-fn _rms(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let rms = arr
-        .mapv(|x| x.powi(2))
-        .mean()
-        .map(f64::sqrt)
-        .unwrap_or(f64::NAN);
-    let s = Column::new("".into(), &[rms]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Root mean square feature.
 ///
 /// The square root of the mean of the squared values in the time series:
@@ -289,24 +155,14 @@ fn _rms(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.root_mean_square` (v0.21.2).
-pub fn root_mean_square(name: &str) -> Expr {
-    col(name)
-        .apply(_rms, |_, _| Ok(Field::new("".into(), DataType::Float64)))
-        .get(0, true)
-        .alias(format!("{}__root_mean_square", name))
-}
-
-fn _skewness(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+    RootMeanSquare, "root_mean_square", |ctx| {
+        // np.sqrt(np.mean(np.square(x)))
+        let x = ctx.values();
+        (numpy_sum(x.len(), |i| x[i] * x[i]) / x.len() as f64).sqrt()
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let skewness = sample_skewness(&arr.column(0));
-    let s = Column::new("".into(), &[skewness]);
-    Ok(s)
 }
 
+scalar_kernel! {
 /// Skewness feature.
 ///
 /// The bias-adjusted sample skewness (Fisher-Pearson $G_1$) of all values in
@@ -327,26 +183,10 @@ fn _skewness(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.skewness` (v0.21.2), i.e. `pandas.Series.skew`.
-pub fn skewness(name: &str) -> Expr {
-    col(name)
-        .apply(_skewness, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__skewness", name))
+    Skewness, "skewness", |ctx| sample_skewness(ctx.x())
 }
 
-fn _absolute_energy(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let abs_energy = arr.mapv(|x| x.powi(2)).sum();
-    let s = Column::new("".into(), &[abs_energy]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Absolute energy feature.
 ///
 /// The sum of the squared values of the time series:
@@ -362,28 +202,10 @@ fn _absolute_energy(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.abs_energy` (v0.21.2).
-pub fn absolute_energy(name: &str) -> Expr {
-    col(name)
-        .apply(_absolute_energy, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{name}__absolute_energy"))
+    AbsoluteEnergy, "absolute_energy", |ctx| ctx.x().mapv(|x| x.powi(2)).sum()
 }
 
-fn _kurtosis(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    // tsfresh calls pandas' kurtosis with skipna=True
-    let arr = Array1::from_iter(arr.iter().copied().filter(|x| !x.is_nan()));
-    let kurtosis = sample_excess_kurtosis(&arr.view());
-    let s = Column::new("".into(), &[kurtosis]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Kurtosis feature.
 ///
 /// The bias-adjusted sample excess kurtosis $G_2$ of all values in the time
@@ -405,27 +227,14 @@ fn _kurtosis(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.kurtosis` (v0.21.2), i.e. `pandas.Series.kurtosis`.
-pub fn kurtosis(name: &str) -> Expr {
-    col(name)
-        .apply(_kurtosis, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__kurtosis", name))
-}
-
-fn _variance_larger_than_standard_deviation(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+    Kurtosis, "kurtosis", |ctx| {
+        // tsfresh calls pandas' kurtosis with skipna=True
+        let x = Array1::from_iter(ctx.x().iter().copied().filter(|x| !x.is_nan()));
+        sample_excess_kurtosis(&x.view())
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let var = population_var(&arr.column(0));
-    let out = if var > var.sqrt() { 1.0 } else { 0.0 };
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
 }
 
+scalar_kernel! {
 /// Variance larger than standard deviation feature.
 ///
 /// Whether the population variance exceeds the population standard
@@ -441,42 +250,69 @@ fn _variance_larger_than_standard_deviation(s: Column) -> Result<Column, PolarsE
 ///
 /// # tsfresh
 /// `feature_calculators.variance_larger_than_standard_deviation` (v0.21.2).
-pub fn variance_larger_than_standard_deviation(name: &str) -> Expr {
-    col(name)
-        .apply(_variance_larger_than_standard_deviation, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__variance_larger_than_standard_deviation", name))
+    VarianceLargerThanStandardDeviation, "variance_larger_than_standard_deviation", |ctx| if ctx.var() > ctx.std() { 1.0 } else { 0.0 }
 }
 
-fn _ratio_beyond_r_sigma(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return _make_nan_struct_column("ratio_beyond_r_sigma", "r", rs);
+scalar_kernel! {
+/// Absolute maximum feature.
+///
+/// The largest absolute value in the time series, $\max_i |x_i|$.
+///
+/// # Output column
+/// `{name}__absolute_maximum`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.absolute_maximum` (v0.21.2).
+    AbsoluteMaximum, "absolute_maximum", |ctx| extremes(ctx.values().iter().map(|x| x.abs())).1
+}
+
+scalar_kernel! {
+/// Variation coefficient feature.
+///
+/// The population standard deviation relative to the mean, $\sigma / \mu$.
+///
+/// # Output column
+/// `{name}__variation_coefficient`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN values are kept and make the result NaN.
+/// - A mean of exactly 0 gives NaN.
+///
+/// # tsfresh
+/// `feature_calculators.variation_coefficient` (v0.21.2).
+    VariationCoefficient, "variation_coefficient", |ctx| if ctx.mean() == 0.0 { f64::NAN } else { ctx.std() / ctx.mean() }
+}
+
+scalar_kernel! {
+/// Median feature.
+///
+/// The median of all values in the time series: the middle value after
+/// sorting, or the mean of the two middle values for an even count, exactly
+/// as `np.median` (see [`crate::utils::stats::numpy_median`]).
+///
+/// # Output column
+/// `{name}__median`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - A series containing NaN gives NaN.
+///
+/// # tsfresh
+/// `feature_calculators.median` (v0.21.2).
+    Median, "median", |ctx| {
+        // NaN propagation, as np.median in tsfresh
+        if ctx.x().iter().any(|x| x.is_nan()) {
+            f64::NAN
+        } else {
+            // A selection is O(n); only the quantiles need the full sort
+            numpy_median(&mut ctx.values().to_vec())
+        }
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let mean_opt = arr.mean();
-    let mean = match mean_opt {
-        Some(m) => m,
-        None => return _make_nan_struct_column("ratio_beyond_r_sigma", "r", rs),
-    };
-    let std = population_std(&arr.column(0));
-    let mut ss: Vec<Column> = Vec::with_capacity(rs.len());
-    for r in rs {
-        let count = arr
-            .mapv(|x| if (x - mean).abs() > r * std { 1.0 } else { 0.0 })
-            .sum();
-        let ratio = count / arr.len() as f64;
-        ss.push(Column::new(
-            format!("ratio_beyond_r_sigma__r_{:2}", r).into(),
-            &[ratio],
-        ));
-    }
-    let s = DataFrame::new(1, ss)?
-        .into_struct("ratio_beyond_r_sigma".into())
-        .into_column();
-    Ok(s)
 }
 
 /// Ratio beyond r sigma feature.
@@ -501,54 +337,28 @@ fn _ratio_beyond_r_sigma(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.ratio_beyond_r_sigma` (v0.21.2).
-pub fn ratio_beyond_r_sigma(name: &str, rs: Vec<f64>) -> Expr {
-    let name = name.to_string();
-    let mut new_field_names = Vec::with_capacity(rs.len());
-    let mut struct_names = Vec::with_capacity(rs.len());
-    for r in rs.iter() {
-        new_field_names.push(format!("{}__ratio_beyond_r_sigma__r_{:.2}", name, r));
-        struct_names.push(Field::new(
-            format!("ratio_beyond_r_sigma__r_{:2}", r).into(),
-            DataType::Float64,
-        ));
-    }
-    col(&name)
-        .apply(
-            move |s| _ratio_beyond_r_sigma(s, &rs),
-            move |_, _| {
-                Ok(Field::new(
-                    "".into(),
-                    DataType::Struct(struct_names.clone()),
-                ))
-            },
-        )
-        .struct_()
-        .rename_fields(new_field_names)
-        .get(0, true)
-        .alias(format!("{}__ratio_beyond_r_sigma", name))
+pub struct RatioBeyondRSigma {
+    pub rs: Vec<f64>,
 }
 
-fn _large_standard_deviation(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return _make_nan_struct_column("large_standard_deviation", "r", rs);
+impl Kernel for RatioBeyondRSigma {
+    fn names(&self) -> Vec<String> {
+        self.rs
+            .iter()
+            .map(|r| format!("ratio_beyond_r_sigma__r_{r:.2}"))
+            .collect()
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let min = arr.min().unwrap_or(&0.0);
-    let max = arr.max().unwrap_or(&0.0);
-    let std = population_std(&arr.column(0));
-    let mut ss: Vec<Column> = Vec::with_capacity(rs.len());
-    for r in rs {
-        let out = std > r * (max - min);
-        ss.push(Column::new(
-            format!("large_standard_deviation__r_{:2}", r).into(),
-            &[out as u8 as f64],
-        ));
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        let (mean, std) = (ctx.mean(), ctx.std());
+        for r in &self.rs {
+            let count = ctx
+                .x()
+                .mapv(|x| if (x - mean).abs() > r * std { 1.0 } else { 0.0 })
+                .sum();
+            out.push(count / ctx.len() as f64);
+        }
     }
-    let s = DataFrame::new(1, ss)?
-        .into_struct("large_standard_deviation".into())
-        .into_column();
-    Ok(s)
 }
 
 /// Large standard deviation feature.
@@ -571,87 +381,23 @@ fn _large_standard_deviation(s: Column, rs: &[f64]) -> Result<Column, PolarsErro
 ///
 /// # tsfresh
 /// `feature_calculators.large_standard_deviation` (v0.21.2).
-pub fn large_standard_deviation(name: &str, rs: Vec<f64>) -> Expr {
-    let mut new_field_names = Vec::with_capacity(rs.len());
-    let mut struct_names = Vec::with_capacity(rs.len());
-    for r in rs.iter() {
-        new_field_names.push(format!("{}__large_standard_deviation__r_{:.2}", name, r));
-        struct_names.push(Field::new(
-            format!("large_standard_deviation__r_{:2}", r).into(),
-            DataType::Float64,
-        ));
-    }
-    col(name)
-        .apply(
-            move |s| _large_standard_deviation(s, &rs),
-            move |_, _| {
-                Ok(Field::new(
-                    "".into(),
-                    DataType::Struct(struct_names.clone()),
-                ))
-            },
-        )
-        .struct_()
-        .rename_fields(new_field_names)
-        .get(0, true)
-        .alias(format!("{}__large_standard_deviation", name))
+pub struct LargeStandardDeviation {
+    pub rs: Vec<f64>,
 }
 
-fn _symmetry_looking(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return _make_nan_struct_column("symmetry_looking", "r", rs);
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    // tsfresh: every comparison with a NaN mean/median is False
-    if arr.iter().any(|x| x.is_nan()) {
-        let ss = rs
+impl Kernel for LargeStandardDeviation {
+    fn names(&self) -> Vec<String> {
+        self.rs
             .iter()
-            .map(|r| Column::new(format!("symmetry_looking__r_{:2}", r).into(), &[0.0]))
-            .collect::<Vec<_>>();
-        return Ok(DataFrame::new(1, ss)?
-            .into_struct("symmetry_looking".into())
-            .into_column());
+            .map(|r| format!("large_standard_deviation__r_{r:.2}"))
+            .collect()
     }
-    let mut arr = arr.mapv(n64);
-    let median_res = median_mut(&mut arr);
-    let median = match median_res {
-        Ok(m) => f64::from(m),
-        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
-    };
-    let mean_opt = arr.mean();
-    let mean = match mean_opt {
-        Some(m) => f64::from(m),
-        None => return _make_nan_struct_column("symmetry_looking", "r", rs),
-    };
-    let mean_median_diff = (mean - median).abs();
-    let max_res = arr.max();
-    let max = match max_res {
-        Ok(m) => f64::from(*m),
-        Err(_) => return _make_nan_struct_column("symmetry_looking", "r", rs),
-    };
-    let min_res = arr.min();
-    let min = match min_res {
-        Ok(m) => f64::from(*m),
-        Err(_) => return _make_nan_struct_column("symmetry_looking", "r", rs),
-    };
-    let max_min_diff = max - min;
-    let mut ss: Vec<Column> = Vec::with_capacity(rs.len());
-    for r in rs {
-        let out = mean_median_diff < r * max_min_diff;
-        ss.push(Column::new(
-            format!("symmetry_looking__r_{:2}", r).into(),
-            &[out as u8 as f64],
-        ));
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        // With a NaN, std is NaN and every comparison is false
+        let (std, range) = (ctx.std(), ctx.max() - ctx.min());
+        out.extend(self.rs.iter().map(|r| (std > r * range) as u8 as f64));
     }
-    let s = DataFrame::new(1, ss)?
-        .into_struct("symmetry_looking".into())
-        .into_column();
-    Ok(s)
 }
 
 /// Symmetry looking feature.
@@ -677,145 +423,34 @@ fn _symmetry_looking(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.symmetry_looking` (v0.21.2).
-pub fn symmetry_looking(name: &str, rs: Vec<f64>) -> Expr {
-    let mut new_field_names = Vec::with_capacity(rs.len());
-    let mut struct_names = Vec::with_capacity(rs.len());
-    for r in rs.iter() {
-        new_field_names.push(format!("{}__symmetry_looking__r_{:.2}", name, r));
-        struct_names.push(Field::new(
-            format!("symmetry_looking__r_{:2}", r).into(),
-            DataType::Float64,
-        ));
-    }
-    col(name)
-        .apply(
-            move |s| _symmetry_looking(s, &rs),
-            move |_, _| {
-                Ok(Field::new(
-                    "".into(),
-                    DataType::Struct(struct_names.clone()),
-                ))
-            },
-        )
-        .struct_()
-        .rename_fields(new_field_names)
-        .get(0, true)
-        .alias(format!("{}__symmetry_looking__r_", name))
+pub struct SymmetryLooking {
+    pub rs: Vec<f64>,
 }
 
-fn _absolute_maximum(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+impl Kernel for SymmetryLooking {
+    fn names(&self) -> Vec<String> {
+        self.rs
+            .iter()
+            .map(|r| format!("symmetry_looking__r_{r:.2}"))
+            .collect()
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let abs_arr = arr.mapv(|x| x.abs());
-    let max_res = abs_arr.max();
-    let max = match max_res {
-        Ok(m) => *m,
-        Err(_) => return Ok(Column::new("".into(), &[f64::NAN])),
-    };
-    let s = Column::new("".into(), &[max]);
-    Ok(s)
-}
 
-/// Absolute maximum feature.
-///
-/// The largest absolute value in the time series, $\max_i |x_i|$.
-///
-/// # Output column
-/// `{name}__absolute_maximum`
-///
-/// # Edge cases
-/// - Nulls are dropped first; a group with no non-null values gives NaN.
-/// - NaN values are kept and make the result NaN.
-///
-/// # tsfresh
-/// `feature_calculators.absolute_maximum` (v0.21.2).
-pub fn absolute_maximum(name: &str) -> Expr {
-    col(name)
-        .apply(_absolute_maximum, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__absolute_maximum", name))
-}
-
-fn _variation_coefficient(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        // tsfresh: every comparison with a NaN mean/median is False
+        if ctx.x().iter().any(|x| x.is_nan()) {
+            out.extend(self.rs.iter().map(|_| 0.0));
+            return;
+        }
+        // np.abs(np.mean(x) - np.median(x)) and np.max(x) - np.min(x), exactly
+        let median = numpy_median(&mut ctx.values().to_vec());
+        let mean_median_diff = (ctx.mean() - median).abs();
+        let max_min_diff = ctx.max() - ctx.min();
+        out.extend(
+            self.rs
+                .iter()
+                .map(|r| (mean_median_diff < r * max_min_diff) as u8 as f64),
+        );
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let mean_opt = arr.mean();
-    let mean = match mean_opt {
-        Some(m) => m,
-        None => return Ok(Column::new("".into(), &[f64::NAN])),
-    };
-    let std = population_std(&arr.column(0));
-    let out = if mean == 0.0 { f64::NAN } else { std / mean };
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
-}
-
-/// Variation coefficient feature.
-///
-/// The population standard deviation relative to the mean, $\sigma / \mu$.
-///
-/// # Output column
-/// `{name}__variation_coefficient`
-///
-/// # Edge cases
-/// - Nulls are dropped first; a group with no non-null values gives NaN.
-/// - NaN values are kept and make the result NaN.
-/// - A mean of exactly 0 gives NaN.
-///
-/// # tsfresh
-/// `feature_calculators.variation_coefficient` (v0.21.2).
-pub fn variation_coefficient(name: &str) -> Expr {
-    col(name)
-        .apply(_variation_coefficient, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__variation_coefficient", name))
-}
-
-fn _mean_n_absolute_max(s: Column, ns: &[usize]) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return _make_nan_struct_column_int("mean_n_absolute_max", "n", ns);
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr.mapv(|x| -OrderedFloat::from(x.abs()));
-
-    let mut ss: Vec<Column> = Vec::with_capacity(ns.len());
-    let sarr = arr
-        .iter()
-        .k_smallest(
-            *ns.iter()
-                .max()
-                .expect("mean_n_absolute_max parameters didn't have a maximum value..."),
-        )
-        .map(|x| -f64::from(*x))
-        .collect::<Vec<f64>>();
-    for n in ns {
-        let out = if arr.len() < *n {
-            f64::NAN
-        } else {
-            let _sarr = sarr.iter().take(*n);
-            let sum_sarr = _sarr.sum::<f64>();
-            sum_sarr / *n as f64
-        };
-        ss.push(Column::new(
-            format!("mean_n_absolute_max__n_{}", n).into(),
-            &[out],
-        ));
-    }
-    let s = DataFrame::new(1, ss)?
-        .into_struct("mean_n_absolute_max".into())
-        .into_column();
-    Ok(s)
 }
 
 /// Mean of the n absolute maxima feature.
@@ -831,34 +466,38 @@ fn _mean_n_absolute_max(s: Column, ns: &[usize]) -> Result<Column, PolarsError> 
 ///
 /// # Edge cases
 /// - Nulls are dropped first; a group with no non-null values gives NaN.
-/// - A series with fewer than $n$ values gives NaN.
+/// - A series with $n$ or fewer values gives NaN (tsfresh requires more than
+///   $n$ values).
+/// - A NaN counts as the largest absolute value (it sorts last, as in
+///   `np.sort`), so with a NaN the result is NaN.
 ///
 /// # tsfresh
-/// `feature_calculators.mean_n_absolute_max` (v0.21.2).
-pub fn mean_n_absolute_max(name: &str, ns: Vec<usize>) -> Expr {
-    let mut new_field_names = Vec::with_capacity(ns.len());
-    let mut struct_names = Vec::with_capacity(ns.len());
-    for n in ns.iter() {
-        new_field_names.push(format!("{}__mean_n_absolute_max__n_{}", name, n));
-        struct_names.push(Field::new(
-            format!("mean_n_absolute_max__n_{}", n).into(),
-            DataType::Float64,
-        ));
+/// `feature_calculators.mean_n_absolute_max` (v0.21.2): the `np.mean` of the
+/// last $n$ values of `np.sort(np.abs(x))`, summed as numpy does.
+pub struct MeanNAbsoluteMax {
+    pub ns: Vec<usize>,
+}
+
+impl Kernel for MeanNAbsoluteMax {
+    fn names(&self) -> Vec<String> {
+        self.ns
+            .iter()
+            .map(|n| format!("mean_n_absolute_max__n_{n}"))
+            .collect()
     }
-    col(name)
-        .apply(
-            move |s| _mean_n_absolute_max(s, &ns),
-            move |_, _| {
-                Ok(Field::new(
-                    "".into(),
-                    DataType::Struct(struct_names.clone()),
-                ))
-            },
-        )
-        .struct_()
-        .rename_fields(new_field_names)
-        .get(0, true)
-        .alias(format!("{}__mean_n_absolute_max", name))
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        // np.sort(np.abs(x)): ascending, NaN last
+        let mut abs = ctx.values().iter().map(|x| x.abs()).collect::<Vec<f64>>();
+        abs.sort_unstable_by(f64::total_cmp);
+        for &n in &self.ns {
+            out.push(if ctx.len() > n {
+                numpy_mean(&abs[abs.len() - n..])
+            } else {
+                f64::NAN
+            });
+        }
+    }
 }
 
 /// Quantile feature.
@@ -867,7 +506,9 @@ pub fn mean_n_absolute_max(name: &str, ns: Vec<usize>) -> Expr {
 /// nearest order statistics (`np.quantile`'s default): for sorted values
 /// $x_{(0)} \le \dots \le x_{(n-1)}$ and $h = (n - 1)\,q$,
 /// $$ Q(q) = x_{(\lfloor h \rfloor)} + (h - \lfloor h \rfloor)\left(x_{(\lceil h \rceil)} - x_{(\lfloor h \rfloor)}\right). $$
-/// Computed with the native Polars API.
+/// Computed exactly as `np.quantile` (see
+/// [`crate::utils::stats::numpy_quantile`], including numpy's evaluation of
+/// the interpolation for $h - \lfloor h \rfloor \ge 0.5$).
 ///
 /// # Parameters
 /// - `q`: quantile in $[0, 1]$. Config: `[quantile] parameters = [{ q = 0.1 }, ...]`;
@@ -877,17 +518,32 @@ pub fn mean_n_absolute_max(name: &str, ns: Vec<usize>) -> Expr {
 /// `{name}__quantile__q_{q:.1}`
 ///
 /// # Edge cases
-/// - Nulls are ignored; a group with no non-null values gives null (not NaN).
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
 /// - A series containing NaN gives NaN.
 /// - The column name rounds `q` to one decimal, so e.g. 0.25 and 0.2 would
 ///   share a name.
 ///
 /// # tsfresh
 /// `feature_calculators.quantile` (v0.21.2), i.e. `np.quantile`.
-pub fn expr_quantile(name: &str, q: f64) -> Expr {
-    // Linear interpolation and NaN propagation, as np.quantile in tsfresh
-    when(col(name).is_nan().any(true))
-        .then(lit(f64::NAN))
-        .otherwise(quantile(name, lit(q), QuantileMethod::Linear).cast(DataType::Float64))
-        .alias(format!("{}__quantile__q_{:.1}", name, q))
+pub struct Quantile {
+    pub qs: Vec<f64>,
+}
+
+impl Kernel for Quantile {
+    fn names(&self) -> Vec<String> {
+        self.qs
+            .iter()
+            .map(|q| format!("quantile__q_{q:.1}"))
+            .collect()
+    }
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        // Linear interpolation and NaN propagation, as np.quantile in tsfresh
+        if ctx.x().iter().any(|x| x.is_nan()) {
+            out.extend(self.qs.iter().map(|_| f64::NAN));
+            return;
+        }
+        let sorted = ctx.sorted();
+        out.extend(self.qs.iter().map(|&q| numpy_quantile(sorted, q)));
+    }
 }

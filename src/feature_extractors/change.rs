@@ -1,28 +1,11 @@
 //! Features built from consecutive differences.
 
-use anyhow::Result;
-use ndarray::{Axis, Ix1, s};
-use polars::lazy::dsl::*;
-use polars::prelude::*;
+use ndarray::{CowArray, s};
 
-use crate::utils::stats::population_std;
+use super::kernel::{GroupContext, Kernel, scalar_kernel};
+use crate::utils::stats::numpy_sum;
 
-fn _mean_absolute_change(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
-    let mean_abs_change = diffs.mapv(|x| x.abs()).mean().unwrap_or(f64::NAN);
-    let s = Column::new("".into(), &[mean_abs_change]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Mean absolute change feature.
 ///
 /// The mean of the absolute differences between consecutive values:
@@ -39,40 +22,62 @@ fn _mean_absolute_change(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.mean_abs_change` (v0.21.2).
-pub fn mean_absolute_change(name: &str) -> Expr {
-    col(name)
-        .apply(_mean_absolute_change, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__mean_absolute_change", name))
+    MeanAbsoluteChange, "mean_absolute_change", |ctx| {
+        // np.mean(np.abs(np.diff(x))); NaN for a single value
+        let x = ctx.values();
+        numpy_sum(x.len() - 1, |i| (x[i + 1] - x[i]).abs()) / (x.len() - 1) as f64
+    }
 }
 
-fn _cid_ce(s: Column, normalize: bool) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+scalar_kernel! {
+/// Absolute sum of changes feature.
+///
+/// The sum of the absolute differences between consecutive values:
+/// $$ \sum_{i=1}^{n-1} |x_{i+1} - x_i|. $$
+///
+/// # Output column
+/// `{name}__absolute_sum_of_changes`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - A single value has no differences and gives 0.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.absolute_sum_of_changes` (v0.21.2).
+    AbsoluteSumOfChanges, "absolute_sum_of_changes", |ctx| {
+        // np.sum(np.abs(np.diff(x)))
+        let x = ctx.values();
+        numpy_sum(x.len() - 1, |i| (x[i + 1] - x[i]).abs())
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let arr = if normalize {
-        let mean = arr.mean().unwrap_or(f64::NAN);
-        let std = population_std(&arr.view());
-        // tsfresh: a constant series has no complexity
-        if std == 0.0 {
-            return Ok(Column::new("".into(), &[0.0]));
+}
+
+scalar_kernel! {
+/// Mean change feature.
+///
+/// The mean of the differences between consecutive values. The sum
+/// telescopes, so only the first and last values matter:
+/// $$ \frac{1}{n-1} \sum_{i=1}^{n-1} (x_{i+1} - x_i) = \frac{x_n - x_1}{n-1}. $$
+///
+/// # Output column
+/// `{name}__mean_change`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - A single value gives NaN.
+/// - Only the endpoints are used, so NaN elsewhere does not affect the
+///   result; NaN at either end gives NaN.
+///
+/// # tsfresh
+/// `feature_calculators.mean_change` (v0.21.2).
+    MeanChange, "mean_change", |ctx| {
+        let x = ctx.values();
+        if x.len() < 2 {
+            f64::NAN
+        } else {
+            (x[x.len() - 1] - x[0]) / ((x.len() - 1) as f64)
         }
-        (arr - mean) / std
-    } else {
-        arr
-    };
-    let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
-    let out = diffs.mapv(|x| x.powi(2)).sum().sqrt();
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
+    }
 }
 
 /// Complexity-invariant distance (CID CE) feature.
@@ -100,97 +105,33 @@ fn _cid_ce(s: Column, normalize: bool) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.cid_ce` (v0.21.2).
-pub fn cid_ce(name: &str, normalize: bool) -> Expr {
-    col(name)
-        .apply(
-            move |s| _cid_ce(s, normalize),
-            |_, _| Ok(Field::new("".into(), DataType::Float64)),
-        )
-        .get(0, true)
-        .alias(format!("{}__cid_ce__normalize_{:.1}", name, normalize))
+pub struct CidCe {
+    pub normalize: Vec<bool>,
 }
 
-fn _absolute_sum_of_changes(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+impl Kernel for CidCe {
+    fn names(&self) -> Vec<String> {
+        // `{:.1}` truncates the bool to "t" / "f"; kept for stable names
+        self.normalize
+            .iter()
+            .map(|normalize| format!("cid_ce__normalize_{normalize:.1}"))
+            .collect()
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
-    let out = diffs.mapv(|x| x.abs()).sum();
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
-}
 
-/// Absolute sum of changes feature.
-///
-/// The sum of the absolute differences between consecutive values:
-/// $$ \sum_{i=1}^{n-1} |x_{i+1} - x_i|. $$
-///
-/// # Output column
-/// `{name}__absolute_sum_of_changes`
-///
-/// # Edge cases
-/// - Nulls are dropped first; a group with no non-null values gives NaN.
-/// - A single value has no differences and gives 0.
-/// - NaN values are kept and make the result NaN.
-///
-/// # tsfresh
-/// `feature_calculators.absolute_sum_of_changes` (v0.21.2).
-pub fn absolute_sum_of_changes(name: &str) -> Expr {
-    col(name)
-        .apply(_absolute_sum_of_changes, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__absolute_sum_of_changes", name))
-}
-
-fn _mean_change(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        for &normalize in &self.normalize {
+            let x = if normalize {
+                // tsfresh: a constant series has no complexity
+                if ctx.std() == 0.0 {
+                    out.push(0.0);
+                    continue;
+                }
+                CowArray::from((ctx.x() - ctx.mean()) / ctx.std())
+            } else {
+                CowArray::from(ctx.x().view())
+            };
+            let diffs = &x.slice(s![1..]) - &x.slice(s![..-1]);
+            out.push(diffs.mapv(|d| d.powi(2)).sum().sqrt());
+        }
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let out = if arr.len() < 2 {
-        f64::NAN
-    } else {
-        (arr[arr.len() - 1] - arr[0]) / ((arr.len() - 1) as f64)
-    };
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
-}
-
-/// Mean change feature.
-///
-/// The mean of the differences between consecutive values. The sum
-/// telescopes, so only the first and last values matter:
-/// $$ \frac{1}{n-1} \sum_{i=1}^{n-1} (x_{i+1} - x_i) = \frac{x_n - x_1}{n-1}. $$
-///
-/// # Output column
-/// `{name}__mean_change`
-///
-/// # Edge cases
-/// - Nulls are dropped first; a group with no non-null values gives NaN.
-/// - A single value gives NaN.
-/// - Only the endpoints are used, so NaN elsewhere does not affect the
-///   result; NaN at either end gives NaN.
-///
-/// # tsfresh
-/// `feature_calculators.mean_change` (v0.21.2).
-pub fn mean_change(name: &str) -> Expr {
-    col(name)
-        .apply(_mean_change, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__mean_change", name))
 }

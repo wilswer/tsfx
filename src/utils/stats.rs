@@ -1,26 +1,68 @@
 //! Shared statistical conventions for the feature extractors.
 
-use std::ops::{Add, Div, Mul, Rem, Sub};
-
 use itertools::Itertools;
-use ndarray::{Array1, ArrayView1, Axis};
-use ndarray_stats::errors::QuantileError;
-use num::FromPrimitive;
+use ndarray::ArrayView1;
+
+/// Sum of `value(0), ..., value(n - 1)` exactly as numpy's `add.reduce` sums
+/// a contiguous `float64` array (numpy 2.x): pairwise summation with eight
+/// accumulators for blocks of up to 128 values, split in halves above that,
+/// added to an initial `0.0`. Results equal numpy's bit for bit, which a
+/// straight or Welford sum does not.
+pub fn numpy_sum(n: usize, value: impl Fn(usize) -> f64) -> f64 {
+    0.0 + pairwise_sum(0, n, &value)
+}
+
+fn pairwise_sum(start: usize, n: usize, value: &impl Fn(usize) -> f64) -> f64 {
+    if n < 8 {
+        (start..start + n).fold(0.0, |res, i| res + value(i))
+    } else if n <= 128 {
+        let mut r: [f64; 8] = std::array::from_fn(|j| value(start + j));
+        let mut i = 8;
+        while i < n - n % 8 {
+            for (j, acc) in r.iter_mut().enumerate() {
+                *acc += value(start + i + j);
+            }
+            i += 8;
+        }
+        let mut res = ((r[0] + r[1]) + (r[2] + r[3])) + ((r[4] + r[5]) + (r[6] + r[7]));
+        for k in i..n {
+            res += value(start + k);
+        }
+        res
+    } else {
+        let mut n2 = n / 2;
+        n2 -= n2 % 8;
+        pairwise_sum(start, n2, value) + pairwise_sum(start + n2, n - n2, value)
+    }
+}
+
+/// Arithmetic mean, exactly as `np.mean` (see [`numpy_sum`]). NaN for an
+/// empty series or if any value is NaN.
+pub fn numpy_mean(x: &[f64]) -> f64 {
+    numpy_sum(x.len(), |i| x[i]) / x.len() as f64
+}
 
 /// Population variance (`ddof = 0`) of a series.
 ///
-/// Matches `np.var` as used by tsfresh. Returns the raw value; how a zero
-/// variance is handled is up to each feature.
+/// Exactly `np.var` as used by tsfresh: the mean, then the mean of the
+/// squared deviations, both summed as numpy does (see [`numpy_sum`]).
+/// Returns the raw value; how a zero variance is handled is up to each
+/// feature.
 pub fn population_var(arr: &ArrayView1<f64>) -> f64 {
-    arr.var(0.0)
+    let n = arr.len();
+    let mean = numpy_sum(n, |i| arr[i]) / n as f64;
+    numpy_sum(n, |i| {
+        let d = arr[i] - mean;
+        d * d
+    }) / n as f64
 }
 
-/// Population standard deviation (`ddof = 0`) of a series.
-///
-/// Matches `np.std` as used by tsfresh. Returns the raw value; how a zero
-/// standard deviation is handled is up to each feature.
+/// Population standard deviation (`ddof = 0`) of a series: the square root
+/// of [`population_var`], exactly `np.std` as used by tsfresh. Returns the
+/// raw value; how a zero standard deviation is handled is up to each
+/// feature.
 pub fn population_std(arr: &ArrayView1<f64>) -> f64 {
-    arr.std(0.0)
+    population_var(arr).sqrt()
 }
 
 /// Treat a sum of `k`-th power deviations as zero when it is within
@@ -90,79 +132,24 @@ pub fn sample_excess_kurtosis(arr: &ArrayView1<f64>) -> f64 {
     n * (n + 1.0) * (n - 1.0) * m4 / denominator - adj
 }
 
-/// Calculates the Ordinary Least Squares (OLS) slope and intercept
-/// for a sequence of y-values where x-values are assumed to be a sequential index (0, 1, 2, ..., N-1).
-/// Returns a tuple of (intercept, slope).
-pub(crate) fn calculate_sequential_ols(
-    y_values: impl IntoIterator<Item = f64>,
-    n: usize,
-) -> (f64, f64) {
-    // Cannot fit a line with fewer than 2 points
+/// Ordinary least squares intercept and slope of `y` against its index
+/// $0, 1, \dots, n - 1$, as `scipy.stats.linregress` (which tsfresh uses)
+/// computes them: centred sums,
+/// $b = \sum (i - \bar{i})(y_i - \bar{y}) / \sum (i - \bar{i})^2$ and
+/// $a = \bar{y} - b\,\bar{i}$, summed as numpy does. (A one-pass
+/// $\sum i\,y_i - n\,\bar{i}\,\bar{y}$ loses digits to cancellation.)
+/// NaN for fewer than 2 values.
+pub(crate) fn calculate_sequential_ols(y: &[f64]) -> (f64, f64) {
+    let n = y.len();
     if n < 2 {
         return (f64::NAN, f64::NAN);
     }
-
-    let n_f64 = n as f64;
-    let mut sum_y = 0.0;
-    let mut sum_xy = 0.0;
-
-    // Calculate sums in a single pass
-    for (i, val) in y_values.into_iter().enumerate() {
-        sum_y += val;
-        sum_xy += (i as f64) * val;
-    }
-
-    let mean_x = (n_f64 - 1.0) / 2.0;
-    let mean_y = sum_y / n_f64;
-
-    // Sum of squares of x (SS_xx) for a sequence 0..n-1 has a known closed-form formula
-    let ss_xx = n_f64 * (n_f64 * n_f64 - 1.0) / 12.0;
-
-    // Sum of products (SS_xy)
-    let ss_xy = sum_xy - n_f64 * mean_x * mean_y;
-
+    let mean_x = (n as f64 - 1.0) / 2.0;
+    let mean_y = numpy_mean(y);
+    let ss_xx = numpy_sum(n, |i| (i as f64 - mean_x) * (i as f64 - mean_x));
+    let ss_xy = numpy_sum(n, |i| (i as f64 - mean_x) * (y[i] - mean_y));
     let slope = ss_xy / ss_xx;
-    let intercept = mean_y - slope * mean_x;
-
-    (intercept, slope)
-}
-
-/// Number of distinct values, counting all NaNs as one value like `np.unique`.
-pub(crate) fn count_unique(arr: &ArrayView1<f64>) -> usize {
-    let sorted = arr
-        .iter()
-        .filter(|x| !x.is_nan())
-        .sorted_by(|a, b| a.total_cmp(b))
-        .collect::<Vec<_>>();
-    let distinct = if sorted.is_empty() {
-        0
-    } else {
-        1 + sorted.windows(2).filter(|win| win[0] != win[1]).count()
-    };
-    let has_nan = arr.iter().any(|x| x.is_nan());
-    distinct + has_nan as usize
-}
-
-/// Reduce the non-NaN values with `f`, like pandas' `max`/`min` (skipna).
-/// NaN if every value is NaN.
-pub(crate) fn skip_nan_reduce(x: &Array1<f64>, f: fn(f64, f64) -> f64) -> f64 {
-    x.iter()
-        .copied()
-        .filter(|v| !v.is_nan())
-        .reduce(f)
-        .unwrap_or(f64::NAN)
-}
-
-pub(crate) fn aggregate_on_chunks(
-    x: Array1<f64>,
-    chunk_size: usize,
-    aggregator: impl Fn(Array1<f64>) -> f64,
-) -> Array1<f64> {
-    let mut agg_arr = Vec::with_capacity(x.len().div_ceil(chunk_size));
-    for chunk in x.axis_chunks_iter(Axis(0), chunk_size) {
-        agg_arr.push(aggregator(chunk.to_owned()));
-    }
-    Array1::from_vec(agg_arr)
+    (mean_y - slope * mean_x, slope)
 }
 
 pub(crate) fn get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize> {
@@ -175,51 +162,43 @@ pub(crate) fn get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize
     group_lengths
 }
 
-/// Return the median. Sorts its argument in place.
-pub(crate) fn median_mut<T>(xs: &mut Array1<T>) -> Result<T, QuantileError>
-where
-    T: Clone + Copy + Ord + FromPrimitive,
-    T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Div<Output = T> + Rem<Output = T>,
-{
-    if xs.is_empty() {
-        return Err(QuantileError::EmptyInput);
-    }
-    xs.as_slice_mut().unwrap().sort_unstable();
-    Ok(if xs.len().is_multiple_of(2) {
-        (xs[xs.len() / 2] + xs[xs.len() / 2 - 1]) / (T::from_u64(2).unwrap())
+/// The `q`-quantile of `sorted` (ascending, not empty), exactly as
+/// `np.quantile` computes it (method "linear"): index $h = (n - 1)\,q$,
+/// neighbours $a = x_{(\lfloor h \rfloor)}$, $b = x_{(\lfloor h \rfloor + 1)}$
+/// and weight $t = h - \lfloor h \rfloor$, then numpy's `_lerp`:
+/// $a + (b - a)\,t$ for $t < 0.5$, $b - (b - a)(1 - t)$ otherwise. At or
+/// beyond the last index numpy uses the last value for both neighbours with
+/// $t = h + 1$ (it computes the weight from the replacement index $-1$).
+/// So an infinite neighbour can give NaN, exactly as in numpy.
+pub fn numpy_quantile(sorted: &[f64], q: f64) -> f64 {
+    let n = sorted.len();
+    let h = (n as f64 - 1.0) * q;
+    let (i, j, t) = if h >= (n - 1) as f64 {
+        (n - 1, n - 1, h + 1.0)
     } else {
-        xs[xs.len() / 2]
-    })
+        let previous = h.floor();
+        (previous as usize, previous as usize + 1, h - previous)
+    };
+    let (a, b) = (sorted[i], sorted[j]);
+    let diff = b - a;
+    if t >= 0.5 {
+        b - diff * (1.0 - t)
+    } else {
+        a + diff * t
+    }
 }
 
-pub(crate) fn roll(x: &mut [f64], shift: isize) -> &[f64] {
-    if shift > 0 {
-        x.rotate_right(shift as usize);
-    } else {
-        x.rotate_left(shift.unsigned_abs());
+/// The median of `values` (not empty, reordered in place), exactly as
+/// `np.median` computes it: the `np.mean` of the middle value, or of the two
+/// middle values for an even count. Found with a selection, $O(n)$.
+pub fn numpy_median(values: &mut [f64]) -> f64 {
+    let n = values.len();
+    let (left, &mut upper, _) = values.select_nth_unstable_by(n / 2, f64::total_cmp);
+    if n % 2 == 1 {
+        return numpy_mean(&[upper]);
     }
-    x
-}
-
-/// Mean of the non-NaN values, like pandas' `mean` (skipna). NaN if every
-/// value is NaN.
-pub(crate) fn skip_nan_mean(x: &Array1<f64>) -> f64 {
-    let (sum, n) = x
-        .iter()
-        .filter(|v| !v.is_nan())
-        .fold((0.0, 0usize), |(s, n), v| (s + v, n + 1));
-    if n == 0 { f64::NAN } else { sum / n as f64 }
-}
-
-/// Sample variance (`ddof = 1`) of the non-NaN values, like pandas' `var`
-/// (skipna). NaN with fewer than 2 non-NaN values.
-pub(crate) fn skip_nan_sample_var(x: &Array1<f64>) -> f64 {
-    let values = Array1::from_iter(x.iter().copied().filter(|v| !v.is_nan()));
-    if values.len() < 2 {
-        f64::NAN
-    } else {
-        values.var(1.0)
-    }
+    let lower = left.iter().copied().max_by(f64::total_cmp).unwrap_or(upper);
+    numpy_mean(&[lower, upper])
 }
 
 /// Index of the first maximum, like `np.argmax`: if the series contains NaN,
@@ -246,26 +225,6 @@ fn np_arg_extreme(x: &ArrayView1<f64>, better: fn(f64, f64) -> bool) -> Option<u
         }
     }
     best.map(|(i, _)| i)
-}
-
-/// Median of the non-NaN values, like pandas' `median` (skipna). NaN if
-/// every value is NaN.
-pub(crate) fn skip_nan_median(x: &Array1<f64>) -> f64 {
-    let mut values = x
-        .iter()
-        .copied()
-        .filter(|v| !v.is_nan())
-        .collect::<Vec<_>>();
-    if values.is_empty() {
-        return f64::NAN;
-    }
-    values.sort_by(|a, b| a.total_cmp(b));
-    let mid = values.len() / 2;
-    if values.len() % 2 == 0 {
-        (values[mid - 1] + values[mid]) / 2.0
-    } else {
-        values[mid]
-    }
 }
 
 #[cfg(test)]

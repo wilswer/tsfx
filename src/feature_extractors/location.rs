@@ -1,33 +1,11 @@
 //! Relative positions in the series where something happens.
 
-use anyhow::Result;
-use ndarray::{Axis, Ix1, s};
-use polars::lazy::dsl::*;
-use polars::prelude::*;
+use ndarray::{Axis, s};
 
-use super::_make_nan_struct_column;
-use crate::utils::stats::{np_argmax, np_argmin};
+use super::kernel::{GroupContext, Kernel, scalar_kernel};
+use crate::utils::stats::{np_argmax, np_argmin, numpy_sum};
 
-fn _first_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let max_res = np_argmax(&arr.view());
-    let max = match max_res {
-        Some(m) => m,
-        None => return Ok(Column::new("".into(), &[f64::NAN])),
-    };
-    let out = max as f64 / arr.len() as f64;
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// First location of maximum feature.
 ///
 /// The relative position of the first occurrence of the maximum value, as a
@@ -45,35 +23,10 @@ fn _first_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.first_location_of_maximum` (v0.21.2).
-pub fn first_location_of_maximum(name: &str) -> Expr {
-    col(name)
-        .apply(_first_location_of_maximum, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__first_location_of_maximum", name))
+    FirstLocationOfMaximum, "first_location_of_maximum", |ctx| np_argmax(ctx.x()).map_or(f64::NAN, |i| i as f64 / ctx.len() as f64)
 }
 
-fn _first_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    let min_res = np_argmin(&arr.view());
-    let min = match min_res {
-        Some(m) => m,
-        None => return Ok(Column::new("".into(), &[f64::NAN])),
-    };
-    let out = min as f64 / arr.len() as f64;
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// First location of minimum feature.
 ///
 /// The relative position of the first occurrence of the minimum value, as a
@@ -91,36 +44,10 @@ fn _first_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.first_location_of_minimum` (v0.21.2).
-pub fn first_location_of_minimum(name: &str) -> Expr {
-    col(name)
-        .apply(_first_location_of_minimum, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__first_location_of_minimum", name))
+    FirstLocationOfMinimum, "first_location_of_minimum", |ctx| np_argmin(ctx.x()).map_or(f64::NAN, |i| i as f64 / ctx.len() as f64)
 }
 
-fn _last_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    // argmax of the reversed series gives the last occurrence
-    let max_res = np_argmax(&arr.slice(s![..;-1]));
-    let max = match max_res {
-        Some(m) => m,
-        None => return Ok(Column::new("".into(), &[f64::NAN])),
-    };
-    let out = 1.0 - (max as f64 / arr.len() as f64);
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Last location of maximum feature.
 ///
 /// The relative position of the last occurrence of the maximum value, as a
@@ -138,36 +65,13 @@ fn _last_location_of_maximum(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.last_location_of_maximum` (v0.21.2).
-pub fn last_location_of_maximum(name: &str) -> Expr {
-    col(name)
-        .apply(_last_location_of_maximum, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__last_location_of_maximum", name))
-}
-
-fn _last_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+    LastLocationOfMaximum, "last_location_of_maximum", |ctx| {
+        // argmax of the reversed series gives the last occurrence
+        np_argmax(&ctx.x().slice(s![..;-1])).map_or(f64::NAN, |i| 1.0 - i as f64 / ctx.len() as f64)
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
-    // argmin of the reversed series gives the last occurrence
-    let min_res = np_argmin(&arr.slice(s![..;-1]));
-    let min = match min_res {
-        Some(m) => m,
-        None => return Ok(Column::new("".into(), &[f64::NAN])),
-    };
-    let out = 1.0 - (min as f64 / arr.len() as f64);
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
 }
 
+scalar_kernel! {
 /// Last location of minimum feature.
 ///
 /// The relative position of the last occurrence of the minimum value, as a
@@ -185,45 +89,10 @@ fn _last_location_of_minimum(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.last_location_of_minimum` (v0.21.2).
-pub fn last_location_of_minimum(name: &str) -> Expr {
-    col(name)
-        .apply(_last_location_of_minimum, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__last_location_of_minimum", name))
-}
-
-fn _index_mass_quantile(s: Column, qs: &[f64]) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return _make_nan_struct_column("index_mass_quantile", "q", qs);
+    LastLocationOfMinimum, "last_location_of_minimum", |ctx| {
+        // argmin of the reversed series gives the last occurrence
+        np_argmin(&ctx.x().slice(s![..;-1])).map_or(f64::NAN, |i| 1.0 - i as f64 / ctx.len() as f64)
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let mut abs_arr = arr.mapv(|x| x.abs());
-    let abs_sum = abs_arr.sum();
-    if abs_sum == 0.0 {
-        return _make_nan_struct_column("index_mass_quantile", "q", qs);
-    }
-    abs_arr.accumulate_axis_inplace(Axis(0), |&prev, curr| *curr += prev);
-    let mass_centralized = abs_arr.mapv(|x| x / abs_sum);
-    let mut ss: Vec<Column> = Vec::with_capacity(qs.len());
-    for q in qs {
-        let idx_res = mass_centralized
-            .iter()
-            .enumerate()
-            .filter(|(_, x)| x >= &q)
-            .map(|(i, _)| i);
-        let out = (idx_res.min().unwrap_or(0) + 1) as f64 / arr.len() as f64;
-        ss.push(Column::new(
-            format!("index_mass_quantile__q_{:2}", q).into(),
-            &[out],
-        ));
-    }
-    let s = DataFrame::new(1, ss)?
-        .into_struct("index_mass_quantile".into())
-        .into_column();
-    Ok(s)
 }
 
 /// Index mass quantile feature.
@@ -249,28 +118,32 @@ fn _index_mass_quantile(s: Column, qs: &[f64]) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.index_mass_quantile` (v0.21.2).
-pub fn index_mass_quantile(name: &str, qs: Vec<f64>) -> Expr {
-    let mut new_field_names = Vec::with_capacity(qs.len());
-    let mut struct_names = Vec::with_capacity(qs.len());
-    for q in qs.iter() {
-        new_field_names.push(format!("{}__index_mass_quantile__q_{:2}", name, q));
-        struct_names.push(Field::new(
-            format!("index_mass_quantile__q_{:2}", q).into(),
-            DataType::Float64,
-        ));
+pub struct IndexMassQuantile {
+    pub qs: Vec<f64>,
+}
+
+impl Kernel for IndexMassQuantile {
+    fn names(&self) -> Vec<String> {
+        self.qs
+            .iter()
+            .map(|q| format!("index_mass_quantile__q_{q:2}"))
+            .collect()
     }
-    col(name)
-        .apply(
-            move |s| _index_mass_quantile(s, &qs),
-            move |_, _| {
-                Ok(Field::new(
-                    "".into(),
-                    DataType::Struct(struct_names.clone()),
-                ))
-            },
-        )
-        .struct_()
-        .rename_fields(new_field_names)
-        .get(0, true)
-        .alias(format!("{}__index_mass_quantile", name))
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        // np.cumsum(np.abs(x)) / np.sum(np.abs(x)): a sequential cumulative
+        // sum over numpy's pairwise total
+        let mut mass = ctx.x().mapv(f64::abs);
+        let total = numpy_sum(mass.len(), |i| mass[i]);
+        if total == 0.0 {
+            out.extend(self.qs.iter().map(|_| f64::NAN));
+            return;
+        }
+        mass.accumulate_axis_inplace(Axis(0), |&prev, curr| *curr += prev);
+        let mass = mass.mapv(|x| x / total);
+        for q in &self.qs {
+            let first = mass.iter().position(|x| x >= q).unwrap_or(0);
+            out.push((first + 1) as f64 / ctx.len() as f64);
+        }
+    }
 }

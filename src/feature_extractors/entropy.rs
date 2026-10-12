@@ -1,15 +1,12 @@
 //! Complexity and entropy measures.
 
-use anyhow::Result;
 use itertools::Itertools;
-use ndarray::{Array1, Axis, Ix1};
-use polars::lazy::dsl::*;
-use polars::prelude::*;
+use ndarray::{Array1, ArrayView1, Axis};
 
-use crate::utils::stats::population_std;
+use super::kernel::scalar_kernel;
 
 /// All length-`chunk_size` sliding windows of `x`, one step apart.
-fn _into_subchunks(x: &Array1<f64>, chunk_size: usize) -> Vec<Array1<f64>> {
+fn _into_subchunks(x: &ArrayView1<f64>, chunk_size: usize) -> Vec<Array1<f64>> {
     let mut subchunks = Vec::with_capacity(x.len());
     for chunk in x.axis_windows(Axis(0), chunk_size) {
         subchunks.push(chunk.to_owned());
@@ -33,29 +30,7 @@ fn _get_matches(templates: Vec<Array1<f64>>, r: f64) -> usize {
     matches
 }
 
-fn _sample_entropy(s: Column) -> Result<Column, PolarsError> {
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .unwrap();
-    let m = 2;
-    let r = 0.2 * population_std(&arr.view());
-    let templates_m = _into_subchunks(&arr, m);
-    let matches_m = _get_matches(templates_m, r);
-    let templates_m_plus_1 = _into_subchunks(&arr, m + 1);
-    let matches_m_plus_1 = _get_matches(templates_m_plus_1, r);
-    let out = ((matches_m as f64) / (matches_m_plus_1 as f64)).ln();
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Sample entropy feature.
 ///
 /// The sample entropy (SampEn) of the time series, a measure of its
@@ -86,11 +61,16 @@ fn _sample_entropy(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.sample_entropy` (v0.21.2).
-pub fn sample_entropy(name: &str) -> Expr {
-    col(name)
-        .apply(_sample_entropy, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__sample_entropy", name))
+    SampleEntropy, "sample_entropy", |ctx| {
+        // Nulls count as NaN here, and any NaN makes the result NaN
+        if ctx.has_nulls() {
+            f64::NAN
+        } else {
+            let m = 2;
+            let r = 0.2 * ctx.std();
+            let matches_m = _get_matches(_into_subchunks(ctx.x(), m), r);
+            let matches_m_plus_1 = _get_matches(_into_subchunks(ctx.x(), m + 1), r);
+            ((matches_m as f64) / (matches_m_plus_1 as f64)).ln()
+        }
+    }
 }

@@ -54,11 +54,14 @@ def extract_features(
     ```
 
     """
-    fdf = tsfx.extract_features(
-        lf=lf,
-        settings=settings,
-        streaming=streaming,
-    )
+    if streaming:
+        fdf = tsfx.extract_features(lf=lf, settings=settings, streaming=True)
+    else:
+        # Collect only the needed columns here and hand Rust a DataFrame:
+        # that crosses without copying, whereas a LazyFrame is serialised
+        # together with any in-memory data in its plan.
+        df = lf.select(settings._input_columns).collect()
+        fdf = tsfx.extract_features_df(df=df, settings=settings)
 
     return fdf.unnest(
         [

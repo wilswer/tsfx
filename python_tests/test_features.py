@@ -46,6 +46,60 @@ def test_only_nan_group_dropped():
     assert fdf.get_column("id").to_list() == ["a", "b", "c"]
 
 
+def test_all_null_group_gives_nan_not_null():
+    """A group without non-null values gives NaN for every feature, as
+    tsfresh (which sees NaN) does. Median and quantile used to give null."""
+    df = pl.DataFrame({"id": ["a", "a", "b", "b"], "val": [1.0, 2.0, None, None]})
+    opts = ExtractionSettings(
+        grouping_cols=["id"],
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df.lazy(), opts).filter(pl.col("id") == "b")
+    features = fdf.drop("id", "length").row(0, named=True)
+    assert [name for name, value in features.items() if value is None] == []
+    assert math.isnan(features["val__median"])
+    assert math.isnan(features["val__quantile__q_0.1"])
+
+
+def test_quantile_with_nulls_matches_numpy_exactly():
+    """Nulls are dropped before the quantile, which then equals np.quantile of
+    the remaining values bit for bit. Polars' quantile counted the nulls into
+    its interpolation index and lost the last bits."""
+    values = [1.0, None, 3.0, 3.0, -2.0, None, 7.0, 7.0, 0.0, 1.0]
+    df = pl.DataFrame({"id": ["a"] * len(values), "val": values})
+    opts = ExtractionSettings(
+        grouping_cols=["id"],
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    features = extract_features(df.lazy(), opts).row(0, named=True)
+    # np.quantile([1, 3, 3, -2, 7, 7, 0, 1], q) with numpy 2.4.4
+    assert features["val__quantile__q_0.1"] == -0.5999999999999999
+    assert features["val__quantile__q_0.2"] == 0.40000000000000013
+
+
+@pytest.mark.parametrize("n", [5, 9, 100, 129, 1259])
+def test_mean_variance_std_match_numpy_exactly(n):
+    """mean, variance and standard_deviation equal np.mean, np.var and np.std
+    bit for bit (numpy's pairwise summation, as tsfresh computes them). The
+    earlier Welford variance and unrolled mean differed in the last bits."""
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(n)
+    values = list(100 + 5 * rng.standard_normal(n))
+    df = pl.DataFrame({"id": ["a"] * n, "val": values})
+    opts = ExtractionSettings(
+        grouping_cols=["id"],
+        feature_setting=FeatureSetting.Minimal,
+        value_cols=["val"],
+    )
+    features = extract_features(df.lazy(), opts).row(0, named=True)
+    x = np.array(values)
+    assert features["val__mean"] == float(np.mean(x))
+    assert features["val__variance"] == float(np.var(x))
+    assert features["val__standard_deviation"] == float(np.std(x))
+
+
 def test_only_nan_group_dropped_with_date():
     df = pl.DataFrame(
         {
@@ -824,10 +878,13 @@ def test_agg_linear_trend_slope():
 
 
 def test_mean_n_absolute_max():
+    # tsfresh needs more than n values: 7 values with n = 7 give NaN
     df = pl.DataFrame(
         {
-            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b"],
-            "val": [1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b", "b", "c", "c"]
+            + ["c"] * 5,
+            "val": [1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+            + [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
         },
     ).lazy()
 
@@ -839,8 +896,10 @@ def test_mean_n_absolute_max():
     fdf = extract_features(df, opts)
     fdf = fdf.sort("id")
 
-    assert math.isnan(fdf.get_column("val__mean_n_absolute_max__n_7").to_list()[0])
-    assert fdf.get_column("val__mean_n_absolute_max__n_7").to_list()[1] == 4.0
+    result = fdf.get_column("val__mean_n_absolute_max__n_7").to_list()
+    assert math.isnan(result[0])
+    assert result[1] == 5.0
+    assert math.isnan(result[2])
 
 
 def test_mean_change():

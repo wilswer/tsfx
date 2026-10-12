@@ -2,7 +2,8 @@
 
 Input/expected pairs are copied from tsfresh v0.21.2,
 tests/units/feature_extraction/test_feature_calculations.py
-(https://github.com/blue-yonder/tsfresh), used under the MIT licence:
+(https://github.com/blue-yonder/tsfresh), used under the MIT licence
+(full text in TSFRESH_LICENSE next to this file):
 
     Copyright (c) 2016 Maximilian Christ, Blue Yonder GmbH
 
@@ -405,15 +406,17 @@ def test_sample_entropy(values, expected):
 # tsfresh v0.21.2 feature calculators on the given input (call in comment).
 
 
-# agg_linear_trend(pd.Series(x), [{"attr": a, "chunk_len": 3, "f_agg": "var"}])
-# tsfresh aggregates chunks with pandas' Series.var, i.e. ddof=1.
+# agg_linear_trend(np.array(x), [{"attr": a, "chunk_len": 3, "f_agg": "var"}])
+# as tsfresh's extract_features calls it: a numpy array, so the chunk
+# variance is numpy's (ddof=0). tsfresh's unit tests pass a pandas Series
+# (ddof=1) instead.
 @pytest.mark.parametrize(
     ("values", "attr", "expected"),
     [
-        (list(range(9)), "intercept", 1.0),
+        (list(range(9)), "intercept", 0.6666666666666666),
         (list(range(9)), "slope", 0.0),
-        ([0, 1, 2, 0, 2, 4, 0, 3, 6], "intercept", 0.666666666666667),
-        ([0, 1, 2, 0, 2, 4, 0, 3, 6], "slope", 4.0),
+        ([0, 1, 2, 0, 2, 4, 0, 3, 6], "intercept", 0.44444444444444375),
+        ([0, 1, 2, 0, 2, 4, 0, 3, 6], "slope", 2.666666666666667),
     ],
 )
 def test_agg_linear_trend_var_generated(values, attr, expected):
@@ -425,9 +428,12 @@ def test_agg_linear_trend_var_generated(values, attr, expected):
 
 
 # ratio_beyond_r_sigma(np.array([0, 0, 0, 1.0]), r=1.5)
+# ratio_beyond_r_sigma(np.array([1, 3, 3, -2, 7, 7, 0, 1.0]), r=1.5) with
+# tsfresh 0.21.2 / numpy 2.4.4: std is exactly 3, so the three values exactly
+# 4.5 from the mean are not beyond 1.5 sigma (needs np.std bit for bit).
 @pytest.mark.parametrize(
     ("values", "r", "expected"),
-    [([0, 0, 0, 1], "1.50", 0.25)],
+    [([0, 0, 0, 1], "1.50", 0.25), ([1, 3, 3, -2, 7, 7, 0, 1], "1.50", 0.0)],
 )
 def test_ratio_beyond_r_sigma_generated(values, r, expected):
     _assert_feature(values, f"val__ratio_beyond_r_sigma__r_{r}", expected)
@@ -488,8 +494,9 @@ def test_ratio_value_number_to_time_series_length_nan_generated(values, expected
     )
 
 
-# agg_linear_trend(pd.Series(x), [{"attr": a, "chunk_len": 3, "f_agg": f}])
-# with pandas 3.0.2: chunk max/min skip NaN.
+# agg_linear_trend(np.array(x), [{"attr": a, "chunk_len": 3, "f_agg": f}]) as
+# extract_features calls it: numpy's max/min propagate NaN, so a chunk with a
+# NaN makes the fit NaN.
 _AGG_NAN_A = [1, math.nan, 3, 4, 2, 6]
 _AGG_NAN_B = [1, math.nan, 3, 4, math.nan, 6, 0, 5, 2]
 
@@ -497,14 +504,10 @@ _AGG_NAN_B = [1, math.nan, 3, 4, math.nan, 6, 0, 5, 2]
 @pytest.mark.parametrize(
     ("values", "agg", "attr", "expected"),
     [
-        (_AGG_NAN_A, "max", "intercept", 3.0),
-        (_AGG_NAN_A, "max", "slope", 3.0),
-        (_AGG_NAN_A, "min", "intercept", 1.0),
-        (_AGG_NAN_A, "min", "slope", 1.0),
-        (_AGG_NAN_B, "max", "intercept", 3.666666666666667),
-        (_AGG_NAN_B, "max", "slope", 1.0),
-        (_AGG_NAN_B, "min", "intercept", 2.166666666666667),
-        (_AGG_NAN_B, "min", "slope", -0.5),
+        (values, agg, attr, math.nan)
+        for values in (_AGG_NAN_A, _AGG_NAN_B)
+        for agg in ("max", "min")
+        for attr in ("intercept", "slope")
     ],
 )
 def test_agg_linear_trend_nan_generated(values, agg, attr, expected):
@@ -650,6 +653,17 @@ def test_mean_change(values, expected):
 )
 def test_mean_n_absolute_max(values, n, expected):
     _assert_feature(values, f"val__mean_n_absolute_max__n_{n}", expected, 1e-7)
+
+
+# mean_n_absolute_max(np.array(x), n) with tsfresh 0.21.2 / numpy 2.4.4: it
+# needs more than n values, and a NaN sorts last in np.sort, so it is the
+# largest absolute value. Found by the tsfresh fuzzer.
+@pytest.mark.parametrize(
+    ("values", "n", "expected"),
+    [([0.0], 1, math.nan), ([0, 0, 0], 3, math.nan), ([1, math.nan, 2], 1, math.nan)],
+)
+def test_mean_n_absolute_max_generated(values, n, expected):
+    _assert_feature(values, f"val__mean_n_absolute_max__n_{n}", expected)
 
 
 # tsfresh checks index_mass_quantile to one decimal place (places=1).
@@ -803,10 +817,12 @@ def test_linear_trend(values, attr, expected):
             for agg in ("max", "min", "mean", "median")
             for attr in ("intercept", "slope")
         ],
+        # tsfresh's unit test expects -3 / 0 here, passing a pandas Series
+        # that skips NaN; extract_features passes a numpy array, which does not
         *[
-            ([math.nan] * 2 + [-3] * 4, agg, attr, expected)
+            ([math.nan] * 2 + [-3] * 4, agg, attr, math.nan)
             for agg in ("max", "min", "mean", "median")
-            for attr, expected in (("intercept", -3), ("slope", 0))
+            for attr in ("intercept", "slope")
         ],
     ],
 )
@@ -914,14 +930,13 @@ def test_percentage_of_reoccurring_values_to_all_datapoints_nan_generated():
     )
 
 
-# agg_linear_trend(pd.Series(x), [{"attr": a, "chunk_len": 3, "f_agg": "var"}])
-# with pandas 3.0.2: chunk var skips NaN (ddof=1, so a chunk with a single
-# non-NaN value gives NaN).
+# agg_linear_trend(np.array(x), [{"attr": a, "chunk_len": 3, "f_agg": "var"}])
+# as extract_features calls it: numpy's var propagates NaN.
 @pytest.mark.parametrize(
     ("values", "attr", "expected"),
     [
-        ([1, math.nan, 3, 4, 2, 6, 0, 5, 2], "intercept", 1.9444444444444446),
-        ([1, math.nan, 3, 4, 2, 6, 0, 5, 2], "slope", 2.166666666666667),
+        ([1, math.nan, 3, 4, 2, 6, 0, 5, 2], "intercept", math.nan),
+        ([1, math.nan, 3, 4, 2, 6, 0, 5, 2], "slope", math.nan),
         ([1, math.nan, math.nan, 4, 2, 6, 0, 5, 2], "intercept", math.nan),
         ([1, math.nan, math.nan, 4, 2, 6, 0, 5, 2], "slope", math.nan),
     ],
@@ -1019,11 +1034,12 @@ def test_sum_of_reoccurring_deviation(values, kind, expected):
     _assert_feature(values, f"val__sum_of_reoccurring_{kind}", expected)
 
 
-# agg_linear_trend(pd.Series(x), [{"attr": a, "chunk_len": 3, "f_agg":
-# "median"}]) with pandas 3.0.2: chunk median skips NaN.
+# The median aggregator is a tsfx addition (tsfresh's extract_features passes
+# a numpy array, which has no median method); it follows np.median, so a
+# chunk with a NaN gives NaN, like the other aggregators.
 @pytest.mark.parametrize(
     ("attr", "expected"),
-    [("intercept", 3.0), ("slope", 0.0)],
+    [("intercept", math.nan), ("slope", math.nan)],
 )
 def test_agg_linear_trend_median_nan_generated(attr, expected):
     _assert_feature(
@@ -1031,3 +1047,114 @@ def test_agg_linear_trend_median_nan_generated(attr, expected):
         f"val__agg_linear_trend_{attr}__chunk_size_3__agg_median",
         expected,
     )
+
+
+# Found by the tsfresh fuzzer (tsfresh 0.21.2 / numpy 2.4.4): np.sum and
+# np.mean sum pairwise, so these must match bit for bit, not approximately.
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        ([0, 0, 0, 0, 0, 1.00001, 32767, 98304], "sum_values", 131072.00001),
+        (
+            [0, 0, 0, 1.288471436710097, 0, 0, 524288, 0, 0],
+            "absolute_sum_of_changes",
+            1048578.5769428734,
+        ),
+        ([0.99999, 0, 0, 0, 0, 0, 0, 65536, 0], "mean_absolute_change", 16384.12499875),
+        (
+            [0, 186, 2.9, 3.6277065286467405, 0, 0, 0, 0],
+            "root_mean_square",
+            65.78142809207054,
+        ),
+        (
+            [0, 0, 0, 1.288471436710097, 0, 0, 524288, 0, 0],
+            "autocorrelation__lag_1",
+            -0.15625086398795657,
+        ),
+        ([0, 0, 0, 0, 0, 1, 27648, 207901], "c3__lag_0", 1125900395896936.5),
+        (
+            [0, 0, 0, 0, 0, 0, 151608, 97965.5, 7, 0],
+            "time_reversal_asymmetry_statistic__lag_1",
+            -99598068723149.0,
+        ),
+    ],
+)
+def test_numpy_summation_exact(values, column, expected):
+    assert _features(values)[f"val__{column}"] == expected
+
+
+# Found by the tsfresh fuzzer (tsfresh 0.21.2 / numpy 2.4.4): np.median is
+# the np.mean of the middle values, and np.quantile interpolates as
+# b - (b - a) * (1 - t) for t >= 0.5, so these must match bit for bit. An
+# infinite neighbour with t == 0 gives NaN in np.quantile ((inf - a) * 0).
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        ([131073.0, 0.99999], "median", 65536.999995),
+        ([0.0, -3.0], "quantile__q_0.8", -0.5999999999999999),
+        ([1.0, 2.0, math.inf], "quantile__q_0.5", math.nan),
+        # at the last index numpy interpolates the last value with itself
+        ([math.inf], "quantile__q_0.1", math.nan),
+        ([1.0, math.inf], "quantile__q_1.0", math.nan),
+        ([1.0, 2.0], "quantile__q_1.0", 2.0),
+        ([1.0, 2.0, math.inf], "median", 2.0),
+    ],
+)
+def test_numpy_median_quantile_exact(values, column, expected):
+    result = _features(values)[f"val__{column}"]
+    if math.isnan(expected):
+        assert math.isnan(result), result
+    else:
+        assert result == expected
+
+
+# Found by the tsfresh fuzzer: agg_linear_trend(np.array(x), [{"attr":
+# "slope", "chunk_len": 3, "f_agg": "var"}]) with tsfresh 0.21.2 / scipy
+# 1.17.1. The chunk variances span eight orders of magnitude, so a one-pass
+# least-squares fit loses digits; linregress centres the data first.
+def test_agg_linear_trend_fit_is_centred():
+    result = _features([0.0, 0.0, 1.0, 0.0, 0.0, 24468.0, 0.0])[
+        "val__agg_linear_trend_slope__chunk_size_3__agg_var"
+    ]
+    assert math.isclose(result, -0.1111111119389534, rel_tol=1e-9)
+
+
+# Found by the tsfresh fuzzer: sum_of_reoccurring_values(np.array(x)) and
+# sum_of_reoccurring_data_points(np.array(x)) with tsfresh 0.21.2 / numpy 2.4.4
+# take np.sum(counts * unique) over every distinct value (sorted, with 0 for
+# values that occur once), so the sum order matters bit for bit.
+_REOCCURRING_X = [0, 1, 2, 3, 131072, 131072, 393216, 393216, 1.5]
+_REOCCURRING_X += [3.01266764466243e-06, 3.01266764466243e-06]
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected"),
+    [("values", 524288.0000030127), ("data_points", 1048576.0000060254)],
+)
+def test_sum_of_reoccurring_exact(kind, expected):
+    assert _features(_REOCCURRING_X)[f"val__sum_of_reoccurring_{kind}"] == expected
+
+
+# Found by a targeted search for threshold cases (series where the threshold
+# is hit exactly in real arithmetic), tsfresh 0.21.2 / numpy 2.4.4:
+# index_mass_quantile(np.array(x), [{"q": 0.5}]) divides by np.sum(np.abs(x))
+# and symmetry_looking(np.array(x), [{"r": 0.05}]) compares
+# np.abs(np.mean(x) - np.median(x)), so the comparison flips unless the sums
+# match numpy's bit for bit.
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        (
+            [0.7, 1.7, 0.57, 0.4, 0.57, -1.7, -0.7, 0.4],
+            "index_mass_quantile__q_0.5",
+            0.625,
+        ),
+        (
+            [-1.6, -1.5, -4.4, -2.6, -2.2, -2.0, 4.1, -0.8, -4.5, 1.8],
+            "symmetry_looking__r_0.05",
+            0.0,
+        ),
+    ],
+)
+def test_threshold_exactly_hit(values, column, expected):
+    assert _features(values)[f"val__{column}"] == expected
