@@ -2,7 +2,8 @@
 
 Input/expected pairs are copied from tsfresh v0.21.2,
 tests/units/feature_extraction/test_feature_calculations.py
-(https://github.com/blue-yonder/tsfresh), used under the MIT licence:
+(https://github.com/blue-yonder/tsfresh), used under the MIT licence
+(full text in TSFRESH_LICENSE next to this file):
 
     Copyright (c) 2016 Maximilian Christ, Blue Yonder GmbH
 
