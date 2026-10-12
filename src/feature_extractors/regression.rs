@@ -258,7 +258,9 @@ fn jacobi_svd(mut a: Vec<Vec<f64>>) -> (Vec<Vec<f64>>, Vec<f64>, Vec<Vec<f64>>) 
 ///   regressors and raises otherwise): NaN for `coeff` $< k$ and
 ///   0 for `coeff` $= k$, as tsfresh (whose fallback has only $k$ entries).
 /// - A constant or otherwise collinear series gives the minimum-norm least
-///   squares solution, as statsmodels' pseudoinverse.
+///   squares solution, as statsmodels' pseudoinverse. For near-collinear
+///   (ill-conditioned) lag matrices the result is rounding-dependent, in
+///   statsmodels too.
 /// - **Deliberate deviation from tsfresh:** a series containing NaN or
 ///   $\pm\infty$ gives NaN for every coefficient. tsfresh raises
 ///   (statsmodels' `MissingDataError` is not caught), failing the whole
@@ -512,6 +514,9 @@ fn adfuller(x: &[f64], autolag: AdfAutolag) -> [f64; 3] {
 ///   (to within a relative $10^{-9}$) and the smaller lag is used, as
 ///   Python's `min` does for exact ties. statsmodels breaks the tie by
 ///   rounding noise.
+/// - Nonzero values so small that their squares underflow (below about
+///   $10^{-150}$) leave the regression numerically rank-deficient; the
+///   result then depends on rounding, in statsmodels as here.
 ///
 /// # Cost
 /// $O(n\,p^2)$ per distinct `autolag`, with $p$ the largest lag (68 for

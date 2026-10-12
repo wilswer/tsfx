@@ -20,7 +20,6 @@ no counterpart for in ``_tsfx_only``. Calculators get what tsfresh's
 the calculator asks for one.
 """
 
-import itertools
 import math
 import re
 import warnings
@@ -201,35 +200,70 @@ def _deviation(feature: str, x: list[float]) -> bool:
         )
     if feature == "ar_coefficient":
         # tsfresh raises on NaN / ±inf (MissingDataError); tsfx gives NaN
-        return not all(math.isfinite(v) for v in x)
+        if not all(math.isfinite(v) for v in x):
+            return True
+        return not _well_posed(x, _ar_designs(x))
     if feature == "augmented_dickey_fuller":
-        return _adf_rounding_decides(x)
+        return not _well_posed(x, _adf_design(x)) or _adf_exact_fit(x)
     return False
 
 
-def _adf_rounding_decides(values: list[float]) -> bool:
-    """Whether rounding noise decides statsmodels' ADF result: the largest
-    regression fits (nearly) exactly (tsfx takes the residual variance as 0
-    below a relative residual of 1e-10; between that and 1e-5 both compute
-    the same, but the residual's rounding noise can exceed the comparison
-    tolerance), or an extra lag is collinear with the others, so the
-    information criteria of two candidates tie (tsfx takes the smaller
-    lag)."""
+# Least squares designs conditioned worse than this are not fuzzed: their
+# statsmodels results depend on rounding (LAPACK's as much as tsfx's)
+MAX_CONDITION = 1e6
+
+
+def _well_posed(values: list[float], designs: list) -> bool:
+    """Whether the regression features are well-posed on this series: no
+    nonzero value so small its square underflows (|v| < 1e-150), and every
+    design condition number at most MAX_CONDITION. This excludes
+    rank-deficient and near-collinear designs, so also the AIC / BIC ties of
+    collinear extra lags (tsfx takes the smaller lag, statsmodels decides by
+    rounding)."""
+    if any(0 < abs(v) < 1e-150 for v in values):
+        return False
+    return all(np.linalg.cond(d) <= MAX_CONDITION for d in designs)
+
+
+def _ar_designs(values: list[float]) -> list:
+    """AutoReg's designs [1, x_{t-1}, ..., x_{t-k}] for the parity config's
+    k that can be fitted (n >= 2k + 2)."""
     x = np.array(values, dtype=float)
     n = len(x)
-    if n < 4 or not np.isfinite(x).all():
-        return False
+    return [
+        np.column_stack([np.ones(n - k)] + [x[k - c : n - c] for c in range(1, k + 1)])
+        for k in (1, 2, 4)
+        if n >= 2 * k + 2
+    ]
+
+
+def _adf_design(values: list[float]) -> list:
+    """The largest ADF regression design (constant, level, all lags), or none
+    if statsmodels raises before fitting."""
+    x = np.array(values, dtype=float)
+    n = len(x)
+    if n < 4 or not np.isfinite(x).all() or x.max() == x.min():
+        return []
     maxlag = min(math.ceil(12 * (n / 100) ** 0.25), n // 2 - 2)
-    if maxlag < 0:
-        return False
     xd = np.diff(x)
     nobs = n - 1 - maxlag
     cols = [np.ones(nobs), x[maxlag : maxlag + nobs]]
     cols += [xd[maxlag - lag : maxlag - lag + nobs] for lag in range(1, maxlag + 1)]
-    design = np.column_stack(cols)
-    ranks = [np.linalg.matrix_rank(design[:, : lags + 2]) for lags in range(maxlag + 1)]
-    if any(a == b for a, b in itertools.pairwise(ranks)):
-        return True
+    return [np.column_stack(cols)]
+
+
+def _adf_exact_fit(values: list[float]) -> bool:
+    """Whether the largest ADF regression fits (nearly) exactly: tsfx takes
+    the residual variance as 0 below a relative residual of 1e-10, where
+    statsmodels divides by rounding noise; up to 1e-5 the residual's noise
+    can still exceed the comparison tolerance."""
+    designs = _adf_design(values)
+    if not designs:
+        return False
+    (design,) = designs
+    x = np.array(values, dtype=float)
+    maxlag = design.shape[1] - 2
+    xd = np.diff(x)
     y = xd[maxlag:]
     beta = np.linalg.lstsq(design, y, rcond=None)[0]
     terms = np.abs(y) + np.abs(design * beta).sum(axis=1)
@@ -246,6 +280,18 @@ def _same(a: float, b: float, tolerant: bool) -> bool:
     if tolerant:
         return math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-9)
     return a == b
+
+
+def _same_ar(x: object, column: str, a: float, b: float) -> bool:
+    """ar_coefficient compared with an absolute tolerance relative to the
+    largest coefficient of the same fit: least squares rounding errors scale
+    with the size of the whole solution, not of each coefficient."""
+    if a is None or b is None or math.isnan(float(a)) or math.isnan(float(b)):
+        return _same(a, b, tolerant=True)
+    k = int(column.rsplit("__k_", 1)[1])
+    fit = fc.ar_coefficient(x, [{"coeff": c, "k": k} for c in range(k + 1)])
+    scale = max([1.0] + [abs(v) for _, v in fit if math.isfinite(v)])
+    return math.isclose(float(a), float(b), rel_tol=1e-9, abs_tol=1e-9 * scale)
 
 
 def _feature(column: str) -> str:
@@ -272,7 +318,11 @@ def test_matches_tsfresh(feature: str) -> None:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 expected = _tsfresh(x, column)
-            if not _same(value, expected, tolerant):
+            if feature == "ar_coefficient":
+                same = _same_ar(x, column, value, expected)
+            else:
+                same = _same(value, expected, tolerant)
+            if not same:
                 mismatches.append(f"{column}: tsfx {value!r}, tsfresh {expected!r}")
         assert not mismatches, "\n".join(mismatches)
 
