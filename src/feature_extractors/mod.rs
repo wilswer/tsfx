@@ -274,6 +274,17 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> 
     Ok(aggregators)
 }
 
+/// The group's values as one contiguous `Float64` chunk, ready for
+/// `ArrayView1::from(ca.cont_slice()?)`.
+///
+/// Unlike `to_ndarray`, this does not copy a `Float64` group that is already
+/// a single chunk; other types are cast (one copy, as before). The column
+/// must not contain nulls, or `cont_slice` fails.
+pub(super) fn f64_values(s: &Column) -> PolarsResult<Float64Chunked> {
+    let series = s.as_materialized_series().cast(&DataType::Float64)?;
+    Ok(series.f64()?.rechunk().into_owned())
+}
+
 pub(super) fn _make_nan_struct_column(
     name: &str,
     parameter_name: &str,

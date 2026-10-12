@@ -2,14 +2,14 @@
 
 use anyhow::Result;
 use itertools::Itertools;
-use ndarray::{Array1, Axis, Ix1};
+use ndarray::{Array1, ArrayView1};
 use ndarray_stats::QuantileExt;
 use noisy_float::types::n64;
 use ordered_float::OrderedFloat;
 use polars::lazy::dsl::*;
 use polars::prelude::*;
 
-use super::{_make_nan_struct_column, _make_nan_struct_column_int};
+use super::{_make_nan_struct_column, _make_nan_struct_column_int, f64_values};
 use crate::utils::stats::{
     median_mut, population_std, population_var, sample_excess_kurtosis, sample_skewness,
 };
@@ -37,7 +37,8 @@ fn _sum_values(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let sum = arr.sum();
     let s = Column::new("".into(), &[sum]);
     Ok(s)
@@ -71,7 +72,8 @@ fn _mean(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let mean = arr.mean().unwrap_or(f64::NAN);
     let s = Column::new("".into(), &[mean]);
     Ok(s)
@@ -104,7 +106,8 @@ fn _min(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let min = arr.min().unwrap_or(&f64::NAN);
     let s = Column::new("".into(), &[*min]);
     Ok(s)
@@ -135,7 +138,8 @@ fn _max(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let max = arr.max().unwrap_or(&f64::NAN);
     let s = Column::new("".into(), &[*max]);
     Ok(s)
@@ -189,8 +193,9 @@ fn _standard_deviation(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let standard_deviation = population_std(&arr.column(0));
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
+    let standard_deviation = population_std(&arr);
     let s = Column::new("".into(), &[standard_deviation]);
     Ok(s)
 }
@@ -227,8 +232,9 @@ fn _variance(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let variance = population_var(&arr.column(0));
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
+    let variance = population_var(&arr);
     let s = Column::new("".into(), &[variance]);
     Ok(s)
 }
@@ -264,7 +270,8 @@ fn _rms(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let rms = arr
         .mapv(|x| x.powi(2))
         .mean()
@@ -301,8 +308,9 @@ fn _skewness(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let skewness = sample_skewness(&arr.column(0));
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
+    let skewness = sample_skewness(&arr);
     let s = Column::new("".into(), &[skewness]);
     Ok(s)
 }
@@ -341,7 +349,8 @@ fn _absolute_energy(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let abs_energy = arr.mapv(|x| x.powi(2)).sum();
     let s = Column::new("".into(), &[abs_energy]);
     Ok(s)
@@ -376,7 +385,8 @@ fn _kurtosis(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     // tsfresh calls pandas' kurtosis with skipna=True
     let arr = Array1::from_iter(arr.iter().copied().filter(|x| !x.is_nan()));
     let kurtosis = sample_excess_kurtosis(&arr.view());
@@ -419,8 +429,9 @@ fn _variance_larger_than_standard_deviation(s: Column) -> Result<Column, PolarsE
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let var = population_var(&arr.column(0));
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
+    let var = population_var(&arr);
     let out = if var > var.sqrt() { 1.0 } else { 0.0 };
     let s = Column::new("".into(), &[out]);
     Ok(s)
@@ -455,13 +466,14 @@ fn _ratio_beyond_r_sigma(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return _make_nan_struct_column("ratio_beyond_r_sigma", "r", rs);
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
         None => return _make_nan_struct_column("ratio_beyond_r_sigma", "r", rs),
     };
-    let std = population_std(&arr.column(0));
+    let std = population_std(&arr);
     let mut ss: Vec<Column> = Vec::with_capacity(rs.len());
     for r in rs {
         let count = arr
@@ -533,10 +545,11 @@ fn _large_standard_deviation(s: Column, rs: &[f64]) -> Result<Column, PolarsErro
     if s.is_empty() {
         return _make_nan_struct_column("large_standard_deviation", "r", rs);
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let min = arr.min().unwrap_or(&0.0);
     let max = arr.max().unwrap_or(&0.0);
-    let std = population_std(&arr.column(0));
+    let std = population_std(&arr);
     let mut ss: Vec<Column> = Vec::with_capacity(rs.len());
     for r in rs {
         let out = std > r * (max - min);
@@ -602,11 +615,8 @@ fn _symmetry_looking(s: Column, rs: &[f64]) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return _make_nan_struct_column("symmetry_looking", "r", rs);
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     // tsfresh: every comparison with a NaN mean/median is False
     if arr.iter().any(|x| x.is_nan()) {
         let ss = rs
@@ -708,7 +718,8 @@ fn _absolute_maximum(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let abs_arr = arr.mapv(|x| x.abs());
     let max_res = abs_arr.max();
     let max = match max_res {
@@ -746,13 +757,14 @@ fn _variation_coefficient(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
         None => return Ok(Column::new("".into(), &[f64::NAN])),
     };
-    let std = population_std(&arr.column(0));
+    let std = population_std(&arr);
     let out = if mean == 0.0 { f64::NAN } else { std / mean };
     let s = Column::new("".into(), &[out]);
     Ok(s)
@@ -786,7 +798,8 @@ fn _mean_n_absolute_max(s: Column, ns: &[usize]) -> Result<Column, PolarsError> 
     if s.is_empty() {
         return _make_nan_struct_column_int("mean_n_absolute_max", "n", ns);
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let arr = arr.mapv(|x| -OrderedFloat::from(x.abs()));
 
     let mut ss: Vec<Column> = Vec::with_capacity(ns.len());
