@@ -1,10 +1,11 @@
 //! Features built from consecutive differences.
 
 use anyhow::Result;
-use ndarray::{Axis, Ix1, s};
+use ndarray::{ArrayView1, CowArray, s};
 use polars::lazy::dsl::*;
 use polars::prelude::*;
 
+use super::f64_values;
 use crate::utils::stats::population_std;
 
 fn _mean_absolute_change(s: Column) -> Result<Column, PolarsError> {
@@ -12,11 +13,8 @@ fn _mean_absolute_change(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
     let mean_abs_change = diffs.mapv(|x| x.abs()).mean().unwrap_or(f64::NAN);
     let s = Column::new("".into(), &[mean_abs_change]);
@@ -53,21 +51,18 @@ fn _cid_ce(s: Column, normalize: bool) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let arr = if normalize {
         let mean = arr.mean().unwrap_or(f64::NAN);
-        let std = population_std(&arr.view());
+        let std = population_std(&arr);
         // tsfresh: a constant series has no complexity
         if std == 0.0 {
             return Ok(Column::new("".into(), &[0.0]));
         }
-        (arr - mean) / std
+        CowArray::from((&arr - mean) / std)
     } else {
-        arr
+        CowArray::from(arr)
     };
     let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
     let out = diffs.mapv(|x| x.powi(2)).sum().sqrt();
@@ -115,11 +110,8 @@ fn _absolute_sum_of_changes(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let diffs = &arr.slice(s![1..]) - &arr.slice(s![..-1]);
     let out = diffs.mapv(|x| x.abs()).sum();
     let s = Column::new("".into(), &[out]);
@@ -155,11 +147,8 @@ fn _mean_change(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let out = if arr.len() < 2 {
         f64::NAN
     } else {
