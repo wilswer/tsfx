@@ -28,8 +28,8 @@ use counting::{
 use entropy::sample_entropy;
 use kernel::KernelPlan;
 use location::{
-    first_location_of_maximum, first_location_of_minimum, index_mass_quantile,
-    last_location_of_maximum, last_location_of_minimum,
+    FirstLocationOfMaximum, FirstLocationOfMinimum, IndexMassQuantile, LastLocationOfMaximum,
+    LastLocationOfMinimum,
 };
 use reoccurrence::{ReoccurrenceFeatures, has_duplicate_max, has_duplicate_min, reoccurrence};
 use statistics::{
@@ -165,16 +165,16 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 plan.push(CountBelow { ts });
             }
             if config.first_location_of_maximum.is_some() {
-                aggregators.push(first_location_of_maximum(col));
+                plan.push(FirstLocationOfMaximum);
             }
             if config.first_location_of_minimum.is_some() {
-                aggregators.push(first_location_of_minimum(col));
+                plan.push(FirstLocationOfMinimum);
             }
             if config.last_location_of_maximum.is_some() {
-                aggregators.push(last_location_of_maximum(col));
+                plan.push(LastLocationOfMaximum);
             }
             if config.last_location_of_minimum.is_some() {
-                aggregators.push(last_location_of_minimum(col));
+                plan.push(LastLocationOfMinimum);
             }
             if config.longest_strike_above_mean.is_some() {
                 plan.push(LongestStrikeAboveMean);
@@ -243,12 +243,8 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 plan.push(RangeCount { ranges });
             }
             if let Some(feature) = &config.index_mass_quantile {
-                let params = &feature.parameters;
-                let mut qs = Vec::new();
-                for p in params {
-                    qs.push(p.q);
-                }
-                aggregators.push(index_mass_quantile(col, qs));
+                let qs = feature.parameters.iter().map(|p| p.q).collect();
+                plan.push(IndexMassQuantile { qs });
             }
             if let Some(feature) = &config.c3 {
                 let parameters = &feature.parameters;
