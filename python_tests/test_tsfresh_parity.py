@@ -1079,3 +1079,24 @@ def test_agg_linear_trend_median_nan_generated(attr, expected):
 )
 def test_numpy_summation_exact(values, column, expected):
     assert _features(values)[f"val__{column}"] == expected
+
+
+# Found by the tsfresh fuzzer (tsfresh 0.21.2 / numpy 2.4.4): np.median is
+# the np.mean of the middle values, and np.quantile interpolates as
+# b - (b - a) * (1 - t) for t >= 0.5, so these must match bit for bit. An
+# infinite neighbour with t == 0 gives NaN in np.quantile ((inf - a) * 0).
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        ([131073.0, 0.99999], "median", 65536.999995),
+        ([0.0, -3.0], "quantile__q_0.8", -0.5999999999999999),
+        ([1.0, 2.0, math.inf], "quantile__q_0.5", math.nan),
+        ([1.0, 2.0, math.inf], "median", 2.0),
+    ],
+)
+def test_numpy_median_quantile_exact(values, column, expected):
+    result = _features(values)[f"val__{column}"]
+    if math.isnan(expected):
+        assert math.isnan(result), result
+    else:
+        assert result == expected

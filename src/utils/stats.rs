@@ -222,48 +222,41 @@ where
     })
 }
 
-/// The `q`-quantile of `sorted` (ascending, not empty) with linear
-/// interpolation between the two nearest values, like `np.quantile`. Uses
-/// exactly Polars' formula (index $h = (n - 1)\,q$, then
-/// $x_{(\lfloor h \rfloor)} + (h - \lfloor h \rfloor)(x_{(\lceil h \rceil)} - x_{(\lfloor h \rfloor)})$),
-/// so results match the earlier Polars-based median and quantile bit for bit.
-pub fn linear_quantile(sorted: &[f64], q: f64) -> f64 {
+/// The `q`-quantile of `sorted` (ascending, not empty), exactly as
+/// `np.quantile` computes it (method "linear"): index $h = (n - 1)\,q$; at
+/// or beyond the last index the largest value; otherwise, with neighbours
+/// $a = x_{(\lfloor h \rfloor)}$, $b = x_{(\lfloor h \rfloor + 1)}$ and
+/// $t = h - \lfloor h \rfloor$, numpy's `_lerp`: $a + (b - a)\,t$ for
+/// $t < 0.5$, $b - (b - a)(1 - t)$ otherwise. (So an infinite neighbour with
+/// $t = 0$ gives NaN, as in numpy.)
+pub fn numpy_quantile(sorted: &[f64], q: f64) -> f64 {
     let n = sorted.len();
-    if n == 1 {
-        return sorted[0];
+    let h = (n as f64 - 1.0) * q;
+    if h >= (n - 1) as f64 {
+        return sorted[n - 1];
     }
-    let float_idx = (n as f64 - 1.0) * q;
-    let idx = (float_idx as usize).min(n - 1);
-    let top = (float_idx.ceil() as usize).min(n - 1);
-    let (lower, upper) = (sorted[idx], sorted[top]);
-    if idx == top || lower == upper {
-        lower
+    let previous = h.floor();
+    let i = previous as usize;
+    let (a, b, t) = (sorted[i], sorted[i + 1], h - previous);
+    let diff = b - a;
+    if t >= 0.5 {
+        b - diff * (1.0 - t)
     } else {
-        (float_idx - idx as f64) * (upper - lower) + lower
+        a + diff * t
     }
 }
 
-/// [`linear_quantile`] of unsorted `values` (not empty, reordered in
-/// place), found with a selection instead of a full sort: $O(n)$, like
-/// Polars' `quantile_slice`. Same neighbours, so the same result bit for bit.
-pub fn linear_quantile_select(values: &mut [f64], q: f64) -> f64 {
+/// The median of `values` (not empty, reordered in place), exactly as
+/// `np.median` computes it: the `np.mean` of the middle value, or of the two
+/// middle values for an even count. Found with a selection, $O(n)$.
+pub fn numpy_median(values: &mut [f64]) -> f64 {
     let n = values.len();
-    if n == 1 {
-        return values[0];
+    let (left, &mut upper, _) = values.select_nth_unstable_by(n / 2, f64::total_cmp);
+    if n % 2 == 1 {
+        return numpy_mean(&[upper]);
     }
-    let float_idx = (n as f64 - 1.0) * q;
-    let idx = (float_idx as usize).min(n - 1);
-    let top = (float_idx.ceil() as usize).min(n - 1);
-    let (_, &mut lower, rest) = values.select_nth_unstable_by(idx, f64::total_cmp);
-    if idx == top {
-        return lower;
-    }
-    let upper = rest.iter().copied().min_by(f64::total_cmp).unwrap_or(lower);
-    if lower == upper {
-        lower
-    } else {
-        (float_idx - idx as f64) * (upper - lower) + lower
-    }
+    let lower = left.iter().copied().max_by(f64::total_cmp).unwrap_or(upper);
+    numpy_mean(&[lower, upper])
 }
 
 /// Mean of the non-NaN values, like pandas' `mean` (skipna). NaN if every

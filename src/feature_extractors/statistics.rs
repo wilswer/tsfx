@@ -7,8 +7,8 @@ use polars::lazy::dsl::*;
 
 use super::kernel::{GroupContext, Kernel, extremes, scalar_kernel};
 use crate::utils::stats::{
-    linear_quantile, linear_quantile_select, median_mut, numpy_mean, numpy_sum,
-    sample_excess_kurtosis, sample_skewness,
+    median_mut, numpy_mean, numpy_median, numpy_quantile, numpy_sum, sample_excess_kurtosis,
+    sample_skewness,
 };
 /// Length feature.
 ///
@@ -295,8 +295,8 @@ scalar_kernel! {
 /// Median feature.
 ///
 /// The median of all values in the time series: the middle value after
-/// sorting, or the mean of the two middle values for an even count (linear
-/// interpolation at $q = 0.5$, see [`crate::utils::stats::linear_quantile`]).
+/// sorting, or the mean of the two middle values for an even count, exactly
+/// as `np.median` (see [`crate::utils::stats::numpy_median`]).
 ///
 /// # Output column
 /// `{name}__median`
@@ -313,7 +313,7 @@ scalar_kernel! {
             f64::NAN
         } else {
             // A selection is O(n); only the quantiles need the full sort
-            linear_quantile_select(&mut ctx.values().to_vec(), 0.5)
+            numpy_median(&mut ctx.values().to_vec())
         }
     }
 }
@@ -512,7 +512,9 @@ impl Kernel for MeanNAbsoluteMax {
 /// nearest order statistics (`np.quantile`'s default): for sorted values
 /// $x_{(0)} \le \dots \le x_{(n-1)}$ and $h = (n - 1)\,q$,
 /// $$ Q(q) = x_{(\lfloor h \rfloor)} + (h - \lfloor h \rfloor)\left(x_{(\lceil h \rceil)} - x_{(\lfloor h \rfloor)}\right). $$
-/// See [`crate::utils::stats::linear_quantile`].
+/// Computed exactly as `np.quantile` (see
+/// [`crate::utils::stats::numpy_quantile`], including numpy's evaluation of
+/// the interpolation for $h - \lfloor h \rfloor \ge 0.5$).
 ///
 /// # Parameters
 /// - `q`: quantile in $[0, 1]$. Config: `[quantile] parameters = [{ q = 0.1 }, ...]`;
@@ -548,6 +550,6 @@ impl Kernel for Quantile {
             return;
         }
         let sorted = ctx.sorted();
-        out.extend(self.qs.iter().map(|&q| linear_quantile(sorted, q)));
+        out.extend(self.qs.iter().map(|&q| numpy_quantile(sorted, q)));
     }
 }
