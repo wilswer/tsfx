@@ -24,6 +24,7 @@ use crate::utils::stats::population_var;
 /// features used before, so sharing does not change any value.
 pub struct GroupContext<'a> {
     values: &'a [f64],
+    has_nulls: bool,
     x: ArrayView1<'a, f64>,
     mean: OnceCell<f64>,
     var: OnceCell<f64>,
@@ -33,9 +34,10 @@ pub struct GroupContext<'a> {
 }
 
 impl<'a> GroupContext<'a> {
-    pub fn new(values: &'a [f64]) -> Self {
+    pub fn new(values: &'a [f64], has_nulls: bool) -> Self {
         Self {
             values,
+            has_nulls,
             x: ArrayView1::from(values),
             mean: OnceCell::new(),
             var: OnceCell::new(),
@@ -53,6 +55,11 @@ impl<'a> GroupContext<'a> {
     /// The same values as a slice.
     pub fn values(&self) -> &'a [f64] {
         self.values
+    }
+
+    /// Whether the group had nulls before they were dropped.
+    pub fn has_nulls(&self) -> bool {
+        self.has_nulls
     }
 
     pub fn len(&self) -> usize {
@@ -150,13 +157,14 @@ impl KernelPlan {
     /// Every feature of one group; NaN for all of them if the group has no
     /// non-null values.
     fn run(&self, s: Column) -> PolarsResult<Column> {
+        let has_nulls = s.null_count() > 0;
         let s = s.drop_nulls();
         let mut out = Vec::with_capacity(self.names.len());
         if s.is_empty() {
             out.resize(self.names.len(), f64::NAN);
         } else {
             let ca = f64_values(&s)?;
-            let ctx = GroupContext::new(ca.cont_slice()?);
+            let ctx = GroupContext::new(ca.cont_slice()?, has_nulls);
             for kernel in &self.kernels {
                 kernel.compute(&ctx, &mut out);
             }

@@ -25,7 +25,7 @@ use counting::{
     CountAbove, CountAboveMean, CountBelow, CountBelowMean, LongestStrikeAboveMean,
     LongestStrikeBelowMean, NumberCrossingM, NumberPeaks, RangeCount,
 };
-use entropy::sample_entropy;
+use entropy::SampleEntropy;
 use kernel::KernelPlan;
 use location::{
     FirstLocationOfMaximum, FirstLocationOfMinimum, IndexMassQuantile, LastLocationOfMaximum,
@@ -267,8 +267,8 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
 
     // Comprehensive tier: always on, independent of the config
     if *tier >= FeatureSetting::Comprehensive {
-        for col in &opts.value_cols {
-            aggregators.push(sample_entropy(col));
+        for plan in plans.iter_mut() {
+            plan.push(SampleEntropy);
         }
     }
 
