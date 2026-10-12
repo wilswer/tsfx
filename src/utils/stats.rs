@@ -201,6 +201,68 @@ pub fn numpy_median(values: &mut [f64]) -> f64 {
     numpy_mean(&[lower, upper])
 }
 
+/// `num` evenly spaced values from `start` to `stop` (both included),
+/// exactly as `np.linspace(start, stop, num)` computes them: $i \cdot s +
+/// \text{start}$ with step $s = (\text{stop} - \text{start}) / (\text{num} - 1)$
+/// (or $(i / (\text{num} - 1)) \cdot \Delta + \text{start}$ if the step
+/// underflows to 0), the last value set to `stop`.
+pub(crate) fn numpy_linspace(start: f64, stop: f64, num: usize) -> Vec<f64> {
+    let delta = stop - start;
+    let mut y: Vec<f64> = if num > 1 {
+        let div = (num - 1) as f64;
+        let step = delta / div;
+        if step == 0.0 {
+            (0..num).map(|i| i as f64 / div * delta + start).collect()
+        } else {
+            (0..num).map(|i| i as f64 * step + start).collect()
+        }
+    } else {
+        (0..num).map(|i| i as f64 * delta + start).collect()
+    };
+    if num > 1 {
+        y[num - 1] = stop;
+    }
+    y
+}
+
+/// numpy's ordering of floats for sorting and searching: NaN sorts last.
+fn numpy_less(a: f64, b: f64) -> bool {
+    a < b || (b.is_nan() && !a.is_nan())
+}
+
+/// `np.searchsorted(arr, keys, side="left")`, reproducing numpy's binary
+/// search step for step (including how it reuses the bounds of the previous
+/// key), so that the result also equals numpy's when `arr` is not sorted
+/// (for example edges that came out NaN).
+pub(crate) fn numpy_searchsorted_left(arr: &[f64], keys: &[f64]) -> Vec<usize> {
+    let n = arr.len();
+    let mut out = Vec::with_capacity(keys.len());
+    let (mut min_idx, mut max_idx) = (0, n);
+    let Some(&first) = keys.first() else {
+        return out;
+    };
+    let mut last_key = first;
+    for &key in keys {
+        if numpy_less(last_key, key) {
+            max_idx = n;
+        } else {
+            min_idx = 0;
+            max_idx = if max_idx < n { max_idx + 1 } else { n };
+        }
+        last_key = key;
+        while min_idx < max_idx {
+            let mid = min_idx + ((max_idx - min_idx) >> 1);
+            if numpy_less(arr[mid], key) {
+                min_idx = mid + 1;
+            } else {
+                max_idx = mid;
+            }
+        }
+        out.push(min_idx);
+    }
+    out
+}
+
 /// Index of the first maximum, like `np.argmax`: if the series contains NaN,
 /// the index of the first NaN. `None` for an empty series.
 pub(crate) fn np_argmax(x: &ArrayView1<f64>) -> Option<usize> {

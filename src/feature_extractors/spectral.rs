@@ -7,6 +7,7 @@ use std::f64::consts::PI;
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex64;
 
+use super::entropy::binned_entropy;
 use super::kernel::{GroupContext, Kernel};
 use crate::utils::stats::{numpy_mean, numpy_sum};
 use crate::utils::toml_reader::{FftAggType, FftAttr};
@@ -345,73 +346,6 @@ impl Kernel for FourierEntropy {
     }
 }
 
-/// tsfresh's `binned_entropy`: the entropy of an `np.histogram` of the
-/// values into `max_bins` equal-width bins; NaN if any value is NaN (or the
-/// histogram cannot be built).
-///
-/// Stand-in for the shared `binned_entropy` feature helper, to be replaced by
-/// it.
-fn binned_entropy(x: &[f64], max_bins: usize) -> f64 {
-    if x.is_empty() || x.iter().any(|v| v.is_nan()) {
-        return f64::NAN;
-    }
-    let Some(hist) = numpy_histogram(x, max_bins) else {
-        return f64::NAN;
-    };
-    let n = x.len() as f64;
-    // probs[probs == 0] = 1.0; -np.sum(probs * np.log(probs))
-    let probs: Vec<f64> = hist
-        .iter()
-        .map(|&count| if count == 0 { 1.0 } else { count as f64 / n })
-        .collect();
-    -numpy_sum(probs.len(), |k| probs[k] * probs[k].ln())
-}
-
-/// Counts of `np.histogram(x, bins)` for finite, non-empty `x`, with numpy's
-/// bin edges and index computation; `None` where numpy raises (an infinite
-/// range, or too many bins for the range).
-fn numpy_histogram(x: &[f64], bins: usize) -> Option<Vec<usize>> {
-    let (mut first, mut last) = super::kernel::extremes(x.iter().copied());
-    if !first.is_finite() || !last.is_finite() || bins == 0 {
-        return None;
-    }
-    if first == last {
-        first -= 0.5;
-        last += 0.5;
-    }
-    // np.linspace(first, last, bins + 1)
-    let delta = last - first;
-    let step = delta / bins as f64;
-    let mut edges: Vec<f64> = (0..=bins)
-        .map(|i| {
-            if step == 0.0 {
-                i as f64 / bins as f64 * delta + first
-            } else {
-                i as f64 * step + first
-            }
-        })
-        .collect();
-    edges[bins] = last;
-    if edges.windows(2).any(|w| w[0] >= w[1]) {
-        return None;
-    }
-    let mut counts = vec![0; bins];
-    for &v in x {
-        let mut index = (((v - first) / delta) * bins as f64) as usize;
-        if index == bins {
-            index -= 1;
-        }
-        if v < edges[index] {
-            index -= 1;
-        }
-        if index != bins - 1 && v >= edges[index + 1] {
-            index += 1;
-        }
-        counts[index] += 1;
-    }
-    Some(counts)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -439,13 +373,5 @@ mod tests {
     #[test]
     fn test_welch_single_value() {
         assert_eq!(welch_psd(&[5.0]), vec![0.0]);
-    }
-
-    #[test]
-    fn test_histogram_edges() {
-        // last bin includes the right edge
-        assert_eq!(numpy_histogram(&[0.0, 0.5, 1.0], 2), Some(vec![1, 2]));
-        // a constant series is centred in a unit range
-        assert_eq!(numpy_histogram(&[3.0, 3.0], 3), Some(vec![0, 2, 0]));
     }
 }
