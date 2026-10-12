@@ -1045,3 +1045,37 @@ def test_agg_linear_trend_median_nan_generated(attr, expected):
         f"val__agg_linear_trend_{attr}__chunk_size_3__agg_median",
         expected,
     )
+
+
+# Found by the tsfresh fuzzer (tsfresh 0.21.2 / numpy 2.4.4): np.sum and
+# np.mean sum pairwise, so these must match bit for bit, not approximately.
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        ([0, 0, 0, 0, 0, 1.00001, 32767, 98304], "sum_values", 131072.00001),
+        (
+            [0, 0, 0, 1.288471436710097, 0, 0, 524288, 0, 0],
+            "absolute_sum_of_changes",
+            1048578.5769428734,
+        ),
+        ([0.99999, 0, 0, 0, 0, 0, 0, 65536, 0], "mean_absolute_change", 16384.12499875),
+        (
+            [0, 186, 2.9, 3.6277065286467405, 0, 0, 0, 0],
+            "root_mean_square",
+            65.78142809207054,
+        ),
+        (
+            [0, 0, 0, 1.288471436710097, 0, 0, 524288, 0, 0],
+            "autocorrelation__lag_1",
+            -0.15625086398795657,
+        ),
+        ([0, 0, 0, 0, 0, 1, 27648, 207901], "c3__lag_0", 1125900395896936.5),
+        (
+            [0, 0, 0, 0, 0, 0, 151608, 97965.5, 7, 0],
+            "time_reversal_asymmetry_statistic__lag_1",
+            -99598068723149.0,
+        ),
+    ],
+)
+def test_numpy_summation_exact(values, column, expected):
+    assert _features(values)[f"val__{column}"] == expected

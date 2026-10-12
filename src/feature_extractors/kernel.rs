@@ -11,7 +11,7 @@
 use std::cell::OnceCell;
 use std::sync::Arc;
 
-use ndarray::{Array1, ArrayView1, s};
+use ndarray::ArrayView1;
 use polars::prelude::*;
 
 use super::f64_values;
@@ -28,7 +28,6 @@ pub struct GroupContext<'a> {
     mean: OnceCell<f64>,
     var: OnceCell<f64>,
     extremes: OnceCell<(f64, f64)>,
-    diffs: OnceCell<Array1<f64>>,
     sorted: OnceCell<Vec<f64>>,
 }
 
@@ -41,7 +40,6 @@ impl<'a> GroupContext<'a> {
             mean: OnceCell::new(),
             var: OnceCell::new(),
             extremes: OnceCell::new(),
-            diffs: OnceCell::new(),
             sorted: OnceCell::new(),
         }
     }
@@ -112,12 +110,6 @@ impl<'a> GroupContext<'a> {
             sorted.sort_unstable_by(f64::total_cmp);
             sorted
         })
-    }
-
-    /// Consecutive differences $x_{i+1} - x_i$ (empty for a single value).
-    pub fn diffs(&self) -> &Array1<f64> {
-        self.diffs
-            .get_or_init(|| &self.x.slice(s![1..]) - &self.x.slice(s![..-1]))
     }
 }
 

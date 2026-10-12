@@ -1,8 +1,7 @@
 //! Lag-based relationships within the series.
 
-use ndarray::{Array1, s};
-
 use super::kernel::{GroupContext, Kernel};
+use crate::utils::stats::numpy_sum;
 
 /// Autocorrelation feature.
 ///
@@ -50,25 +49,22 @@ impl Kernel for Autocorrelation {
             out.push(if x.len() < lag {
                 f64::NAN
             } else {
-                let y1 = x.slice(s![..(x.len() - lag)]);
-                let y2 = x.slice(s![lag..]);
-                let sum_product = (y1.to_owned() - mean).dot(&(y2.to_owned() - mean));
-                sum_product / ((x.len() - lag) as f64 * v)
+                // np.sum((y1 - x_mean) * (y2 - x_mean)), y1 = x[:n-lag], y2 = x[lag:]
+                let m = x.len() - lag;
+                let sum_product = numpy_sum(m, |i| (x[i] - mean) * (x[i + lag] - mean));
+                sum_product / (m as f64 * v)
             });
         }
     }
 }
 
-/// Mean of `term(i)` for `i` in `0..n - 2 * lag`, or 0 if the series is too
-/// short (`n <= 2 * lag`), as tsfresh. Summed in index order, exactly as the
-/// earlier rolled-array version did.
+/// `np.mean` of `term(i)` for `i` in `0..n - 2 * lag`, or 0 if the series is
+/// too short (`n <= 2 * lag`), as tsfresh.
 fn lagged_mean(n: usize, lag: usize, term: impl Fn(usize) -> f64) -> f64 {
     if n <= 2 * lag {
         return 0.0;
     }
-    Array1::from_iter((0..n - 2 * lag).map(term))
-        .mean()
-        .unwrap_or(f64::NAN)
+    numpy_sum(n - 2 * lag, term) / (n - 2 * lag) as f64
 }
 
 /// C3 non-linearity feature.

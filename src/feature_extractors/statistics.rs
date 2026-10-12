@@ -7,8 +7,8 @@ use polars::lazy::dsl::*;
 
 use super::kernel::{GroupContext, Kernel, extremes, scalar_kernel};
 use crate::utils::stats::{
-    linear_quantile, linear_quantile_select, median_mut, numpy_mean, sample_excess_kurtosis,
-    sample_skewness,
+    linear_quantile, linear_quantile_select, median_mut, numpy_mean, numpy_sum,
+    sample_excess_kurtosis, sample_skewness,
 };
 /// Length feature.
 ///
@@ -43,7 +43,7 @@ scalar_kernel! {
 ///
 /// # tsfresh
 /// `feature_calculators.sum_values` (v0.21.2).
-    SumValues, "sum_values", |ctx| ctx.x().sum()
+    SumValues, "sum_values", |ctx| numpy_sum(ctx.len(), |i| ctx.values()[i])
 }
 
 scalar_kernel! {
@@ -158,7 +158,11 @@ scalar_kernel! {
 ///
 /// # tsfresh
 /// `feature_calculators.root_mean_square` (v0.21.2).
-    RootMeanSquare, "root_mean_square", |ctx| ctx.x().mapv(|x| x.powi(2)).mean().map(f64::sqrt).unwrap_or(f64::NAN)
+    RootMeanSquare, "root_mean_square", |ctx| {
+        // np.sqrt(np.mean(np.square(x)))
+        let x = ctx.values();
+        (numpy_sum(x.len(), |i| x[i] * x[i]) / x.len() as f64).sqrt()
+    }
 }
 
 scalar_kernel! {

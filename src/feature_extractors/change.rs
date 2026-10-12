@@ -3,6 +3,7 @@
 use ndarray::{CowArray, s};
 
 use super::kernel::{GroupContext, Kernel, scalar_kernel};
+use crate::utils::stats::numpy_sum;
 
 scalar_kernel! {
 /// Mean absolute change feature.
@@ -21,7 +22,11 @@ scalar_kernel! {
 ///
 /// # tsfresh
 /// `feature_calculators.mean_abs_change` (v0.21.2).
-    MeanAbsoluteChange, "mean_absolute_change", |ctx| ctx.diffs().mapv(f64::abs).mean().unwrap_or(f64::NAN)
+    MeanAbsoluteChange, "mean_absolute_change", |ctx| {
+        // np.mean(np.abs(np.diff(x))); NaN for a single value
+        let x = ctx.values();
+        numpy_sum(x.len() - 1, |i| (x[i + 1] - x[i]).abs()) / (x.len() - 1) as f64
+    }
 }
 
 scalar_kernel! {
@@ -40,7 +45,11 @@ scalar_kernel! {
 ///
 /// # tsfresh
 /// `feature_calculators.absolute_sum_of_changes` (v0.21.2).
-    AbsoluteSumOfChanges, "absolute_sum_of_changes", |ctx| ctx.diffs().mapv(f64::abs).sum()
+    AbsoluteSumOfChanges, "absolute_sum_of_changes", |ctx| {
+        // np.sum(np.abs(np.diff(x)))
+        let x = ctx.values();
+        numpy_sum(x.len() - 1, |i| (x[i + 1] - x[i]).abs())
+    }
 }
 
 scalar_kernel! {
