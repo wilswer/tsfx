@@ -1,10 +1,9 @@
 //! Linear fits over time.
 
-use super::kernel::{GroupContext, Kernel};
-use crate::utils::stats::{
-    aggregate_on_chunks, calculate_sequential_ols, skip_nan_mean, skip_nan_median, skip_nan_reduce,
-    skip_nan_sample_var,
-};
+use ndarray::ArrayView1;
+
+use super::kernel::{GroupContext, Kernel, extremes};
+use crate::utils::stats::{calculate_sequential_ols, numpy_mean, numpy_median, population_var};
 use crate::utils::toml_reader::ChunkAggregator;
 
 /// Linear trend feature.
@@ -52,8 +51,10 @@ impl Kernel for LinearTrend {
 /// # Parameters
 /// - `chunk_size`: values per chunk.
 /// - `aggregator`: how each chunk is summarised: `mean`, `median`, `min`,
-///   `max` or `var` (sample variance, `ddof = 1`, as pandas). Any other name
-///   is rejected when the config is loaded.
+///   `max` or `var` (population variance, `ddof = 0`), each exactly as the
+///   numpy method tsfresh's extraction calls on the chunk. `median` is a
+///   tsfx addition (numpy arrays have no `median` method; it follows
+///   `np.median`). Any other name is rejected when the config is loaded.
 ///
 /// Config: `[agg_linear_trend] parameters = [{ chunk_size = 5, aggregator = "mean" }, ...]`;
 /// two columns per entry.
@@ -63,15 +64,17 @@ impl Kernel for LinearTrend {
 /// and `{name}__agg_linear_trend_slope__chunk_size_{chunk_size}__agg_{aggregator}`
 ///
 /// # Edge cases
-/// - Nulls are dropped first. A group with fewer than `chunk_size` values gives NaN.
+/// - Nulls are dropped first. A group with `chunk_size` or fewer values
+///   gives NaN, as tsfresh.
 /// - Fewer than 2 chunks give NaN (no line can be fitted).
-/// - Each chunk aggregate skips NaN, like pandas; a chunk that is all NaN
-///   (or, for `var`, has fewer than 2 non-NaN values) gives NaN, and so does
-///   the fit.
+/// - A NaN in a chunk makes that chunk's aggregate NaN (numpy semantics, as
+///   in tsfresh's extraction), and so the fit.
 ///
 /// # tsfresh
 /// `feature_calculators.agg_linear_trend` (v0.21.2) with `chunk_len`,
-/// `f_agg` and `attr` = `"intercept"` or `"slope"`.
+/// `f_agg` and `attr` = `"intercept"` or `"slope"`, as called by tsfresh's
+/// `extract_features` (with a numpy array, not a pandas Series as in
+/// tsfresh's own unit tests, where `var` uses `ddof = 1` and NaN is skipped).
 pub struct AggLinearTrend {
     /// `(chunk_size, aggregator)` per config entry.
     pub params: Vec<(usize, ChunkAggregator)>,
@@ -90,25 +93,27 @@ impl Kernel for AggLinearTrend {
     }
 
     fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
-        let x = ctx.x();
+        let x = ctx.values();
         for (chunk_size, aggregator) in &self.params {
             let chunk_size = *chunk_size;
-            if x.len() < chunk_size {
+            if x.len() <= chunk_size {
                 out.extend([f64::NAN, f64::NAN]);
                 continue;
             }
-            let aggregates = match aggregator {
-                ChunkAggregator::Mean => aggregate_on_chunks(x, chunk_size, skip_nan_mean),
-                ChunkAggregator::Median => aggregate_on_chunks(x, chunk_size, skip_nan_median),
-                ChunkAggregator::Max => {
-                    aggregate_on_chunks(x, chunk_size, |c| skip_nan_reduce(c, f64::max))
+            let aggregate = |chunk: &[f64]| match aggregator {
+                ChunkAggregator::Mean => numpy_mean(chunk),
+                ChunkAggregator::Median => {
+                    if chunk.iter().any(|v| v.is_nan()) {
+                        f64::NAN
+                    } else {
+                        numpy_median(&mut chunk.to_vec())
+                    }
                 }
-                ChunkAggregator::Min => {
-                    aggregate_on_chunks(x, chunk_size, |c| skip_nan_reduce(c, f64::min))
-                }
-                // ddof=1 on purpose: tsfresh aggregates chunks with pandas' Series.var
-                ChunkAggregator::Var => aggregate_on_chunks(x, chunk_size, skip_nan_sample_var),
+                ChunkAggregator::Max => extremes(chunk.iter().copied()).1,
+                ChunkAggregator::Min => extremes(chunk.iter().copied()).0,
+                ChunkAggregator::Var => population_var(&ArrayView1::from(chunk)),
             };
+            let aggregates = x.chunks(chunk_size).map(aggregate).collect::<Vec<f64>>();
             let n = aggregates.len();
             let (intercept, slope) = calculate_sequential_ols(aggregates, n);
             out.extend([intercept, slope]);

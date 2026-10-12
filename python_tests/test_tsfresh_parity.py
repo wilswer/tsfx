@@ -405,15 +405,17 @@ def test_sample_entropy(values, expected):
 # tsfresh v0.21.2 feature calculators on the given input (call in comment).
 
 
-# agg_linear_trend(pd.Series(x), [{"attr": a, "chunk_len": 3, "f_agg": "var"}])
-# tsfresh aggregates chunks with pandas' Series.var, i.e. ddof=1.
+# agg_linear_trend(np.array(x), [{"attr": a, "chunk_len": 3, "f_agg": "var"}])
+# as tsfresh's extract_features calls it: a numpy array, so the chunk
+# variance is numpy's (ddof=0). tsfresh's unit tests pass a pandas Series
+# (ddof=1) instead.
 @pytest.mark.parametrize(
     ("values", "attr", "expected"),
     [
-        (list(range(9)), "intercept", 1.0),
+        (list(range(9)), "intercept", 0.6666666666666666),
         (list(range(9)), "slope", 0.0),
-        ([0, 1, 2, 0, 2, 4, 0, 3, 6], "intercept", 0.666666666666667),
-        ([0, 1, 2, 0, 2, 4, 0, 3, 6], "slope", 4.0),
+        ([0, 1, 2, 0, 2, 4, 0, 3, 6], "intercept", 0.44444444444444375),
+        ([0, 1, 2, 0, 2, 4, 0, 3, 6], "slope", 2.666666666666667),
     ],
 )
 def test_agg_linear_trend_var_generated(values, attr, expected):
@@ -491,8 +493,9 @@ def test_ratio_value_number_to_time_series_length_nan_generated(values, expected
     )
 
 
-# agg_linear_trend(pd.Series(x), [{"attr": a, "chunk_len": 3, "f_agg": f}])
-# with pandas 3.0.2: chunk max/min skip NaN.
+# agg_linear_trend(np.array(x), [{"attr": a, "chunk_len": 3, "f_agg": f}]) as
+# extract_features calls it: numpy's max/min propagate NaN, so a chunk with a
+# NaN makes the fit NaN.
 _AGG_NAN_A = [1, math.nan, 3, 4, 2, 6]
 _AGG_NAN_B = [1, math.nan, 3, 4, math.nan, 6, 0, 5, 2]
 
@@ -500,14 +503,10 @@ _AGG_NAN_B = [1, math.nan, 3, 4, math.nan, 6, 0, 5, 2]
 @pytest.mark.parametrize(
     ("values", "agg", "attr", "expected"),
     [
-        (_AGG_NAN_A, "max", "intercept", 3.0),
-        (_AGG_NAN_A, "max", "slope", 3.0),
-        (_AGG_NAN_A, "min", "intercept", 1.0),
-        (_AGG_NAN_A, "min", "slope", 1.0),
-        (_AGG_NAN_B, "max", "intercept", 3.666666666666667),
-        (_AGG_NAN_B, "max", "slope", 1.0),
-        (_AGG_NAN_B, "min", "intercept", 2.166666666666667),
-        (_AGG_NAN_B, "min", "slope", -0.5),
+        (values, agg, attr, math.nan)
+        for values in (_AGG_NAN_A, _AGG_NAN_B)
+        for agg in ("max", "min")
+        for attr in ("intercept", "slope")
     ],
 )
 def test_agg_linear_trend_nan_generated(values, agg, attr, expected):
@@ -817,10 +816,12 @@ def test_linear_trend(values, attr, expected):
             for agg in ("max", "min", "mean", "median")
             for attr in ("intercept", "slope")
         ],
+        # tsfresh's unit test expects -3 / 0 here, passing a pandas Series
+        # that skips NaN; extract_features passes a numpy array, which does not
         *[
-            ([math.nan] * 2 + [-3] * 4, agg, attr, expected)
+            ([math.nan] * 2 + [-3] * 4, agg, attr, math.nan)
             for agg in ("max", "min", "mean", "median")
-            for attr, expected in (("intercept", -3), ("slope", 0))
+            for attr in ("intercept", "slope")
         ],
     ],
 )
@@ -928,14 +929,13 @@ def test_percentage_of_reoccurring_values_to_all_datapoints_nan_generated():
     )
 
 
-# agg_linear_trend(pd.Series(x), [{"attr": a, "chunk_len": 3, "f_agg": "var"}])
-# with pandas 3.0.2: chunk var skips NaN (ddof=1, so a chunk with a single
-# non-NaN value gives NaN).
+# agg_linear_trend(np.array(x), [{"attr": a, "chunk_len": 3, "f_agg": "var"}])
+# as extract_features calls it: numpy's var propagates NaN.
 @pytest.mark.parametrize(
     ("values", "attr", "expected"),
     [
-        ([1, math.nan, 3, 4, 2, 6, 0, 5, 2], "intercept", 1.9444444444444446),
-        ([1, math.nan, 3, 4, 2, 6, 0, 5, 2], "slope", 2.166666666666667),
+        ([1, math.nan, 3, 4, 2, 6, 0, 5, 2], "intercept", math.nan),
+        ([1, math.nan, 3, 4, 2, 6, 0, 5, 2], "slope", math.nan),
         ([1, math.nan, math.nan, 4, 2, 6, 0, 5, 2], "intercept", math.nan),
         ([1, math.nan, math.nan, 4, 2, 6, 0, 5, 2], "slope", math.nan),
     ],
@@ -1033,11 +1033,12 @@ def test_sum_of_reoccurring_deviation(values, kind, expected):
     _assert_feature(values, f"val__sum_of_reoccurring_{kind}", expected)
 
 
-# agg_linear_trend(pd.Series(x), [{"attr": a, "chunk_len": 3, "f_agg":
-# "median"}]) with pandas 3.0.2: chunk median skips NaN.
+# The median aggregator is a tsfx addition (tsfresh's extract_features passes
+# a numpy array, which has no median method); it follows np.median, so a
+# chunk with a NaN gives NaN, like the other aggregators.
 @pytest.mark.parametrize(
     ("attr", "expected"),
-    [("intercept", 3.0), ("slope", 0.0)],
+    [("intercept", math.nan), ("slope", math.nan)],
 )
 def test_agg_linear_trend_median_nan_generated(attr, expected):
     _assert_feature(
