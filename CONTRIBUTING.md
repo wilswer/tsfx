@@ -187,7 +187,7 @@ Python and a Rust toolchain.
 
 **Prerequisites:**
 
-- Python 3.9 or newer.
+- Python 3.11 or newer.
 - A **nightly** Rust toolchain (the channel is pinned in `rust-toolchain.toml`).
   Install it via [rustup](https://rustup.rs/):
   ```bash

@@ -2,6 +2,17 @@
 
 All notable changes to TSFX are documented here.
 
+## Unreleased
+
+### Changed
+
+- **Python 3.11 or newer is required** (3.9 and 3.10 have reached end of
+  life). On 3.9 or 3.10, pip keeps installing 0.4.0.
+- Wheels use the stable ABI (abi3): one wheel per platform covers CPython
+  3.11 and every later version, including 3.15. Free-threaded builds still
+  get version-specific wheels. Release builds strip symbols, so wheels are
+  smaller (PyPI limits a project's total size).
+
 ## 0.4.0 (2026-10-12)
 
 ### Changed
