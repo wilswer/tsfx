@@ -25,6 +25,7 @@ Current deviations:
 - ``sample_entropy`` with +-inf in the series
 - ``sum_of_reoccurring_values`` / ``sum_of_reoccurring_data_points`` with a
   NaN or +-inf that occurs only once
+- ``fft_coefficient`` with a NaN or +-inf in the series
 
 Cases that still fail are marked with ``_bug`` (strict xfail), so the marker
 must be removed once the fix lands.
@@ -1158,3 +1159,147 @@ def test_sum_of_reoccurring_exact(kind, expected):
 )
 def test_threshold_exactly_hit(values, column, expected):
     assert _features(values)[f"val__{column}"] == expected
+
+
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        (list(range(10)), "attr_imag__coeff_0", 0),
+        (list(range(10)), "attr_real__coeff_0", 45),
+        (list(range(10)), "attr_angle__coeff_0", 0),
+        (list(range(10)), "attr_abs__coeff_0", 45),
+        # np.fft.rfft([0, 1, 0, 0]) == [1, -1j, -1]
+        ([0, 1, 0, 0], "attr_imag__coeff_0", 0),
+        ([0, 1, 0, 0], "attr_real__coeff_0", 1),
+        ([0, 1, 0, 0], "attr_imag__coeff_1", -1),
+        ([0, 1, 0, 0], "attr_angle__coeff_1", -90),
+        ([0, 1, 0, 0], "attr_real__coeff_1", 0),
+        ([0, 1, 0, 0], "attr_imag__coeff_2", 0),
+        ([0, 1, 0, 0], "attr_real__coeff_2", -1),
+        # coefficient beyond the spectrum
+        (list(range(5)), "attr_real__coeff_10", math.nan),
+    ],
+)
+def test_fft_coefficient(values, column, expected):
+    _assert_feature(values, f"val__fft_coefficient__{column}", expected, abs_tol=1e-6)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [[math.nan, 1, 2, 3], [1, 2, math.inf, 3], [-math.inf, 0, 1]],
+)
+def test_fft_coefficient_non_finite_deviation(values):
+    # tsfresh / numpy keep some parts finite (np.fft.rfft([nan, 1, 2, 3])[1]
+    # is nan+2j); tsfx gives NaN for every attribute
+    features = _features(values)
+    for column, value in features.items():
+        if column.startswith("val__fft_coefficient__"):
+            assert math.isnan(value), column
+
+
+_FFT_AGG_X = list(range(10))
+# a sine wave: its spectrum is a dirac delta, too narrow for skew / kurtosis
+_FFT_AGG_SINE = [math.sin(2 * math.pi / 10 * i) for i in range(30)]
+_FFT_AGG_GENERATED = [1, 2, -3, 4, 0.5, -1, 2, 7, -2, 3, 1, 0]
+
+
+@pytest.mark.parametrize(
+    ("values", "aggtype", "expected", "abs_tol"),
+    [
+        (_FFT_AGG_X, "centroid", 1.135, 5e-4),
+        (_FFT_AGG_X, "variance", 2.368, 5e-4),
+        (_FFT_AGG_X, "skew", 1.249, 5e-4),
+        (_FFT_AGG_X, "kurtosis", 3.643, 5e-4),
+        # scaling the series does not change the results
+        ([10 * v for v in _FFT_AGG_X], "centroid", 1.135, 5e-4),
+        ([10 * v for v in _FFT_AGG_X], "variance", 2.368, 5e-4),
+        ([10 * v for v in _FFT_AGG_X], "skew", 1.249, 5e-4),
+        ([10 * v for v in _FFT_AGG_X], "kurtosis", 3.643, 5e-4),
+        (_FFT_AGG_SINE, "centroid", 3.0, 5e-6),
+        (_FFT_AGG_SINE, "variance", 0.0, 5e-6),
+        (_FFT_AGG_SINE, "skew", math.nan, 0),
+        (_FFT_AGG_SINE, "kurtosis", math.nan, 0),
+        # generated: tsfresh 0.21.2 / numpy 2.4.4
+        (_FFT_AGG_GENERATED, "centroid", 3.137131540145538, 1e-9),
+        (_FFT_AGG_GENERATED, "variance", 4.947448163480152, 1e-9),
+        (_FFT_AGG_GENERATED, "skew", -0.16794828919527058, 1e-9),
+        (_FFT_AGG_GENERATED, "kurtosis", 13.129875965022391, 1e-9),
+        # a series of zeros has an empty spectrum
+        ([0, 0, 0], "centroid", math.nan, 0),
+    ],
+)
+def test_fft_aggregated(values, aggtype, expected, abs_tol):
+    _assert_feature(
+        values, f"val__fft_aggregated__aggtype_{aggtype}", expected, abs_tol=abs_tol
+    )
+
+
+def test_fft_aggregated_gaussian():
+    # The spectrum of a normal density is a half-normal; tsfresh compares with
+    # its hand-calculated centroid and variance, allowing 2%
+    mean, sigma, length = 500.0, 1.0, 1000
+    x = [
+        1 / (2 * math.pi * sigma**2) * math.exp(-((y - mean) ** 2) / (2 * sigma**2))
+        for y in range(length)
+    ]
+    centroid = (length / (2 * math.pi * sigma)) * math.sqrt(2 / math.pi)
+    variance = (length / (2 * math.pi * sigma)) ** 2 * (1 - 2 / math.pi)
+    features = _features(x)
+    assert features["val__fft_aggregated__aggtype_centroid"] == pytest.approx(
+        centroid, rel=0.02
+    )
+    assert features["val__fft_aggregated__aggtype_variance"] == pytest.approx(
+        variance, rel=0.02
+    )
+
+
+# generated: tsfresh 0.21.2 / numpy 2.4.4 / scipy 1.17.1; the 600-value
+# series is averaged over several Welch segments
+_WELCH_SHORT = [1, 2, -3, 4, 0.5, -1, 2, 7, -2, 3, 1, 0]
+_WELCH_LONG = [math.sin(i / 7.0) + i / 100 for i in range(600)]
+
+
+@pytest.mark.parametrize(
+    ("values", "coeff", "expected"),
+    [
+        (list(range(10)), 10, math.nan),
+        (_WELCH_SHORT, 1, 6.0464735681703505),
+        (_WELCH_SHORT, 2, 9.54513760383238),
+        (_WELCH_SHORT, 5, 10.959079931294792),
+        (_WELCH_SHORT, 8, math.nan),
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 1, 25.04970175673019),
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 2, 82.80704332963252),
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 5, 10.298967046456776),
+        (_WELCH_LONG, 1, 31.859839769019818),
+        (_WELCH_LONG, 2, 1.6009400295989102),
+        (_WELCH_LONG, 5, 34.072975417825454),
+        (_WELCH_LONG, 8, 0.03488547535923996),
+        (_WELCH_LONG, 10, 0.00043631285325968676),
+        ([1, math.nan, 3], 1, math.nan),
+    ],
+)
+def test_spkt_welch_density(values, coeff, expected):
+    _assert_feature(values, f"val__spkt_welch_density__coeff_{coeff}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "bins", "expected"),
+    [
+        ([1, 2, 1], 2, 0.693147180),
+        ([1, 2, 1], 5, 0.693147180),
+        ([1, 1, 2, 1, 1, 1, 1], 5, 0.5623351446188083),
+        ([1, 1, 1, 1, 2, 1, 1], 5, 1.0397207708399179),
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 10, 1.5607104090414063),
+        ([-1, math.nan, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 10, math.nan),
+        # generated: tsfresh 0.21.2 / numpy 2.4.4 / scipy 1.17.1
+        (_WELCH_LONG, 2, 0.04539477814685819),
+        (_WELCH_LONG, 3, 0.12525570174922163),
+        (_WELCH_LONG, 5, 0.13600216966487969),
+        (_WELCH_LONG, 10, 0.18121382170440362),
+        (_WELCH_LONG, 100, 0.22636345757853585),
+        # a constant series has no power to scale
+        ([3, 3, 3], 2, math.nan),
+    ],
+)
+def test_fourier_entropy(values, bins, expected):
+    _assert_feature(values, f"val__fourier_entropy__bins_{bins}", expected)
