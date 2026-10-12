@@ -13,6 +13,7 @@ pub mod location;
 pub mod reoccurrence;
 pub mod statistics;
 pub mod trend;
+pub mod wavelet;
 
 use std::sync::Arc;
 
@@ -40,6 +41,7 @@ use statistics::{
     VariationCoefficient, count,
 };
 use trend::{AggLinearTrend, LinearTrend};
+use wavelet::{CwtCoefficients, NumberCwtPeaks};
 
 /// Feature expressions for the configured features of the selected tier.
 ///
@@ -253,6 +255,18 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
             if let Some(feature) = &config.number_peaks {
                 let ns = feature.parameters.iter().map(|p| p.n).collect();
                 plan.push(NumberPeaks { ns });
+            }
+            if let Some(feature) = &config.cwt_coefficients {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.widths.clone(), p.coeff, p.w))
+                    .collect();
+                plan.push(CwtCoefficients { params });
+            }
+            if let Some(feature) = &config.number_cwt_peaks {
+                let ns = feature.parameters.iter().map(|p| p.n).collect();
+                plan.push(NumberCwtPeaks { ns });
             }
         }
     }

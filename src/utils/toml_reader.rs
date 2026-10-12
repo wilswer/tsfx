@@ -59,6 +59,8 @@ pub struct Config {
     pub c3: Option<C3>,
     pub time_reversal_asymmetry_statistic: Option<TimeReversalAsymmetryStatistic>,
     pub number_peaks: Option<NumberPeaks>,
+    pub cwt_coefficients: Option<CwtCoefficients>,
+    pub number_cwt_peaks: Option<NumberCwtPeaks>,
 }
 
 impl Default for Config {
@@ -123,6 +125,8 @@ impl Default for Config {
             c3: Some(C3::default()),
             time_reversal_asymmetry_statistic: Some(TimeReversalAsymmetryStatistic::default()),
             number_peaks: Some(NumberPeaks::default()),
+            cwt_coefficients: Some(CwtCoefficients::default()),
+            number_cwt_peaks: Some(NumberCwtPeaks::default()),
         }
     }
 }
@@ -706,6 +710,103 @@ pub struct NumberPeaksParams {
     pub n: usize,
 }
 
+#[derive(Deserialize, Clone, Debug)]
+pub struct CwtCoefficients {
+    pub parameters: Vec<CwtCoefficientsParams>,
+}
+impl Default for CwtCoefficients {
+    fn default() -> Self {
+        let widths = vec![2, 5, 10, 20];
+        let mut parameters = Vec::new();
+        for coeff in 0..15 {
+            for &w in &widths {
+                parameters.push(CwtCoefficientsParams {
+                    widths: widths.clone(),
+                    coeff,
+                    w,
+                });
+            }
+        }
+        CwtCoefficients { parameters }
+    }
+}
+
+/// One `cwt_coefficients` entry; `w` must be one of `widths`, which must be
+/// positive.
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[serde(try_from = "RawCwtCoefficientsParams")]
+pub struct CwtCoefficientsParams {
+    pub widths: Vec<usize>,
+    pub coeff: usize,
+    pub w: usize,
+}
+
+#[derive(Deserialize)]
+struct RawCwtCoefficientsParams {
+    widths: Vec<usize>,
+    coeff: usize,
+    w: usize,
+}
+
+impl TryFrom<RawCwtCoefficientsParams> for CwtCoefficientsParams {
+    type Error = String;
+
+    fn try_from(raw: RawCwtCoefficientsParams) -> Result<Self, Self::Error> {
+        if raw.widths.is_empty() || raw.widths.contains(&0) {
+            return Err(format!(
+                "cwt_coefficients widths must be positive, got {:?}",
+                raw.widths
+            ));
+        }
+        if !raw.widths.contains(&raw.w) {
+            return Err(format!(
+                "cwt_coefficients w = {} is not one of widths {:?}",
+                raw.w, raw.widths
+            ));
+        }
+        Ok(CwtCoefficientsParams {
+            widths: raw.widths,
+            coeff: raw.coeff,
+            w: raw.w,
+        })
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct NumberCwtPeaks {
+    pub parameters: Vec<NumberCwtPeaksParams>,
+}
+impl Default for NumberCwtPeaks {
+    fn default() -> Self {
+        NumberCwtPeaks {
+            parameters: vec![NumberCwtPeaksParams { n: 1 }, NumberCwtPeaksParams { n: 5 }],
+        }
+    }
+}
+
+/// One `number_cwt_peaks` entry; `n` must be positive.
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[serde(try_from = "RawNumberCwtPeaksParams")]
+pub struct NumberCwtPeaksParams {
+    pub n: usize,
+}
+
+#[derive(Deserialize)]
+struct RawNumberCwtPeaksParams {
+    n: usize,
+}
+
+impl TryFrom<RawNumberCwtPeaksParams> for NumberCwtPeaksParams {
+    type Error = String;
+
+    fn try_from(raw: RawNumberCwtPeaksParams) -> Result<Self, Self::Error> {
+        if raw.n == 0 {
+            return Err("number_cwt_peaks n must be positive".to_string());
+        }
+        Ok(NumberCwtPeaksParams { n: raw.n })
+    }
+}
+
 /// A config file that could not be read or parsed.
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -743,6 +844,21 @@ pub fn load_config(file_path: Option<&str>) -> Result<Config, ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_invalid_wavelet_params_rejected() {
+        let ok: Result<Config, _> = toml::from_str(
+            "[cwt_coefficients]\nparameters = [{ widths = [1, 3], coeff = 0, w = 3 }]",
+        );
+        assert!(ok.is_ok());
+        for bad in [
+            "[cwt_coefficients]\nparameters = [{ widths = [1, 3], coeff = 0, w = 2 }]",
+            "[cwt_coefficients]\nparameters = [{ widths = [0, 3], coeff = 0, w = 3 }]",
+            "[number_cwt_peaks]\nparameters = [{ n = 0 }]",
+        ] {
+            assert!(toml::from_str::<Config>(bad).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn test_read_config_from_file() {
@@ -1091,6 +1207,37 @@ mod tests {
                 NumberPeaksParams { n: 10 },
                 NumberPeaksParams { n: 50 }
             ]
+        );
+        assert!(config.cwt_coefficients.is_some());
+        let cwt = config.clone().cwt_coefficients.unwrap().parameters;
+        assert_eq!(cwt.len(), 60);
+        assert_eq!(
+            cwt[..2],
+            [
+                CwtCoefficientsParams {
+                    widths: vec![2, 5, 10, 20],
+                    coeff: 0,
+                    w: 2
+                },
+                CwtCoefficientsParams {
+                    widths: vec![2, 5, 10, 20],
+                    coeff: 0,
+                    w: 5
+                },
+            ]
+        );
+        assert_eq!(
+            cwt[59],
+            CwtCoefficientsParams {
+                widths: vec![2, 5, 10, 20],
+                coeff: 14,
+                w: 20
+            }
+        );
+        assert!(config.number_cwt_peaks.is_some());
+        assert_eq!(
+            config.clone().number_cwt_peaks.unwrap().parameters[..],
+            [NumberCwtPeaksParams { n: 1 }, NumberCwtPeaksParams { n: 5 }]
         );
     }
 }
