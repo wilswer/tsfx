@@ -7,10 +7,13 @@ pub mod autocorrelation;
 pub mod change;
 pub mod counting;
 pub mod entropy;
+pub mod kernel;
 pub mod location;
 pub mod reoccurrence;
 pub mod statistics;
 pub mod trend;
+
+use std::sync::Arc;
 
 use polars::prelude::*;
 
@@ -23,16 +26,17 @@ use counting::{
     longest_strike_below_mean, number_crossing_m, number_peaks_multi, range_count,
 };
 use entropy::sample_entropy;
+use kernel::KernelPlan;
 use location::{
     first_location_of_maximum, first_location_of_minimum, index_mass_quantile,
     last_location_of_maximum, last_location_of_minimum,
 };
 use reoccurrence::{ReoccurrenceFeatures, has_duplicate_max, has_duplicate_min, reoccurrence};
 use statistics::{
-    absolute_energy, absolute_maximum, count, expr_median, expr_quantile, kurtosis,
-    large_standard_deviation, maximum, mean, mean_n_absolute_max, minimum, ratio_beyond_r_sigma,
-    root_mean_square, skewness, standard_deviation, sum_values, symmetry_looking, variance,
-    variance_larger_than_standard_deviation, variation_coefficient,
+    AbsoluteEnergy, AbsoluteMaximum, Kurtosis, LargeStandardDeviation, Maximum, Mean,
+    MeanNAbsoluteMax, Minimum, RatioBeyondRSigma, RootMeanSquare, Skewness, StandardDeviation,
+    SumValues, SymmetryLooking, Variance, VarianceLargerThanStandardDeviation,
+    VariationCoefficient, count, expr_median, expr_quantile,
 };
 use trend::{agg_linear_trend, linear_trend};
 
@@ -40,53 +44,59 @@ use trend::{agg_linear_trend, linear_trend};
 ///
 /// Columns come out tier by tier (Minimal, then Efficient, then
 /// Comprehensive), each tier looping over all value columns.
-pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> {
+pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigError> {
     let config = load_config(opts.config_path.as_deref())?;
     let tier = &opts.feature_setting;
     let mut aggregators = Vec::new();
+    // Features computed by the single `apply` of each value column
+    let mut plans: Vec<KernelPlan> = opts
+        .value_cols
+        .iter()
+        .map(|_| KernelPlan::default())
+        .collect();
 
     // Minimal tier
     if config.length.is_some() {
         aggregators.push(count(&opts.value_cols[0]));
     }
-    for col in &opts.value_cols {
+    for (col, plan) in opts.value_cols.iter().zip(plans.iter_mut()) {
         if config.sum_values.is_some() {
-            aggregators.push(sum_values(col));
+            plan.push(SumValues);
         }
         if config.mean.is_some() {
-            aggregators.push(mean(col));
+            plan.push(Mean);
         }
         if config.median.is_some() {
             aggregators.push(expr_median(col));
         }
         if config.minimum.is_some() {
-            aggregators.push(minimum(col));
+            plan.push(Minimum);
         }
         if config.maximum.is_some() {
-            aggregators.push(maximum(col));
+            plan.push(Maximum);
         }
         if config.standard_deviation.is_some() {
-            aggregators.push(standard_deviation(col));
+            plan.push(StandardDeviation);
         }
         if config.variance.is_some() {
-            aggregators.push(variance(col));
+            plan.push(Variance);
         }
         if config.skewness.is_some() {
-            aggregators.push(skewness(col));
+            plan.push(Skewness);
         }
         if config.root_mean_square.is_some() {
-            aggregators.push(root_mean_square(col));
+            plan.push(RootMeanSquare);
         }
     }
 
     // Efficient tier
     if *tier >= FeatureSetting::Efficient {
-        for col in &opts.value_cols {
+        for (col, plan) in opts.value_cols.iter().zip(plans.iter_mut()) {
             if config.kurtosis.is_some() {
-                aggregators.push(kurtosis(col));
+                plan.push(Kurtosis);
             }
             if config.absolute_energy.is_some() {
-                aggregators.push(absolute_energy(col));
+                plan.push(AbsoluteEnergy);
             }
             if config.mean_absolute_change.is_some() {
                 aggregators.push(mean_absolute_change(col));
@@ -95,7 +105,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> 
                 aggregators.push(linear_trend(col));
             }
             if config.variance_larger_than_standard_deviation.is_some() {
-                aggregators.push(variance_larger_than_standard_deviation(col));
+                plan.push(VarianceLargerThanStandardDeviation);
             }
             if let Some(feature) = &config.ratio_beyond_r_sigma {
                 let params = &feature.parameters;
@@ -103,7 +113,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> 
                 for p in params {
                     rs.push(p.r);
                 }
-                aggregators.push(ratio_beyond_r_sigma(col, rs));
+                plan.push(RatioBeyondRSigma { rs });
             }
 
             if let Some(feature) = &config.large_standard_deviation {
@@ -112,7 +122,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> 
                 for p in params {
                     rs.push(p.r);
                 }
-                aggregators.push(large_standard_deviation(col, rs));
+                plan.push(LargeStandardDeviation { rs });
             }
             if let Some(feature) = &config.symmetry_looking {
                 let params = &feature.parameters;
@@ -120,7 +130,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> 
                 for p in params {
                     rs.push(p.r);
                 }
-                aggregators.push(symmetry_looking(col, rs));
+                plan.push(SymmetryLooking { rs });
             }
             if config.has_duplicate_max.is_some() {
                 aggregators.push(has_duplicate_max(col));
@@ -135,7 +145,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> 
                 }
             }
             if config.absolute_maximum.is_some() {
-                aggregators.push(absolute_maximum(col));
+                plan.push(AbsoluteMaximum);
             }
             if config.absolute_sum_of_changes.is_some() {
                 aggregators.push(absolute_sum_of_changes(col));
@@ -193,7 +203,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> 
                 aggregators.push(reoccurrence(col, reoccurring));
             }
             if config.variation_coefficient.is_some() {
-                aggregators.push(variation_coefficient(col));
+                plan.push(VariationCoefficient);
             }
             if config.mean_change.is_some() {
                 aggregators.push(mean_change(col));
@@ -210,7 +220,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> 
                 for p in params {
                     ns.push(p.n);
                 }
-                aggregators.push(mean_n_absolute_max(col, ns));
+                plan.push(MeanNAbsoluteMax { ns });
             }
             if let Some(feature) = &config.autocorrelation {
                 let params = &feature.parameters;
@@ -271,7 +281,34 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<Vec<Expr>, ConfigError> 
             aggregators.push(sample_entropy(col));
         }
     }
-    Ok(aggregators)
+
+    let mut unpack = Vec::new();
+    let mut packed = Vec::new();
+    for (col, plan) in opts.value_cols.iter().zip(plans) {
+        if plan.is_empty() {
+            continue;
+        }
+        let plan = Arc::new(plan);
+        aggregators.push(plan.aggregation(col));
+        unpack.extend(plan.unpack(col));
+        packed.push(KernelPlan::packed_name(col));
+    }
+    Ok(FeatureExprs {
+        aggregations: aggregators,
+        unpack,
+        packed,
+    })
+}
+
+/// What [`aggregators`] builds for a group-by.
+pub struct FeatureExprs {
+    /// Expressions for the group-by aggregation.
+    pub aggregations: Vec<Expr>,
+    /// Expressions that turn each value column's packed feature list into
+    /// named columns, to run on the aggregated frame.
+    pub unpack: Vec<Expr>,
+    /// The packed list columns, to drop after unpacking.
+    pub packed: Vec<String>,
 }
 
 /// The group's values as one contiguous `Float64` chunk, ready for
