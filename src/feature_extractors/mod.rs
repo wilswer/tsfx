@@ -19,7 +19,7 @@ use polars::prelude::*;
 
 use crate::extract::{ExtractionSettings, FeatureSetting};
 use crate::utils::toml_reader::{ConfigError, load_config};
-use autocorrelation::{autocorrelation, c3, time_reversal_asymmetry_statistic};
+use autocorrelation::{Autocorrelation, C3, TimeReversalAsymmetryStatistic};
 use change::{AbsoluteSumOfChanges, CidCe, MeanAbsoluteChange, MeanChange};
 use counting::{
     CountAbove, CountAboveMean, CountBelow, CountBelowMean, LongestStrikeAboveMean,
@@ -221,12 +221,8 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 plan.push(MeanNAbsoluteMax { ns });
             }
             if let Some(feature) = &config.autocorrelation {
-                let params = &feature.parameters;
-                let mut lags = Vec::new();
-                for p in params {
-                    lags.push(p.lag);
-                }
-                aggregators.push(autocorrelation(col, lags));
+                let lags = feature.parameters.iter().map(|p| p.lag).collect();
+                plan.push(Autocorrelation { lags });
             }
             if let Some(feature) = &config.quantile {
                 let params = &feature.parameters;
@@ -247,16 +243,12 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 plan.push(IndexMassQuantile { qs });
             }
             if let Some(feature) = &config.c3 {
-                let parameters = &feature.parameters;
-                for p in parameters {
-                    aggregators.push(c3(col, p.lag));
-                }
+                let lags = feature.parameters.iter().map(|p| p.lag).collect();
+                plan.push(C3 { lags });
             }
             if let Some(feature) = &config.time_reversal_asymmetry_statistic {
-                let params = &feature.parameters;
-                for p in params {
-                    aggregators.push(time_reversal_asymmetry_statistic(col, p.lag));
-                }
+                let lags = feature.parameters.iter().map(|p| p.lag).collect();
+                plan.push(TimeReversalAsymmetryStatistic { lags });
             }
             if let Some(feature) = &config.number_peaks {
                 let ns = feature.parameters.iter().map(|p| p.n).collect();
