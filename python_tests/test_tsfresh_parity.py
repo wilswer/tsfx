@@ -1096,7 +1096,6 @@ def test_numpy_summation_exact(values, column, expected):
         ([math.inf], "quantile__q_0.1", math.nan),
         ([1.0, math.inf], "quantile__q_1.0", math.nan),
         ([1.0, 2.0], "quantile__q_1.0", 2.0),
-
         ([1.0, 2.0, math.inf], "median", 2.0),
     ],
 )
@@ -1106,3 +1105,14 @@ def test_numpy_median_quantile_exact(values, column, expected):
         assert math.isnan(result), result
     else:
         assert result == expected
+
+
+# Found by the tsfresh fuzzer: agg_linear_trend(np.array(x), [{"attr":
+# "slope", "chunk_len": 3, "f_agg": "var"}]) with tsfresh 0.21.2 / scipy
+# 1.17.1. The chunk variances span eight orders of magnitude, so a one-pass
+# least-squares fit loses digits; linregress centres the data first.
+def test_agg_linear_trend_fit_is_centred():
+    result = _features([0.0, 0.0, 1.0, 0.0, 0.0, 24468.0, 0.0])[
+        "val__agg_linear_trend_slope__chunk_size_3__agg_var"
+    ]
+    assert math.isclose(result, -0.1111111119389534, rel_tol=1e-9)

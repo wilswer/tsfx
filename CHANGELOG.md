@@ -39,6 +39,9 @@ All notable changes to TSFX are documented here.
     variance (`ddof = 0`, was `ddof = 1`), and a NaN in a chunk now makes the
     result NaN instead of being skipped. The `median` aggregator (a tsfx
     addition) follows `np.median` likewise.
+  - `linear_trend` and `agg_linear_trend` fit the line from centred sums,
+    as `scipy.stats.linregress` does; the one-pass formula lost digits when
+    the values span many orders of magnitude.
 - Feature values now match tsfresh v0.21.2 for every feature, which changes
   results for many features compared with 0.3.3, and invalid config files
   raise `ValueError`. See

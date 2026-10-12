@@ -36,7 +36,7 @@ impl Kernel for LinearTrend {
     }
 
     fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
-        let (intercept, slope) = calculate_sequential_ols(ctx.values().iter().copied(), ctx.len());
+        let (intercept, slope) = calculate_sequential_ols(ctx.values());
         out.extend([intercept, slope]);
     }
 }
@@ -114,8 +114,7 @@ impl Kernel for AggLinearTrend {
                 ChunkAggregator::Var => population_var(&ArrayView1::from(chunk)),
             };
             let aggregates = x.chunks(chunk_size).map(aggregate).collect::<Vec<f64>>();
-            let n = aggregates.len();
-            let (intercept, slope) = calculate_sequential_ols(aggregates, n);
+            let (intercept, slope) = calculate_sequential_ols(&aggregates);
             out.extend([intercept, slope]);
         }
     }

@@ -136,41 +136,24 @@ pub fn sample_excess_kurtosis(arr: &ArrayView1<f64>) -> f64 {
     n * (n + 1.0) * (n - 1.0) * m4 / denominator - adj
 }
 
-/// Calculates the Ordinary Least Squares (OLS) slope and intercept
-/// for a sequence of y-values where x-values are assumed to be a sequential index (0, 1, 2, ..., N-1).
-/// Returns a tuple of (intercept, slope).
-pub(crate) fn calculate_sequential_ols(
-    y_values: impl IntoIterator<Item = f64>,
-    n: usize,
-) -> (f64, f64) {
-    // Cannot fit a line with fewer than 2 points
+/// Ordinary least squares intercept and slope of `y` against its index
+/// $0, 1, \dots, n - 1$, as `scipy.stats.linregress` (which tsfresh uses)
+/// computes them: centred sums,
+/// $b = \sum (i - \bar{i})(y_i - \bar{y}) / \sum (i - \bar{i})^2$ and
+/// $a = \bar{y} - b\,\bar{i}$, summed as numpy does. (A one-pass
+/// $\sum i\,y_i - n\,\bar{i}\,\bar{y}$ loses digits to cancellation.)
+/// NaN for fewer than 2 values.
+pub(crate) fn calculate_sequential_ols(y: &[f64]) -> (f64, f64) {
+    let n = y.len();
     if n < 2 {
         return (f64::NAN, f64::NAN);
     }
-
-    let n_f64 = n as f64;
-    let mut sum_y = 0.0;
-    let mut sum_xy = 0.0;
-
-    // Calculate sums in a single pass
-    for (i, val) in y_values.into_iter().enumerate() {
-        sum_y += val;
-        sum_xy += (i as f64) * val;
-    }
-
-    let mean_x = (n_f64 - 1.0) / 2.0;
-    let mean_y = sum_y / n_f64;
-
-    // Sum of squares of x (SS_xx) for a sequence 0..n-1 has a known closed-form formula
-    let ss_xx = n_f64 * (n_f64 * n_f64 - 1.0) / 12.0;
-
-    // Sum of products (SS_xy)
-    let ss_xy = sum_xy - n_f64 * mean_x * mean_y;
-
+    let mean_x = (n as f64 - 1.0) / 2.0;
+    let mean_y = numpy_mean(y);
+    let ss_xx = numpy_sum(n, |i| (i as f64 - mean_x) * (i as f64 - mean_x));
+    let ss_xy = numpy_sum(n, |i| (i as f64 - mean_x) * (y[i] - mean_y));
     let slope = ss_xy / ss_xx;
-    let intercept = mean_y - slope * mean_x;
-
-    (intercept, slope)
+    (mean_y - slope * mean_x, slope)
 }
 
 pub(crate) fn get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize> {
