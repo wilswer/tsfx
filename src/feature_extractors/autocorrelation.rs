@@ -1,11 +1,11 @@
 //! Lag-based relationships within the series.
 
 use anyhow::Result;
-use ndarray::{ArrayView1, Axis, Ix1, s};
+use ndarray::{ArrayView1, s};
 use polars::lazy::dsl::*;
 use polars::prelude::*;
 
-use super::_make_nan_struct_column_int;
+use super::{_make_nan_struct_column_int, f64_values};
 use crate::utils::stats::{population_var, roll};
 
 fn _autocorrelation(s: Column, lags: &[usize]) -> Result<Column, PolarsError> {
@@ -13,17 +13,14 @@ fn _autocorrelation(s: Column, lags: &[usize]) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return _make_nan_struct_column_int("autocorrelation", "lag", lags);
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
         None => return _make_nan_struct_column_int("autocorrelation", "lag", lags),
     };
-    let v = population_var(&arr.view());
+    let v = population_var(&arr);
     // tsfresh: autocorrelation is undefined without variance (np.isclose(v, 0))
     if v.abs() <= 1e-8 {
         return _make_nan_struct_column_int("autocorrelation", "lag", lags);
@@ -107,11 +104,8 @@ fn _c3(s: Column, lag: usize) -> Result<Column, PolarsError> {
     if n <= 2 * lag {
         return Ok(Column::new("".into(), &[0 as f64]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let slice = &mut arr.to_vec()[..];
     let neg_lag = -(lag as isize);
     let y1_slice = roll(slice, 2 * neg_lag);
@@ -171,11 +165,8 @@ fn _time_reversal_asymmetry_statistic(s: Column, lag: usize) -> Result<Column, P
     if n <= 2 * lag {
         return Ok(Column::new("".into(), &[0 as f64]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let slice = &mut arr.to_vec()[..];
     let neg_lag = -(lag as isize);
     let one_lag = roll(slice, neg_lag);
@@ -184,7 +175,7 @@ fn _time_reversal_asymmetry_statistic(s: Column, lag: usize) -> Result<Column, P
     let slice = &mut arr.to_vec()[..];
     let two_lag = roll(slice, 2 * neg_lag);
     let two_lag = ArrayView1::from(two_lag);
-    let full_prod = &two_lag * &two_lag * one_lag - &one_lag * &arr * &arr;
+    let full_prod = &two_lag * &two_lag * one_lag - &one_lag * &arr * arr;
     let prod = full_prod.slice(s![..(n - 2 * lag)]);
     let mean_opt = prod.mean();
     let out = match mean_opt {
