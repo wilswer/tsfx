@@ -1,8 +1,9 @@
 """Differential fuzzing against tsfresh, the specification.
 
 Hypothesis generates series (ties, NaN, ±inf, signed zeros, long series for
-numpy's pairwise summation, ...), and every feature of the parity config is
-compared with tsfresh's feature calculator. One test per feature, so each
+numpy's pairwise summation, series that hit thresholds exactly, ...), and
+every feature of the parity config is compared with tsfresh's feature
+calculator. One test per feature, so each
 gets its own shrunk counterexample.
 
 Opt-in (marker ``fuzz``, needs hypothesis and tsfresh):
@@ -62,8 +63,31 @@ SPECIAL = [0.0, -0.0, 1.0, -1.0, math.nan, math.inf, -math.inf]
 
 
 @st.composite
+def threshold_series(draw: st.DrawFn) -> list[float]:
+    """A block of decimals followed by sign-flipped permutations of it, so
+    thresholds are hit exactly in real arithmetic (cumulative shares of |x|
+    at 1/k, mean and median in exact ratios to the range) and only
+    floating-point rounding decides comparisons such as index_mass_quantile's
+    and symmetry_looking's."""
+    scale = draw(st.sampled_from([10, 100, 4, 8, 3, 7]))
+    block = draw(
+        st.lists(
+            st.integers(-99, 99).map(lambda i: i / scale), min_size=1, max_size=12
+        ),
+    )
+    out = []
+    for _ in range(draw(st.sampled_from([2, 5, 10]))):
+        signs = draw(st.lists(st.booleans(), min_size=len(block), max_size=len(block)))
+        copy = draw(st.permutations(block))
+        out += [-v if flip else v for v, flip in zip(copy, signs, strict=True)]
+    return out
+
+
+@st.composite
 def series(draw: st.DrawFn) -> list[float]:
     """A series with the edge cases features tend to get wrong."""
+    if draw(st.integers(0, 3)) == 0:
+        return draw(threshold_series())
     value = st.one_of(
         st.floats(-1e6, 1e6, allow_nan=False, allow_infinity=False),
         st.integers(-5, 5).map(float),
