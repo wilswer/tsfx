@@ -12,7 +12,6 @@ use std::cell::OnceCell;
 use std::sync::Arc;
 
 use ndarray::{Array1, ArrayView1, s};
-use ndarray_stats::QuantileExt;
 use polars::prelude::*;
 
 use super::f64_values;
@@ -28,8 +27,7 @@ pub struct GroupContext<'a> {
     x: ArrayView1<'a, f64>,
     mean: OnceCell<f64>,
     var: OnceCell<f64>,
-    min: OnceCell<f64>,
-    max: OnceCell<f64>,
+    extremes: OnceCell<(f64, f64)>,
     diffs: OnceCell<Array1<f64>>,
     sorted: OnceCell<Vec<f64>>,
 }
@@ -42,8 +40,7 @@ impl<'a> GroupContext<'a> {
             x: ArrayView1::from(values),
             mean: OnceCell::new(),
             var: OnceCell::new(),
-            min: OnceCell::new(),
-            max: OnceCell::new(),
+            extremes: OnceCell::new(),
             diffs: OnceCell::new(),
             sorted: OnceCell::new(),
         }
@@ -90,12 +87,21 @@ impl<'a> GroupContext<'a> {
 
     /// Smallest value; NaN if any value is NaN (like `np.min`).
     pub fn min(&self) -> f64 {
-        *self.min.get_or_init(|| *self.x.min().unwrap_or(&f64::NAN))
+        self.extremes().0
     }
 
     /// Largest value; NaN if any value is NaN (like `np.max`).
     pub fn max(&self) -> f64 {
-        *self.max.get_or_init(|| *self.x.max().unwrap_or(&f64::NAN))
+        self.extremes().1
+    }
+
+    /// Minimum and maximum in one pass, with exactly the semantics of
+    /// `ndarray_stats`' `min`/`max` (both NaN if any value is NaN; on ties
+    /// the first value wins, which matters only for `-0.0` versus `0.0`).
+    fn extremes(&self) -> (f64, f64) {
+        *self
+            .extremes
+            .get_or_init(|| extremes(self.values.iter().copied()))
     }
 
     /// The values sorted ascending (`total_cmp`, so NaN sorts last).
@@ -112,6 +118,30 @@ impl<'a> GroupContext<'a> {
         self.diffs
             .get_or_init(|| &self.x.slice(s![1..]) - &self.x.slice(s![..-1]))
     }
+}
+
+/// Minimum and maximum of a non-empty sequence in one pass: both NaN if any
+/// value is NaN; on ties the first value wins.
+pub(crate) fn extremes(values: impl IntoIterator<Item = f64>) -> (f64, f64) {
+    let mut values = values.into_iter();
+    let Some(first) = values.next() else {
+        return (f64::NAN, f64::NAN);
+    };
+    if first.is_nan() {
+        return (f64::NAN, f64::NAN);
+    }
+    let (mut min, mut max) = (first, first);
+    for v in values {
+        if v.is_nan() {
+            return (f64::NAN, f64::NAN);
+        }
+        if v < min {
+            min = v;
+        } else if v > max {
+            max = v;
+        }
+    }
+    (min, max)
 }
 
 /// A feature (or a family of features) computed from a [`GroupContext`].

@@ -7,7 +7,7 @@ use noisy_float::types::n64;
 use ordered_float::OrderedFloat;
 use polars::lazy::dsl::*;
 
-use super::kernel::{GroupContext, Kernel, scalar_kernel};
+use super::kernel::{GroupContext, Kernel, extremes, scalar_kernel};
 use crate::utils::stats::{
     linear_quantile, linear_quantile_select, median_mut, sample_excess_kurtosis, sample_skewness,
 };
@@ -267,7 +267,7 @@ scalar_kernel! {
 ///
 /// # tsfresh
 /// `feature_calculators.absolute_maximum` (v0.21.2).
-    AbsoluteMaximum, "absolute_maximum", |ctx| *ctx.x().mapv(f64::abs).max().unwrap_or(&f64::NAN)
+    AbsoluteMaximum, "absolute_maximum", |ctx| extremes(ctx.values().iter().map(|x| x.abs())).1
 }
 
 scalar_kernel! {
