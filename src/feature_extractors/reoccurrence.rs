@@ -1,16 +1,20 @@
 //! Features about repeated values.
 
 use anyhow::Result;
+use ndarray::ArrayView1;
 use ndarray_stats::QuantileExt;
 use polars::lazy::dsl::*;
 use polars::prelude::*;
+
+use super::f64_values;
 
 fn _has_duplicate_max(s: Column) -> Result<Column, PolarsError> {
     let s = s.drop_nulls();
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     // tsfresh: np.max is NaN and x == NaN is never true, so the answer is 0
     if arr.iter().any(|x| x.is_nan()) {
         return Ok(Column::new("".into(), &[0.0]));
@@ -55,7 +59,8 @@ fn _has_duplicate_min(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     // tsfresh: np.min is NaN and x == NaN is never true, so the answer is 0
     if arr.iter().any(|x| x.is_nan()) {
         return Ok(Column::new("".into(), &[0.0]));
