@@ -1,9 +1,10 @@
 //! Features built from consecutive differences.
 
-use ndarray::{CowArray, s};
+use ndarray::{ArrayView1, CowArray, s};
 
 use super::kernel::{GroupContext, Kernel, scalar_kernel};
-use crate::utils::stats::numpy_sum;
+use crate::utils::stats::{numpy_mean, numpy_median, numpy_quantile, numpy_sum, population_var};
+use crate::utils::toml_reader::ChangeAggregator;
 
 scalar_kernel! {
 /// Mean absolute change feature.
@@ -134,4 +135,207 @@ impl Kernel for CidCe {
             out.push(diffs.mapv(|d| d.powi(2)).sum().sqrt());
         }
     }
+}
+
+scalar_kernel! {
+/// Mean second derivative central feature.
+///
+/// The mean of the central approximation of the second derivative,
+/// $\frac{1}{2}(x_{i+2} - 2\,x_{i+1} + x_i)$. The sum telescopes, so only
+/// the first two and last two values matter:
+/// $$ \frac{1}{n-2} \sum_{i=1}^{n-2} \frac{1}{2}(x_{i+2} - 2\,x_{i+1} + x_i)
+///    = \frac{x_n - x_{n-1} - x_2 + x_1}{2\,(n-2)}. $$
+///
+/// # Output column
+/// `{name}__mean_second_derivative_central`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - Fewer than 3 values give NaN.
+/// - Only the first two and last two values are used, so NaN elsewhere does
+///   not affect the result.
+///
+/// # tsfresh
+/// `feature_calculators.mean_second_derivative_central` (v0.21.2).
+    MeanSecondDerivativeCentral, "mean_second_derivative_central", |ctx| {
+        let x = ctx.values();
+        let n = x.len();
+        if n > 2 {
+            // (x[-1] - x[-2] - x[1] + x[0]) / (2 * (len(x) - 2)), in this order
+            (x[n - 1] - x[n - 2] - x[1] + x[0]) / (2 * (n - 2)) as f64
+        } else {
+            f64::NAN
+        }
+    }
+}
+
+/// Change quantiles feature.
+///
+/// Fix a corridor between the `ql`- and `qh`-quantiles of the values, then
+/// aggregate the consecutive changes $x_{i+1} - x_i$ (or their absolute
+/// values) that start and end inside the corridor:
+/// $$ f_{agg}\left(\{\, x_{i+1} - x_i : c_i \wedge c_{i+1} \,\}\right), $$
+/// where $c_i$ says whether $x_i$ lies in the corridor
+/// $(Q(q_l), Q(q_h)]$, the lower edge included.
+///
+/// The corridor is `pd.qcut(x, [ql, qh])`'s first bin: the edges are the
+/// quantiles of the non-NaN values with linear interpolation (as pandas
+/// computes them, through `np.percentile` with `100 q`), and values are
+/// binned with numpy's `searchsorted` exactly as pandas does.
+///
+/// # Parameters
+/// - `ql`, `qh`: lower and upper quantile of the corridor.
+/// - `isabs`: aggregate absolute changes.
+/// - `f_agg`: `mean`, `var`, `std` or `median` of the changes (population
+///   variance and standard deviation, `ddof = 0`; NaN propagates as in
+///   numpy). Any other name is rejected when the config is loaded.
+///
+/// Config:
+/// `[change_quantiles] parameters = [{ ql = 0.0, qh = 0.2, isabs = false, f_agg = "mean" }, ...]`;
+/// one column per entry.
+///
+/// # Output column
+/// `{name}__change_quantiles__ql_{ql}__qh_{qh}__isabs_{isabs}__f_agg_{f_agg}`,
+/// with `ql` and `qh` written as Python's `repr` would (e.g. `0.2`, `1.0`)
+/// and `isabs` as `true` / `false`.
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - $q_l \geq q_h$ gives 0.
+/// - No change inside the corridor (e.g. a single value) gives 0.
+/// - NaN values never lie in the corridor; a change involving $\pm\infty$
+///   can be NaN and then makes the aggregate NaN, as in numpy.
+/// - If both edges coincide, pandas (3.x) keeps the duplicate edge for two
+///   quantiles, so the corridor holds exactly the values equal to it.
+///
+/// # tsfresh
+/// `feature_calculators.change_quantiles` (v0.21.2).
+pub struct ChangeQuantiles {
+    /// `(ql, qh, isabs, f_agg)` per config entry.
+    pub params: Vec<(f64, f64, bool, ChangeAggregator)>,
+}
+
+impl Kernel for ChangeQuantiles {
+    fn names(&self) -> Vec<String> {
+        self.params
+            .iter()
+            .map(|(ql, qh, isabs, f_agg)| {
+                format!("change_quantiles__ql_{ql:?}__qh_{qh:?}__isabs_{isabs}__f_agg_{f_agg}")
+            })
+            .collect()
+    }
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        let x = ctx.values();
+        // The quantiles of the non-NaN values (pandas drops NaN first)
+        let finite_sorted = ctx
+            .sorted()
+            .iter()
+            .copied()
+            .filter(|v| !v.is_nan())
+            .collect::<Vec<f64>>();
+        let mut changes = Vec::new();
+        for &(ql, qh, isabs, f_agg) in &self.params {
+            if ql >= qh {
+                out.push(0.0);
+                continue;
+            }
+            let bins = [ql, qh].map(|q| pandas_quantile(&finite_sorted, q));
+            let inside = qcut_first_bin(x, bins);
+            changes.clear();
+            // Only changes that start and end inside the corridor
+            changes.extend(
+                (0..x.len().saturating_sub(1))
+                    .filter(|&i| inside[i] && inside[i + 1])
+                    .map(|i| {
+                        let d = x[i + 1] - x[i];
+                        if isabs { d.abs() } else { d }
+                    }),
+            );
+            out.push(if changes.is_empty() {
+                0.0
+            } else {
+                f_agg.aggregate(&mut changes)
+            });
+        }
+    }
+}
+
+impl ChangeAggregator {
+    /// The numpy function of the same name on `values` (not empty; may be
+    /// reordered).
+    fn aggregate(&self, values: &mut [f64]) -> f64 {
+        match self {
+            ChangeAggregator::Mean => numpy_mean(values),
+            ChangeAggregator::Var => population_var(&ArrayView1::from(&*values)),
+            ChangeAggregator::Std => population_var(&ArrayView1::from(&*values)).sqrt(),
+            ChangeAggregator::Median => {
+                if values.iter().any(|v| v.is_nan()) {
+                    f64::NAN
+                } else {
+                    numpy_median(values)
+                }
+            }
+        }
+    }
+}
+
+/// `Series.quantile(q)` of non-NaN `sorted` values as pandas computes it:
+/// `np.percentile(x, q * 100)`, which divides by 100 again (so `q = 0.2`
+/// becomes `0.20000000000000004`). NaN for no values.
+fn pandas_quantile(sorted: &[f64], q: f64) -> f64 {
+    if sorted.is_empty() {
+        return f64::NAN;
+    }
+    numpy_quantile(sorted, (q * 100.0) / 100.0)
+}
+
+/// Which values fall in the first bin of `pd.qcut(x, bins, labels=False)`
+/// with two edges: `ids = np.searchsorted(bins, x, side="left")`, values
+/// equal to the lower edge moved into the bin, NaN never in it.
+fn qcut_first_bin(x: &[f64], bins: [f64; 2]) -> Vec<bool> {
+    let mut ids = numpy_searchsorted_left(&bins, x);
+    for (id, &v) in ids.iter_mut().zip(x) {
+        if v == bins[0] {
+            *id = 1;
+        }
+    }
+    ids.iter()
+        .zip(x)
+        .map(|(&id, v)| id == 1 && !v.is_nan())
+        .collect()
+}
+
+/// `np.searchsorted(arr, keys, side="left")` for float64, including numpy's
+/// use of the previous key to narrow the search (which matters only when
+/// `arr` is not sorted, e.g. a NaN edge before a number) and its NaN-last
+/// ordering.
+fn numpy_searchsorted_left(arr: &[f64], keys: &[f64]) -> Vec<usize> {
+    let less = |a: f64, b: f64| a < b || (b.is_nan() && !a.is_nan());
+    let n = arr.len();
+    let (mut min_idx, mut max_idx) = (0, n);
+    let Some(&first) = keys.first() else {
+        return Vec::new();
+    };
+    let mut last_key = first;
+    keys.iter()
+        .map(|&key| {
+            if less(last_key, key) {
+                max_idx = n;
+            } else {
+                min_idx = 0;
+                max_idx = if max_idx < n { max_idx + 1 } else { n };
+            }
+            last_key = key;
+            while min_idx < max_idx {
+                let mid = min_idx + ((max_idx - min_idx) >> 1);
+                if less(arr[mid], key) {
+                    min_idx = mid + 1;
+                } else {
+                    max_idx = mid;
+                }
+            }
+            min_idx
+        })
+        .collect()
 }

@@ -11,6 +11,7 @@ pub mod entropy;
 pub mod kernel;
 pub mod location;
 pub mod reoccurrence;
+pub mod similarity;
 pub mod statistics;
 pub mod trend;
 
@@ -21,10 +22,13 @@ use polars::prelude::*;
 use crate::extract::{ExtractionSettings, FeatureSetting};
 use crate::utils::toml_reader::{ConfigError, load_config};
 use autocorrelation::{Autocorrelation, C3, TimeReversalAsymmetryStatistic};
-use change::{AbsoluteSumOfChanges, CidCe, MeanAbsoluteChange, MeanChange};
+use change::{
+    AbsoluteSumOfChanges, ChangeQuantiles, CidCe, MeanAbsoluteChange, MeanChange,
+    MeanSecondDerivativeCentral,
+};
 use counting::{
     CountAbove, CountAboveMean, CountBelow, CountBelowMean, LongestStrikeAboveMean,
-    LongestStrikeBelowMean, NumberCrossingM, NumberPeaks, RangeCount,
+    LongestStrikeBelowMean, NumberCrossingM, NumberPeaks, RangeCount, ValueCount,
 };
 use entropy::SampleEntropy;
 use kernel::KernelPlan;
@@ -33,11 +37,12 @@ use location::{
     LastLocationOfMinimum,
 };
 use reoccurrence::{HasDuplicateMax, HasDuplicateMin, ReoccurrenceFeatures};
+use similarity::{Query, QuerySimilarityCount};
 use statistics::{
-    AbsoluteEnergy, AbsoluteMaximum, Kurtosis, LargeStandardDeviation, Maximum, Mean,
-    MeanNAbsoluteMax, Median, Minimum, Quantile, RatioBeyondRSigma, RootMeanSquare, Skewness,
-    StandardDeviation, SumValues, SymmetryLooking, Variance, VarianceLargerThanStandardDeviation,
-    VariationCoefficient, count,
+    AbsoluteEnergy, AbsoluteMaximum, BenfordCorrelation, EnergyRatioByChunks, Kurtosis,
+    LargeStandardDeviation, Maximum, Mean, MeanNAbsoluteMax, Median, Minimum, Quantile,
+    RatioBeyondRSigma, RootMeanSquare, Skewness, StandardDeviation, SumValues, SymmetryLooking,
+    Variance, VarianceLargerThanStandardDeviation, VariationCoefficient, count,
 };
 use trend::{AggLinearTrend, LinearTrend};
 
@@ -253,6 +258,44 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
             if let Some(feature) = &config.number_peaks {
                 let ns = feature.parameters.iter().map(|p| p.n).collect();
                 plan.push(NumberPeaks { ns });
+            }
+            if config.mean_second_derivative_central.is_some() {
+                plan.push(MeanSecondDerivativeCentral);
+            }
+            if let Some(feature) = &config.value_count {
+                let values = feature.parameters.iter().map(|p| p.value).collect();
+                plan.push(ValueCount { values });
+            }
+            if let Some(feature) = &config.energy_ratio_by_chunks {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.num_segments, p.segment_focus))
+                    .collect();
+                plan.push(EnergyRatioByChunks { params });
+            }
+            if let Some(feature) = &config.change_quantiles {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.ql, p.qh, p.isabs, p.f_agg))
+                    .collect();
+                plan.push(ChangeQuantiles { params });
+            }
+            if config.benford_correlation.is_some() {
+                plan.push(BenfordCorrelation);
+            }
+            if let Some(feature) = &config.query_similarity_count {
+                let queries = feature
+                    .parameters
+                    .iter()
+                    .map(|p| Query {
+                        query: p.query.clone(),
+                        threshold: p.threshold,
+                        normalize: p.normalize,
+                    })
+                    .collect();
+                plan.push(QuerySimilarityCount { queries });
             }
         }
     }

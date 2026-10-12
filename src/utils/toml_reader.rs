@@ -59,6 +59,12 @@ pub struct Config {
     pub c3: Option<C3>,
     pub time_reversal_asymmetry_statistic: Option<TimeReversalAsymmetryStatistic>,
     pub number_peaks: Option<NumberPeaks>,
+    pub mean_second_derivative_central: Option<MeanSecondDerivativeCentral>,
+    pub value_count: Option<ValueCount>,
+    pub energy_ratio_by_chunks: Option<EnergyRatioByChunks>,
+    pub change_quantiles: Option<ChangeQuantiles>,
+    pub benford_correlation: Option<BenfordCorrelation>,
+    pub query_similarity_count: Option<QuerySimilarityCount>,
 }
 
 impl Default for Config {
@@ -123,6 +129,13 @@ impl Default for Config {
             c3: Some(C3::default()),
             time_reversal_asymmetry_statistic: Some(TimeReversalAsymmetryStatistic::default()),
             number_peaks: Some(NumberPeaks::default()),
+            mean_second_derivative_central: Some(MeanSecondDerivativeCentral::default()),
+            value_count: Some(ValueCount::default()),
+            energy_ratio_by_chunks: Some(EnergyRatioByChunks::default()),
+            change_quantiles: Some(ChangeQuantiles::default()),
+            benford_correlation: Some(BenfordCorrelation::default()),
+            // Needs a query; tsfresh's default (no query) only gives NaN
+            query_similarity_count: None,
         }
     }
 }
@@ -706,6 +719,157 @@ pub struct NumberPeaksParams {
     pub n: usize,
 }
 
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct MeanSecondDerivativeCentral {}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ValueCount {
+    pub parameters: Vec<ValueCountParams>,
+}
+impl Default for ValueCount {
+    fn default() -> Self {
+        ValueCount {
+            parameters: [0.0, 1.0, -1.0]
+                .map(|value| ValueCountParams { value })
+                .to_vec(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct ValueCountParams {
+    pub value: f64,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct EnergyRatioByChunks {
+    pub parameters: Vec<EnergyRatioByChunksParams>,
+}
+impl Default for EnergyRatioByChunks {
+    fn default() -> Self {
+        EnergyRatioByChunks {
+            parameters: (0..10)
+                .map(|segment_focus| EnergyRatioByChunksParams {
+                    num_segments: 10,
+                    segment_focus,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Rejected when loaded unless `segment_focus < num_segments`.
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[serde(try_from = "RawEnergyRatioByChunksParams")]
+pub struct EnergyRatioByChunksParams {
+    pub num_segments: usize,
+    pub segment_focus: usize,
+}
+
+#[derive(Deserialize)]
+struct RawEnergyRatioByChunksParams {
+    num_segments: usize,
+    segment_focus: usize,
+}
+
+impl TryFrom<RawEnergyRatioByChunksParams> for EnergyRatioByChunksParams {
+    type Error = String;
+
+    fn try_from(raw: RawEnergyRatioByChunksParams) -> Result<Self, Self::Error> {
+        if raw.segment_focus >= raw.num_segments {
+            return Err(format!(
+                "energy_ratio_by_chunks needs segment_focus < num_segments, \
+                 got segment_focus = {} and num_segments = {}",
+                raw.segment_focus, raw.num_segments
+            ));
+        }
+        Ok(EnergyRatioByChunksParams {
+            num_segments: raw.num_segments,
+            segment_focus: raw.segment_focus,
+        })
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ChangeQuantiles {
+    pub parameters: Vec<ChangeQuantilesParams>,
+}
+impl Default for ChangeQuantiles {
+    fn default() -> Self {
+        // tsfresh's grid: every ql < qh, both isabs, mean and var
+        let mut parameters = Vec::new();
+        for ql in [0.0, 0.2, 0.4, 0.6, 0.8] {
+            for qh in [0.2, 0.4, 0.6, 0.8, 1.0] {
+                for isabs in [false, true] {
+                    for f_agg in [ChangeAggregator::Mean, ChangeAggregator::Var] {
+                        if ql < qh {
+                            parameters.push(ChangeQuantilesParams {
+                                ql,
+                                qh,
+                                isabs,
+                                f_agg,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        ChangeQuantiles { parameters }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct ChangeQuantilesParams {
+    pub ql: f64,
+    pub qh: f64,
+    pub isabs: bool,
+    pub f_agg: ChangeAggregator,
+}
+
+/// How `change_quantiles` aggregates the changes inside the corridor.
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ChangeAggregator {
+    Mean,
+    Var,
+    Std,
+    Median,
+}
+
+impl Display for ChangeAggregator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ChangeAggregator::Mean => "mean",
+            ChangeAggregator::Var => "var",
+            ChangeAggregator::Std => "std",
+            ChangeAggregator::Median => "median",
+        };
+        write!(f, "{s}")
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct BenfordCorrelation {}
+
+/// Off by default: there is no sensible default query.
+#[derive(Deserialize, Clone, Debug)]
+pub struct QuerySimilarityCount {
+    pub parameters: Vec<QuerySimilarityCountParams>,
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct QuerySimilarityCountParams {
+    pub query: Vec<f64>,
+    #[serde(default)]
+    pub threshold: f64,
+    #[serde(default = "default_true")]
+    pub normalize: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
 /// A config file that could not be read or parsed.
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -1092,5 +1256,67 @@ mod tests {
                 NumberPeaksParams { n: 50 }
             ]
         );
+        assert!(config.mean_second_derivative_central.is_some());
+        assert_eq!(
+            config.clone().value_count.unwrap().parameters[..],
+            [
+                ValueCountParams { value: 0.0 },
+                ValueCountParams { value: 1.0 },
+                ValueCountParams { value: -1.0 },
+            ]
+        );
+        let energy = config.clone().energy_ratio_by_chunks.unwrap().parameters;
+        assert_eq!(energy.len(), 10);
+        assert!(
+            energy
+                .iter()
+                .enumerate()
+                .all(|(i, p)| p.num_segments == 10 && p.segment_focus == i)
+        );
+        let change = config.clone().change_quantiles.unwrap().parameters;
+        assert_eq!(change.len(), 60);
+        assert_eq!(
+            change[0],
+            ChangeQuantilesParams {
+                ql: 0.0,
+                qh: 0.2,
+                isabs: false,
+                f_agg: ChangeAggregator::Mean,
+            }
+        );
+        assert!(change.iter().all(|p| p.ql < p.qh));
+        assert!(config.benford_correlation.is_some());
+        assert!(config.query_similarity_count.is_none());
+    }
+
+    #[test]
+    fn test_query_similarity_count_defaults() {
+        let config: Config =
+            toml::from_str("[query_similarity_count]\nparameters = [{ query = [1.0, 2.0, 3.0] }]")
+                .unwrap();
+        assert_eq!(
+            config.query_similarity_count.unwrap().parameters[..],
+            [QuerySimilarityCountParams {
+                query: vec![1.0, 2.0, 3.0],
+                threshold: 0.0,
+                normalize: true,
+            }]
+        );
+    }
+
+    #[test]
+    fn test_invalid_energy_ratio_segment_focus() {
+        let result = toml::from_str::<Config>(
+            "[energy_ratio_by_chunks]\nparameters = [{ num_segments = 3, segment_focus = 3 }]",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_change_quantiles_aggregator() {
+        let result = toml::from_str::<Config>(
+            "[change_quantiles]\nparameters = [{ ql = 0.0, qh = 1.0, isabs = false, f_agg = \"sum\" }]",
+        );
+        assert!(result.is_err());
     }
 }

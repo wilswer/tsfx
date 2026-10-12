@@ -25,6 +25,8 @@ Current deviations:
 - ``sample_entropy`` with +-inf in the series
 - ``sum_of_reoccurring_values`` / ``sum_of_reoccurring_data_points`` with a
   NaN or +-inf that occurs only once
+- ``query_similarity_count`` of a series shorter than the query (tsfresh
+  raises; TSFX gives NaN)
 
 Cases that still fail are marked with ``_bug`` (strict xfail), so the marker
 must be removed once the fix lands.
@@ -1158,3 +1160,148 @@ def test_sum_of_reoccurring_exact(kind, expected):
 )
 def test_threshold_exactly_hit(values, column, expected):
     assert _features(values)[f"val__{column}"] == expected
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        (list(range(10)), 0),
+        ([1, 3, 5], 0),
+        ([1, 3, 7, -3], -3),
+        # generated (tsfresh 0.21.2 / numpy 2.4.4): only the ends are used
+        ([1, 3], math.nan),
+        ([1, math.nan, 5, math.nan, 2, 7], math.nan),
+        ([1, 2, math.nan, 2, 7], 2 / 3),
+    ],
+)
+def test_mean_second_derivative_central(values, expected):
+    _assert_feature(values, "val__mean_second_derivative_central", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "value", "expected"),
+    [
+        ([1] * 10, "1.0", 10),
+        (list(range(10)), "0.0", 1),
+        ([1] * 10, "0.0", 0),
+        ([math.nan, 0, 1] * 3, "0.0", 3),
+        ([-math.inf, 0, 1] * 3, "0.0", 3),
+        ([math.inf, 0, 1] * 3, "0.0", 3),
+        ([0.1, 0.2, 0.3] * 3, "0.2", 3),
+        ([math.nan, 0, 1] * 3, "NaN", 3),
+        ([-math.inf, 0, 1] * 3, "-inf", 3),
+        ([math.inf, 0, 1] * 3, "inf", 3),
+    ],
+)
+def test_value_count(values, value, expected):
+    _assert_feature(values, f"val__value_count__value_{value}", expected)
+
+
+@pytest.mark.parametrize(
+    ("focus", "expected"),
+    [(0, 0.0043), (1, 0.0316), (2, 0.0871), (3, 0.1709), (4, 0.2829), (5, 0.4232)],
+)
+def test_energy_ratio_by_chunks(focus, expected):
+    column = f"val__energy_ratio_by_chunks__num_segments_6__segment_focus_{focus}"
+    _assert_feature(list(range(90)), column, expected, abs_tol=5e-4)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([1] * 10, [0.4, 0.3, 0.3]), ([0] * 10, [math.nan] * 3)],
+)
+def test_energy_ratio_by_chunks_three_segments(values, expected):
+    for focus, value in enumerate(expected):
+        column = f"val__energy_ratio_by_chunks__num_segments_3__segment_focus_{focus}"
+        _assert_feature(values, column, value, abs_tol=5e-4)
+
+
+# generated (tsfresh 0.21.2 / numpy 2.4.4): fewer values than segments
+def test_energy_ratio_by_chunks_empty_segments_generated():
+    features = _features([1, 2, 3, 4])
+    expected = [1 / 30, 4 / 30, 9 / 30, 16 / 30, 0, 0]
+    for focus, value in enumerate(expected):
+        column = f"val__energy_ratio_by_chunks__num_segments_6__segment_focus_{focus}"
+        assert features[column] == pytest.approx(value, abs=1e-15)
+
+
+# generated (tsfresh 0.21.2 / numpy 2.4.4 / pandas 3.0.2). tsfresh's own test
+# uses 10000 random values (np.random.seed(0)), which are not reproduced here.
+_CHANGE_QUANTILES = [
+    ("ql_0.1__qh_0.2__isabs_false__f_agg_mean", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("ql_0.0__qh_0.2__isabs_true__f_agg_var", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("ql_0.2__qh_0.8__isabs_false__f_agg_mean", [1.0, -1 / 3, 0.2, 0.0, -1.0, 0.0]),
+    ("ql_0.2__qh_0.8__isabs_true__f_agg_mean", [1.0, 5 / 3, 0.2, 0.0, 1.0, 0.0]),
+    ("ql_0.4__qh_1.0__isabs_false__f_agg_var", [0.0, 5.2, 0.16, 0.0, 2.25, 0.25]),
+    (
+        "ql_0.0__qh_1.0__isabs_false__f_agg_std",
+        [0.0, 3.2906537901857598, 0.4] + [0.0, 1.5, 0.0],
+    ),
+    ("ql_0.0__qh_1.0__isabs_true__f_agg_median", [1.0, 3.0, 0.0, 0.0, 1.5, 0.0]),
+    ("ql_0.4__qh_0.4__isabs_false__f_agg_mean", [0.0] * 6),
+    ("ql_0.8__qh_0.2__isabs_false__f_agg_mean", [0.0] * 6),
+]
+_CHANGE_QUANTILES_X = [
+    list(range(10)),
+    [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7],
+    [1, 1, 1, 2, 2, 2],
+    [1, 1, 1, 1],
+    [math.nan, 2, 1, 3, 2, 4, math.nan, 3],
+    # the lower edge is NaN (-inf - -inf), so numpy's searchsorted sees an
+    # unsorted pair of edges
+    [-math.inf, -math.inf, 5, 1, 2, 2, 3],
+]
+
+
+@pytest.mark.parametrize(("params", "expected"), _CHANGE_QUANTILES)
+@pytest.mark.parametrize("case", range(len(_CHANGE_QUANTILES_X)))
+def test_change_quantiles_generated(params, expected, case):
+    column = f"val__change_quantiles__{params}"
+    _assert_feature(_CHANGE_QUANTILES_X[case], column, expected[case])
+
+
+_FIBONACCI = [0, 1]
+for _ in range(198):
+    _FIBONACCI.append(_FIBONACCI[-1] + _FIBONACCI[-2])
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        (_FIBONACCI, 0.998003988),
+        (
+            [1.354, 0.058, 0.055, 0.99, 3.15, math.nan, 0.3, 2.3, 0, 0.59, 0.74],
+            0.10357511,
+        ),
+        ([1, 2, 3, 4, 5, 6, 7, 8, 9], math.nan),
+        # generated (tsfresh 0.21.2 / numpy 2.4.4): +-inf has leading digit 1
+        ([math.inf, -math.inf, 2, 30, 0.4, 5e-300], 0.8847905644846786),
+        ([0, 0, 0], math.nan),
+    ],
+)
+def test_benford_correlation(values, expected):
+    _assert_feature(values, "val__benford_correlation", expected)
+
+
+# generated (tsfresh 0.21.2 / stumpy 1.14.1) with the queries of the parity
+# config: [1, 3, 2] (threshold 1), [0, 1, 0, -1] (threshold 2.5, not
+# normalised), [1, 1, 1] (threshold 0.5) and [1, 2] (too short: NaN).
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([0, 1, 3, 2, 5, 2, 6, 4, 1, 3, 2, 2, 2, 2], [4, 0, 2, math.nan]),
+        ([0, 1, 0, -1, 0, 1, 0, -1, 0, 2, 0, -2], [3, 6, 0, math.nan]),
+        ([1, 3, 2, math.nan, 1, 3, 2, math.inf, 2, 2, 2], [2, 0, 1, math.nan]),
+    ],
+)
+def test_query_similarity_count_generated(values, expected):
+    for i, value in enumerate(expected):
+        _assert_feature(values, f"val__query_similarity_count__query_{i}", value)
+
+
+# tsfresh (stumpy) raises a ValueError for a series shorter than the query;
+# TSFX gives NaN for that query.
+def test_query_similarity_count_short_series_deviation():
+    features = _features([1, 2, 3])
+    assert features["val__query_similarity_count__query_0"] == 0
+    assert math.isnan(features["val__query_similarity_count__query_1"])

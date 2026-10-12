@@ -344,3 +344,49 @@ fn peak_counts(x: &[f64], ns: &[usize]) -> Vec<usize> {
     }
     counts
 }
+
+/// Value count feature.
+///
+/// The number of values equal to `value`:
+/// $$ \sum_{i=1}^{n} \mathbb{1}[x_i = v]. $$
+///
+/// # Parameters
+/// - `value`: the value $v$ to count; may be `nan`, `inf` or `-inf` (TOML
+///   spellings). Config: `[value_count] parameters = [{ value = 0.0 }, ...]`;
+///   one column per entry.
+///
+/// # Output column
+/// `{name}__value_count__value_{value}`, with `value` written as Python's
+/// `repr` would (e.g. `0.0`, `-1.0`, `0.25`, `NaN`, `inf`).
+///
+/// # Edge cases
+/// - Nulls are dropped first (and not counted); a group with no non-null
+///   values gives NaN.
+/// - `value = nan` counts the NaN values; otherwise NaN never matches.
+///
+/// # tsfresh
+/// `feature_calculators.value_count` (v0.21.2).
+pub struct ValueCount {
+    pub values: Vec<f64>,
+}
+
+impl Kernel for ValueCount {
+    fn names(&self) -> Vec<String> {
+        self.values
+            .iter()
+            .map(|value| format!("value_count__value_{value:?}"))
+            .collect()
+    }
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        let x = ctx.values();
+        for &value in &self.values {
+            let count = if value.is_nan() {
+                x.iter().filter(|v| v.is_nan()).count()
+            } else {
+                x.iter().filter(|&&v| v == value).count()
+            };
+            out.push(count as f64);
+        }
+    }
+}

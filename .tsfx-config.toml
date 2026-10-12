@@ -214,3 +214,92 @@ parameters = [{ lag = 1 }, { lag = 2 }, { lag = 3 }]
 
 [number_peaks]
 parameters = [{ n = 1 }, { n = 3 }, { n = 5 }, { n = 10 }, { n = 50 }]
+
+[mean_second_derivative_central]
+
+[value_count]
+parameters = [{ value = 0.0 }, { value = 1.0 }, { value = -1.0 }]
+
+[energy_ratio_by_chunks]
+parameters = [
+    { num_segments = 10, segment_focus = 0 },
+    { num_segments = 10, segment_focus = 1 },
+    { num_segments = 10, segment_focus = 2 },
+    { num_segments = 10, segment_focus = 3 },
+    { num_segments = 10, segment_focus = 4 },
+    { num_segments = 10, segment_focus = 5 },
+    { num_segments = 10, segment_focus = 6 },
+    { num_segments = 10, segment_focus = 7 },
+    { num_segments = 10, segment_focus = 8 },
+    { num_segments = 10, segment_focus = 9 },
+]
+
+[change_quantiles]
+parameters = [
+    { ql = 0.0, qh = 0.2, isabs = false, f_agg = "mean" },
+    { ql = 0.0, qh = 0.2, isabs = false, f_agg = "var" },
+    { ql = 0.0, qh = 0.2, isabs = true, f_agg = "mean" },
+    { ql = 0.0, qh = 0.2, isabs = true, f_agg = "var" },
+    { ql = 0.0, qh = 0.4, isabs = false, f_agg = "mean" },
+    { ql = 0.0, qh = 0.4, isabs = false, f_agg = "var" },
+    { ql = 0.0, qh = 0.4, isabs = true, f_agg = "mean" },
+    { ql = 0.0, qh = 0.4, isabs = true, f_agg = "var" },
+    { ql = 0.0, qh = 0.6, isabs = false, f_agg = "mean" },
+    { ql = 0.0, qh = 0.6, isabs = false, f_agg = "var" },
+    { ql = 0.0, qh = 0.6, isabs = true, f_agg = "mean" },
+    { ql = 0.0, qh = 0.6, isabs = true, f_agg = "var" },
+    { ql = 0.0, qh = 0.8, isabs = false, f_agg = "mean" },
+    { ql = 0.0, qh = 0.8, isabs = false, f_agg = "var" },
+    { ql = 0.0, qh = 0.8, isabs = true, f_agg = "mean" },
+    { ql = 0.0, qh = 0.8, isabs = true, f_agg = "var" },
+    { ql = 0.0, qh = 1.0, isabs = false, f_agg = "mean" },
+    { ql = 0.0, qh = 1.0, isabs = false, f_agg = "var" },
+    { ql = 0.0, qh = 1.0, isabs = true, f_agg = "mean" },
+    { ql = 0.0, qh = 1.0, isabs = true, f_agg = "var" },
+    { ql = 0.2, qh = 0.4, isabs = false, f_agg = "mean" },
+    { ql = 0.2, qh = 0.4, isabs = false, f_agg = "var" },
+    { ql = 0.2, qh = 0.4, isabs = true, f_agg = "mean" },
+    { ql = 0.2, qh = 0.4, isabs = true, f_agg = "var" },
+    { ql = 0.2, qh = 0.6, isabs = false, f_agg = "mean" },
+    { ql = 0.2, qh = 0.6, isabs = false, f_agg = "var" },
+    { ql = 0.2, qh = 0.6, isabs = true, f_agg = "mean" },
+    { ql = 0.2, qh = 0.6, isabs = true, f_agg = "var" },
+    { ql = 0.2, qh = 0.8, isabs = false, f_agg = "mean" },
+    { ql = 0.2, qh = 0.8, isabs = false, f_agg = "var" },
+    { ql = 0.2, qh = 0.8, isabs = true, f_agg = "mean" },
+    { ql = 0.2, qh = 0.8, isabs = true, f_agg = "var" },
+    { ql = 0.2, qh = 1.0, isabs = false, f_agg = "mean" },
+    { ql = 0.2, qh = 1.0, isabs = false, f_agg = "var" },
+    { ql = 0.2, qh = 1.0, isabs = true, f_agg = "mean" },
+    { ql = 0.2, qh = 1.0, isabs = true, f_agg = "var" },
+    { ql = 0.4, qh = 0.6, isabs = false, f_agg = "mean" },
+    { ql = 0.4, qh = 0.6, isabs = false, f_agg = "var" },
+    { ql = 0.4, qh = 0.6, isabs = true, f_agg = "mean" },
+    { ql = 0.4, qh = 0.6, isabs = true, f_agg = "var" },
+    { ql = 0.4, qh = 0.8, isabs = false, f_agg = "mean" },
+    { ql = 0.4, qh = 0.8, isabs = false, f_agg = "var" },
+    { ql = 0.4, qh = 0.8, isabs = true, f_agg = "mean" },
+    { ql = 0.4, qh = 0.8, isabs = true, f_agg = "var" },
+    { ql = 0.4, qh = 1.0, isabs = false, f_agg = "mean" },
+    { ql = 0.4, qh = 1.0, isabs = false, f_agg = "var" },
+    { ql = 0.4, qh = 1.0, isabs = true, f_agg = "mean" },
+    { ql = 0.4, qh = 1.0, isabs = true, f_agg = "var" },
+    { ql = 0.6, qh = 0.8, isabs = false, f_agg = "mean" },
+    { ql = 0.6, qh = 0.8, isabs = false, f_agg = "var" },
+    { ql = 0.6, qh = 0.8, isabs = true, f_agg = "mean" },
+    { ql = 0.6, qh = 0.8, isabs = true, f_agg = "var" },
+    { ql = 0.6, qh = 1.0, isabs = false, f_agg = "mean" },
+    { ql = 0.6, qh = 1.0, isabs = false, f_agg = "var" },
+    { ql = 0.6, qh = 1.0, isabs = true, f_agg = "mean" },
+    { ql = 0.6, qh = 1.0, isabs = true, f_agg = "var" },
+    { ql = 0.8, qh = 1.0, isabs = false, f_agg = "mean" },
+    { ql = 0.8, qh = 1.0, isabs = false, f_agg = "var" },
+    { ql = 0.8, qh = 1.0, isabs = true, f_agg = "mean" },
+    { ql = 0.8, qh = 1.0, isabs = true, f_agg = "var" },
+]
+
+[benford_correlation]
+
+# query_similarity_count is off unless configured, e.g.
+# [query_similarity_count]
+# parameters = [{ query = [0.0, 1.0, 0.0], threshold = 0.5, normalize = true }]

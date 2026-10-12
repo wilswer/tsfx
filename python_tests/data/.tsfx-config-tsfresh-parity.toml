@@ -136,3 +136,52 @@ parameters = [{ lag = 0 }, { lag = 1 }, { lag = 2 }, { lag = 3 }]
 
 [time_reversal_asymmetry_statistic]
 parameters = [{ lag = 0 }, { lag = 1 }, { lag = 2 }, { lag = 3 }]
+
+[mean_second_derivative_central]
+
+[value_count]
+parameters = [
+    { value = 0.0 },
+    { value = 1.0 },
+    { value = -1.0 },
+    { value = 0.2 },
+    { value = nan },
+    { value = inf },
+    { value = -inf },
+]
+
+[energy_ratio_by_chunks]
+parameters = [
+    { num_segments = 6, segment_focus = 0 },
+    { num_segments = 6, segment_focus = 1 },
+    { num_segments = 6, segment_focus = 2 },
+    { num_segments = 6, segment_focus = 3 },
+    { num_segments = 6, segment_focus = 4 },
+    { num_segments = 6, segment_focus = 5 },
+    { num_segments = 3, segment_focus = 0 },
+    { num_segments = 3, segment_focus = 1 },
+    { num_segments = 3, segment_focus = 2 },
+]
+
+[change_quantiles]
+parameters = [
+    { ql = 0.1, qh = 0.2, isabs = false, f_agg = "mean" },
+    { ql = 0.0, qh = 0.2, isabs = true, f_agg = "var" },
+    { ql = 0.2, qh = 0.8, isabs = false, f_agg = "mean" },
+    { ql = 0.2, qh = 0.8, isabs = true, f_agg = "mean" },
+    { ql = 0.4, qh = 1.0, isabs = false, f_agg = "var" },
+    { ql = 0.0, qh = 1.0, isabs = false, f_agg = "std" },
+    { ql = 0.0, qh = 1.0, isabs = true, f_agg = "median" },
+    { ql = 0.4, qh = 0.4, isabs = false, f_agg = "mean" },
+    { ql = 0.8, qh = 0.2, isabs = false, f_agg = "mean" },
+]
+
+[benford_correlation]
+
+[query_similarity_count]
+parameters = [
+    { query = [1.0, 3.0, 2.0], threshold = 1.0 },
+    { query = [0.0, 1.0, 0.0, -1.0], threshold = 2.5, normalize = false },
+    { query = [1.0, 1.0, 1.0], threshold = 0.5 },
+    { query = [1.0, 2.0], threshold = 1.0 },
+]

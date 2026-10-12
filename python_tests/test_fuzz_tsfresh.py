@@ -22,6 +22,7 @@ the calculator asks for one.
 
 import math
 import re
+import tomllib
 import warnings
 
 import polars as pl
@@ -48,6 +49,7 @@ TOLERANT = {
     "absolute_energy",
     "cid_ce",
     "sample_entropy",
+    "benford_correlation",
 }
 
 # tsfx names that tsfresh spells differently
@@ -138,6 +140,8 @@ def _tsfresh(x: object, column: str) -> float:
     if m:
         return _combiner(fc.linear_trend, x, {"attr": m.group(2)})
     name, _, rest = column.partition("__")
+    if name in GROUP_A:
+        return GROUP_A[name](x, rest)
     params = dict(p.split("_", 1) for p in rest.split("__")) if rest else {}
     if name == "symmetry_looking":
         return _combiner(fc.symmetry_looking, x, {"r": float(params["r"])})
@@ -155,6 +159,39 @@ def _tsfresh(x: object, column: str) -> float:
         cast = int if key in ("lag", "n") else float
         return fn(_input(fn, x), cast(value))
     return fn(_input(fn, x))
+
+
+def _energy_ratio_by_chunks(x: object, rest: str) -> float:
+    m = re.fullmatch(r"num_segments_(\d+)__segment_focus_(\d+)", rest)
+    param = {"num_segments": int(m.group(1)), "segment_focus": int(m.group(2))}
+    return _combiner(fc.energy_ratio_by_chunks, x, param)
+
+
+def _change_quantiles(x: object, rest: str) -> float:
+    m = re.fullmatch(r"ql_(.+)__qh_(.+)__isabs_(true|false)__f_agg_(\w+)", rest)
+    ql, qh, isabs, f_agg = m.groups()
+    return fc.change_quantiles(x, float(ql), float(qh), isabs == "true", f_agg)
+
+
+def _query_similarity_count(x: object, rest: str) -> float:
+    """tsfresh's count for the i-th query of the parity config; NaN where
+    stumpy raises (a series shorter than the query)."""
+    with open(CONFIG, "rb") as f:
+        queries = tomllib.load(f)["query_similarity_count"]["parameters"]
+    param = dict(queries[int(rest.removeprefix("query_"))])
+    param["query"] = np.array(param["query"])
+    try:
+        return _combiner(fc.query_similarity_count, x, param)
+    except ValueError:
+        return math.nan
+
+
+# Features whose column names need their own parsing
+GROUP_A = {
+    "energy_ratio_by_chunks": _energy_ratio_by_chunks,
+    "change_quantiles": _change_quantiles,
+    "query_similarity_count": _query_similarity_count,
+}
 
 
 def _tsfx_only(column: str) -> bool:
