@@ -48,6 +48,23 @@ TOLERANT = {
     "absolute_energy",
     "cid_ce",
     "sample_entropy",
+    # np.log (numpy's SIMD logarithm) differs from libm's in the last bit
+    "binned_entropy",
+    "permutation_entropy",
+    "approximate_entropy",
+    # LAPACK least squares (np.polyfit) and eigenvalues (np.roots)
+    "friedrich_coefficients",
+    "max_langevin_fixed_point",
+}
+
+# tsfresh raises for these where tsfx returns NaN (documented per feature)
+RAISES_IS_NAN = {
+    "binned_entropy",
+    "lempel_ziv_complexity",
+    "permutation_entropy",
+    "approximate_entropy",
+    "friedrich_coefficients",
+    "max_langevin_fixed_point",
 }
 
 # tsfx names that tsfresh spells differently
@@ -138,6 +155,11 @@ def _tsfresh(x: object, column: str) -> float:
     if m:
         return _combiner(fc.linear_trend, x, {"attr": m.group(2)})
     name, _, rest = column.partition("__")
+    if name in RAISES_IS_NAN:
+        try:
+            return _tsfresh_multi(x, name, rest)
+        except Exception:
+            return math.nan
     params = dict(p.split("_", 1) for p in rest.split("__")) if rest else {}
     if name == "symmetry_looking":
         return _combiner(fc.symmetry_looking, x, {"r": float(params["r"])})
@@ -157,6 +179,27 @@ def _tsfresh(x: object, column: str) -> float:
     return fn(_input(fn, x))
 
 
+def _tsfresh_multi(x: object, name: str, rest: str) -> float:
+    """tsfresh's value for features whose parameter names contain "_"."""
+    params = dict(
+        re.fullmatch(r"(\w+?)_(-?[\d.]+)", p).groups() for p in rest.split("__")
+    )
+    if name == "binned_entropy":
+        return fc.binned_entropy(x, int(params["max_bins"]))
+    if name == "lempel_ziv_complexity":
+        return fc.lempel_ziv_complexity(x, int(params["bins"]))
+    if name == "permutation_entropy":
+        return fc.permutation_entropy(x, int(params["tau"]), int(params["dimension"]))
+    if name == "approximate_entropy":
+        return fc.approximate_entropy(x, int(params["m"]), float(params["r"]))
+    if name == "friedrich_coefficients":
+        param = {k: int(v) for k, v in params.items()}
+        return _combiner(fc.friedrich_coefficients, x, param)
+    if name == "max_langevin_fixed_point":
+        return fc.max_langevin_fixed_point(x, int(params["r"]), int(params["m"]))
+    raise KeyError(name)
+
+
 def _tsfx_only(column: str) -> bool:
     """Columns tsfresh cannot compute: agg_linear_trend's median aggregator
     is a tsfx addition (tsfresh's extraction hands it a numpy array, which
@@ -168,6 +211,14 @@ def _deviation(feature: str, x: list[float]) -> bool:
     """Documented deliberate deviations from tsfresh (see the parity tests)."""
     if feature == "sample_entropy":
         return any(math.isinf(v) for v in x)
+    if feature == "permutation_entropy":
+        # ties within a window: tsfresh's tie order depends on numpy's sort
+        # for the CPU; tsfx ranks ties by position (windows up to 7 values)
+        return any(
+            x[i] == x[j] or (math.isnan(x[i]) and math.isnan(x[j]))
+            for i in range(len(x))
+            for j in range(i + 1, min(i + 7, len(x)))
+        )
     if feature in ("sum_of_reoccurring_values", "sum_of_reoccurring_data_points"):
         # a NaN or ±inf that occurs only once is left out by tsfx
         odd = [v for v in x if not math.isfinite(v)]
@@ -178,15 +229,72 @@ def _deviation(feature: str, x: list[float]) -> bool:
     return False
 
 
-def _same(a: float, b: float, tolerant: bool) -> bool:
+def _same(
+    a: float, b: float, tolerant: bool, tol: tuple[float, float] = (1e-9, 1e-9)
+) -> bool:
     if a is None or b is None:
         return a is None and b is None
     a, b = float(a), float(b)
     if math.isnan(a) or math.isnan(b):
         return math.isnan(a) and math.isnan(b)
     if tolerant:
-        return math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-9)
+        return math.isclose(a, b, rel_tol=tol[0], abs_tol=tol[1])
     return a == b
+
+
+LANGEVIN = ("friedrich_coefficients", "max_langevin_fixed_point")
+# (m, r) of the Langevin entries in the parity config
+LANGEVIN_FITS = [(2, 30), (3, 30), (3, 5), (2, 5)]
+
+
+def _langevin_fit(x: object, m: int, r: int) -> tuple[float, object] | None:
+    """Condition number of tsfresh's (column-scaled) polyfit and its
+    coefficients, or None where tsfresh cannot fit."""
+    df = pd.DataFrame({"signal": x[:-1], "delta": np.diff(x)})
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            df["quantiles"] = pd.qcut(df.signal, r)
+            groups = df.groupby("quantiles")
+            means = pd.DataFrame(
+                {"x": groups.signal.mean(), "y": groups.delta.mean()},
+            ).dropna()
+            lhs = np.vander(means.x.to_numpy() + 0.0, m + 1)
+            lhs /= np.sqrt((lhs * lhs).sum(axis=0))
+            s = np.linalg.svd(lhs, compute_uv=False)
+            coeffs = np.polyfit(means.x, means.y, deg=m)
+    except Exception:
+        return None
+    # no more bin averages than coefficients: the fit interpolates (or is
+    # underdetermined), as ill-posed as an infinite condition number
+    if len(means) <= m + 1 or s[-1] <= 0:
+        return math.inf, coeffs
+    return s[0] / s[-1], coeffs
+
+
+def _ill_conditioned(feature: str, x: object) -> bool:
+    """Langevin fits with at most m + 1 bin averages, or whose condition
+    number exceeds 1e6, are not compared: np.polyfit / np.roots (and tsfx)
+    are only accurate to about cond * eps there, so tsfresh's own result
+    depends on its rounding."""
+    if feature not in LANGEVIN:
+        return False
+    fits = [_langevin_fit(np.asarray(x, dtype=float), m, r) for m, r in LANGEVIN_FITS]
+    return any(fit is not None and not fit[0] <= 1e6 for fit in fits)
+
+
+def _tolerance(x: object, column: str) -> tuple[float, float]:
+    """Relative and absolute tolerance for a tolerant column: 1e-9, for a
+    polynomial coefficient relative to the largest coefficient of its fit
+    (least squares is accurate relative to the whole solution vector)."""
+    name, _, rest = column.partition("__")
+    if name != "friedrich_coefficients":
+        return 1e-9, 1e-9
+    m, r = map(int, re.search(r"m_(\d+)__r_(\d+)", rest).groups())
+    fit = _langevin_fit(x, m, r)
+    if fit is None:
+        return 1e-9, 1e-9
+    return 1e-9, 1e-9 * max([1.0] + [abs(c) for c in fit[1] if math.isfinite(c)])
 
 
 def _feature(column: str) -> str:
@@ -204,6 +312,7 @@ def test_matches_tsfresh(feature: str) -> None:
     @hypothesis.given(series())
     def check(values: list[float]) -> None:
         hypothesis.assume(not _deviation(feature, values))
+        hypothesis.assume(not _ill_conditioned(feature, values))
         ours = _tsfx(values)
         x = np.array(values, dtype=float)
         mismatches = []
@@ -213,7 +322,8 @@ def test_matches_tsfresh(feature: str) -> None:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 expected = _tsfresh(x, column)
-            if not _same(value, expected, tolerant):
+                tol = _tolerance(x, column) if tolerant else (0.0, 0.0)
+            if not _same(value, expected, tolerant, tol):
                 mismatches.append(f"{column}: tsfx {value!r}, tsfresh {expected!r}")
         assert not mismatches, "\n".join(mismatches)
 

@@ -9,6 +9,7 @@ pub mod change;
 pub mod counting;
 pub mod entropy;
 pub mod kernel;
+pub mod langevin;
 pub mod location;
 pub mod reoccurrence;
 pub mod statistics;
@@ -26,8 +27,11 @@ use counting::{
     CountAbove, CountAboveMean, CountBelow, CountBelowMean, LongestStrikeAboveMean,
     LongestStrikeBelowMean, NumberCrossingM, NumberPeaks, RangeCount,
 };
-use entropy::SampleEntropy;
+use entropy::{
+    ApproximateEntropy, BinnedEntropy, LempelZivComplexity, PermutationEntropy, SampleEntropy,
+};
 use kernel::KernelPlan;
+use langevin::{FriedrichCoefficients, MaxLangevinFixedPoint};
 use location::{
     FirstLocationOfMaximum, FirstLocationOfMinimum, IndexMassQuantile, LastLocationOfMaximum,
     LastLocationOfMinimum,
@@ -254,13 +258,46 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 let ns = feature.parameters.iter().map(|p| p.n).collect();
                 plan.push(NumberPeaks { ns });
             }
+            if let Some(feature) = &config.binned_entropy {
+                let max_bins = feature.parameters.iter().map(|p| p.max_bins).collect();
+                plan.push(BinnedEntropy { max_bins });
+            }
+            if let Some(feature) = &config.lempel_ziv_complexity {
+                let bins = feature.parameters.iter().map(|p| p.bins).collect();
+                plan.push(LempelZivComplexity { bins });
+            }
+            if let Some(feature) = &config.permutation_entropy {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.tau, p.dimension))
+                    .collect();
+                plan.push(PermutationEntropy { params });
+            }
+            if let Some(feature) = &config.friedrich_coefficients {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.coeff, p.m, p.r))
+                    .collect();
+                plan.push(FriedrichCoefficients { params });
+            }
+            if let Some(feature) = &config.max_langevin_fixed_point {
+                let params = feature.parameters.iter().map(|p| (p.m, p.r)).collect();
+                plan.push(MaxLangevinFixedPoint { params });
+            }
         }
     }
 
-    // Comprehensive tier: always on, independent of the config
+    // Comprehensive tier: sample_entropy is always on, independent of the
+    // config
     if *tier >= FeatureSetting::Comprehensive {
         for plan in plans.iter_mut() {
             plan.push(SampleEntropy);
+            if let Some(feature) = &config.approximate_entropy {
+                let params = feature.parameters.iter().map(|p| (p.m, p.r)).collect();
+                plan.push(ApproximateEntropy { params });
+            }
         }
     }
 

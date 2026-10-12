@@ -59,6 +59,12 @@ pub struct Config {
     pub c3: Option<C3>,
     pub time_reversal_asymmetry_statistic: Option<TimeReversalAsymmetryStatistic>,
     pub number_peaks: Option<NumberPeaks>,
+    pub binned_entropy: Option<BinnedEntropy>,
+    pub lempel_ziv_complexity: Option<LempelZivComplexity>,
+    pub permutation_entropy: Option<PermutationEntropy>,
+    pub approximate_entropy: Option<ApproximateEntropy>,
+    pub friedrich_coefficients: Option<FriedrichCoefficients>,
+    pub max_langevin_fixed_point: Option<MaxLangevinFixedPoint>,
 }
 
 impl Default for Config {
@@ -123,6 +129,12 @@ impl Default for Config {
             c3: Some(C3::default()),
             time_reversal_asymmetry_statistic: Some(TimeReversalAsymmetryStatistic::default()),
             number_peaks: Some(NumberPeaks::default()),
+            binned_entropy: Some(BinnedEntropy::default()),
+            lempel_ziv_complexity: Some(LempelZivComplexity::default()),
+            permutation_entropy: Some(PermutationEntropy::default()),
+            approximate_entropy: Some(ApproximateEntropy::default()),
+            friedrich_coefficients: Some(FriedrichCoefficients::default()),
+            max_langevin_fixed_point: Some(MaxLangevinFixedPoint::default()),
         }
     }
 }
@@ -706,6 +718,127 @@ pub struct NumberPeaksParams {
     pub n: usize,
 }
 
+#[derive(Deserialize, Clone, Debug)]
+pub struct BinnedEntropy {
+    pub parameters: Vec<BinnedEntropyParams>,
+}
+
+impl Default for BinnedEntropy {
+    fn default() -> Self {
+        BinnedEntropy {
+            parameters: vec![BinnedEntropyParams { max_bins: 10 }],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct BinnedEntropyParams {
+    pub max_bins: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct LempelZivComplexity {
+    pub parameters: Vec<LempelZivComplexityParams>,
+}
+
+impl Default for LempelZivComplexity {
+    fn default() -> Self {
+        LempelZivComplexity {
+            parameters: [2, 3, 5, 10, 100]
+                .map(|bins| LempelZivComplexityParams { bins })
+                .to_vec(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct LempelZivComplexityParams {
+    pub bins: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct PermutationEntropy {
+    pub parameters: Vec<PermutationEntropyParams>,
+}
+
+impl Default for PermutationEntropy {
+    fn default() -> Self {
+        PermutationEntropy {
+            parameters: (3..=7)
+                .map(|dimension| PermutationEntropyParams { tau: 1, dimension })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct PermutationEntropyParams {
+    pub tau: usize,
+    pub dimension: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ApproximateEntropy {
+    pub parameters: Vec<ApproximateEntropyParams>,
+}
+
+impl Default for ApproximateEntropy {
+    fn default() -> Self {
+        ApproximateEntropy {
+            parameters: [0.1, 0.3, 0.5, 0.7, 0.9]
+                .map(|r| ApproximateEntropyParams { m: 2, r })
+                .to_vec(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct ApproximateEntropyParams {
+    pub m: usize,
+    pub r: f64,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct FriedrichCoefficients {
+    pub parameters: Vec<FriedrichCoefficientsParams>,
+}
+
+impl Default for FriedrichCoefficients {
+    fn default() -> Self {
+        FriedrichCoefficients {
+            parameters: (0..=3)
+                .map(|coeff| FriedrichCoefficientsParams { coeff, m: 3, r: 30 })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct FriedrichCoefficientsParams {
+    pub coeff: usize,
+    pub m: usize,
+    pub r: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct MaxLangevinFixedPoint {
+    pub parameters: Vec<MaxLangevinFixedPointParams>,
+}
+
+impl Default for MaxLangevinFixedPoint {
+    fn default() -> Self {
+        MaxLangevinFixedPoint {
+            parameters: vec![MaxLangevinFixedPointParams { m: 3, r: 30 }],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct MaxLangevinFixedPointParams {
+    pub m: usize,
+    pub r: usize,
+}
+
 /// A config file that could not be read or parsed.
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -1091,6 +1224,30 @@ mod tests {
                 NumberPeaksParams { n: 10 },
                 NumberPeaksParams { n: 50 }
             ]
+        );
+        assert_eq!(
+            config.clone().binned_entropy.unwrap().parameters[..],
+            [BinnedEntropyParams { max_bins: 10 }]
+        );
+        assert_eq!(
+            config.clone().lempel_ziv_complexity.unwrap().parameters[..],
+            [2, 3, 5, 10, 100].map(|bins| LempelZivComplexityParams { bins })
+        );
+        assert_eq!(
+            config.clone().permutation_entropy.unwrap().parameters[..],
+            [3, 4, 5, 6, 7].map(|dimension| PermutationEntropyParams { tau: 1, dimension })
+        );
+        assert_eq!(
+            config.clone().approximate_entropy.unwrap().parameters[..],
+            [0.1, 0.3, 0.5, 0.7, 0.9].map(|r| ApproximateEntropyParams { m: 2, r })
+        );
+        assert_eq!(
+            config.clone().friedrich_coefficients.unwrap().parameters[..],
+            [0, 1, 2, 3].map(|coeff| FriedrichCoefficientsParams { coeff, m: 3, r: 30 })
+        );
+        assert_eq!(
+            config.clone().max_langevin_fixed_point.unwrap().parameters[..],
+            [MaxLangevinFixedPointParams { m: 3, r: 30 }]
         );
     }
 }

@@ -214,3 +214,38 @@ parameters = [{ lag = 1 }, { lag = 2 }, { lag = 3 }]
 
 [number_peaks]
 parameters = [{ n = 1 }, { n = 3 }, { n = 5 }, { n = 10 }, { n = 50 }]
+
+[binned_entropy]
+parameters = [{ max_bins = 10 }]
+
+[lempel_ziv_complexity]
+parameters = [{ bins = 2 }, { bins = 3 }, { bins = 5 }, { bins = 10 }, { bins = 100 }]
+
+[permutation_entropy]
+parameters = [
+    { tau = 1, dimension = 3 },
+    { tau = 1, dimension = 4 },
+    { tau = 1, dimension = 5 },
+    { tau = 1, dimension = 6 },
+    { tau = 1, dimension = 7 },
+]
+
+[approximate_entropy]
+parameters = [
+    { m = 2, r = 0.1 },
+    { m = 2, r = 0.3 },
+    { m = 2, r = 0.5 },
+    { m = 2, r = 0.7 },
+    { m = 2, r = 0.9 },
+]
+
+[friedrich_coefficients]
+parameters = [
+    { coeff = 0, m = 3, r = 30 },
+    { coeff = 1, m = 3, r = 30 },
+    { coeff = 2, m = 3, r = 30 },
+    { coeff = 3, m = 3, r = 30 },
+]
+
+[max_langevin_fixed_point]
+parameters = [{ m = 3, r = 30 }]

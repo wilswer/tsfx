@@ -25,6 +25,9 @@ Current deviations:
 - ``sample_entropy`` with +-inf in the series
 - ``sum_of_reoccurring_values`` / ``sum_of_reoccurring_data_points`` with a
   NaN or +-inf that occurs only once
+- ``binned_entropy`` with +-inf in the series (tsfresh raises)
+- ``permutation_entropy`` with ties within a window (tsfresh's result depends
+  on the CPU)
 
 Cases that still fail are marked with ``_bug`` (strict xfail), so the marker
 must be removed once the fix lands.
@@ -1158,3 +1161,176 @@ def test_sum_of_reoccurring_exact(kind, expected):
 )
 def test_threshold_exactly_hit(values, column, expected):
     assert _features(values)[f"val__{column}"] == expected
+
+
+# --- Entropy and Langevin features (tsfresh v0.21.2 test cases) --------------
+
+
+@pytest.mark.parametrize(
+    ("values", "max_bins", "expected"),
+    [
+        ([10] * 100, 10, 0),
+        (
+            [10] * 10 + [1],
+            10,
+            -(10 / 11 * math.log(10 / 11) + 1 / 11 * math.log(1 / 11)),
+        ),
+        (
+            [10] * 10 + [1],
+            100,
+            -(10 / 11 * math.log(10 / 11) + 1 / 11 * math.log(1 / 11)),
+        ),
+        (list(range(10)), 100, -math.log(1 / 10)),
+    ],
+)
+def test_binned_entropy(values, max_bins, expected):
+    _assert_feature(values, f"val__binned_entropy__max_bins_{max_bins}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "bins", "expected"),
+    [
+        ([1, 1, 1], 2, 2.0 / 3),
+        ([1, 1, 1], 5, 2.0 / 3),
+        ([1, 1, 1, 1, 1, 1, 1], 2, 0.4285714285),
+        ([1, 1, 1, 2, 1, 1, 1], 2, 0.5714285714),
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 10, 0.8),
+        ([-1, math.nan, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 10, 0.4),
+        # np.linspace(0, 1, 10)
+        ([i * (1 / 9) for i in range(9)] + [1.0], 3, 0.6),
+        ([1, 1, 2, 3, 4, 5, 6, 0, 7, 8], 3, 0.6),
+    ],
+)
+def test_lempel_ziv_complexity(values, bins, expected):
+    _assert_feature(values, f"val__lempel_ziv_complexity__bins_{bins}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "tau", "dimension", "expected"),
+    [
+        ([4, 7, 9, 10, 6, 11, 3], 1, 3, 1.054920167),
+        ([1, -1, 1, -1, 1, -1, 1, -1], 1, 3, 0.6931471805599453),
+        ([1, -1, 1, -1, 1, 1, 1, -1], 1, 3, 1.3296613488547582),
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 2, 3, 1.0397207708399179),
+        # nan is treated like any other number
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, math.nan, -3.4, 6], 2, 3, 1.0397207708399179),
+        # too short
+        ([1, -1], 1, 3, math.nan),
+    ],
+)
+def test_permutation_entropy(values, tau, dimension, expected):
+    _assert_feature(
+        values, f"val__permutation_entropy__tau_{tau}__dimension_{dimension}", expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("values", "r", "expected"),
+    [
+        ([1], "0.5", 0),
+        ([1, 2], "0.5", 0),
+        ([1, 2, 3], "0.5", 0),
+        ([12, 13, 15, 16, 17] * 10, "0.9", 0.282456191),
+    ],
+)
+def test_approximate_entropy(values, r, expected):
+    _assert_feature(values, f"val__approximate_entropy__m_2__r_{r}", expected)
+
+
+_FRIEDRICH_X = [
+    -0.53, -0.61, -1.26, -0.88, -0.34, 0.58, 2.86, -0.47, 0.78, -0.45,
+    -0.27, 0.43, 1.72, 0.26, 1.02, -0.09, 0.65, 1.49, -0.95, -1.02,
+    -0.64, -1.63, -0.71, -0.43, -1.69, 0.05, 1.58, 1.1, 0.55, -1.02,
+]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("coeff", "expected"),
+    [
+        (0, -0.24536975738843042),
+        (1, -0.533309548662685),
+        (2, 0.2759399238199404),
+        (3, math.nan),
+    ],
+)
+def test_friedrich_coefficients(coeff, expected):
+    _assert_feature(
+        _FRIEDRICH_X, f"val__friedrich_coefficients__coeff_{coeff}__m_2__r_30", expected
+    )
+
+
+def test_friedrich_coefficients_binning_error():
+    # duplicate quantile bin edges: pd.qcut raises, tsfresh returns NaN
+    features = _features([0.0] * 100)
+    for column in [
+        "friedrich_coefficients__coeff_0__m_2__r_30",
+        "friedrich_coefficients__coeff_3__m_3__r_30",
+        "max_langevin_fixed_point__m_3__r_30",
+    ]:
+        assert math.isnan(features[f"val__{column}"])
+
+
+# friedrich_coefficients(np.array(x), [{"coeff": c, "m": m, "r": r}]) and
+# max_langevin_fixed_point(np.array(x), r, m), tsfresh 0.21.2 / numpy 2.4.4 /
+# pandas 3.0.2
+@pytest.mark.parametrize(
+    ("column", "expected"),
+    [
+        ("friedrich_coefficients__coeff_0__m_3__r_30", -0.08817903596441255),
+        ("friedrich_coefficients__coeff_3__m_3__r_30", 0.1927106415135666),
+        ("friedrich_coefficients__coeff_1__m_3__r_5", -0.15568913997546366),
+        ("max_langevin_fixed_point__m_3__r_30", 0.48057874107946674),
+        ("max_langevin_fixed_point__m_2__r_5", 0.5609283827089417),
+    ],
+)
+def test_friedrich_generated(column, expected):
+    _assert_feature(_FRIEDRICH_X, f"val__{column}", expected, abs_tol=1e-12)
+
+
+# binned_entropy, lempel_ziv_complexity, permutation_entropy and
+# approximate_entropy of np.array(_FRIEDRICH_X) (and the NaN / constant cases
+# shown), tsfresh 0.21.2 / numpy 2.4.4
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        (_FRIEDRICH_X, "binned_entropy__max_bins_10", 2.0549978302404694),
+        (_FRIEDRICH_X, "binned_entropy__max_bins_100", 3.2163581335128364),
+        ([3, 3], "binned_entropy__max_bins_10", 0),
+        (_FRIEDRICH_X, "lempel_ziv_complexity__bins_2", 0.36666666666666664),
+        (_FRIEDRICH_X, "lempel_ziv_complexity__bins_3", 0.43333333333333335),
+        (_FRIEDRICH_X, "lempel_ziv_complexity__bins_5", 0.5),
+        (_FRIEDRICH_X, "lempel_ziv_complexity__bins_10", 0.6),
+        ([1, math.nan, 2, 3, 1], "lempel_ziv_complexity__bins_2", 0.4),
+        (_FRIEDRICH_X, "permutation_entropy__tau_1__dimension_3", 1.6731183626432509),
+        (_FRIEDRICH_X, "permutation_entropy__tau_2__dimension_3", 1.4701319204088408),
+        (_FRIEDRICH_X, "permutation_entropy__tau_1__dimension_5", 3.151458510243029),
+        (_FRIEDRICH_X, "permutation_entropy__tau_1__dimension_7", 3.1780538303479453),
+        (_FRIEDRICH_X, "approximate_entropy__m_2__r_0.1", 0.03509131981127078),
+        (_FRIEDRICH_X, "approximate_entropy__m_2__r_0.5", 0.49836321975535425),
+        (_FRIEDRICH_X, "approximate_entropy__m_2__r_0.9", 0.6409051240650174),
+        (_FRIEDRICH_X, "approximate_entropy__m_1__r_0.3", 1.0477808169056246),
+        ([1, 2, math.nan, 4, 5, 6], "approximate_entropy__m_2__r_0.5", math.nan),
+    ],
+)
+def test_entropy_generated(values, column, expected):
+    _assert_feature(values, f"val__{column}", expected, abs_tol=1e-12)
+
+
+# Deliberate deviation from tsfresh v0.21.2: np.histogram raises ValueError
+# ("autodetected range ... is not finite") for ±inf; TSFX returns NaN.
+def test_binned_entropy_inf_deviation():
+    _assert_feature([1, math.inf, 2], "val__binned_entropy__max_bins_10", math.nan)
+
+
+# Deliberate deviation from tsfresh v0.21.2: tsfresh ranks a window's values
+# with np.argsort, whose order of ties depends on the sort numpy picks for the
+# CPU. With AVX-512 (numpy 2.4.4) both windows of [2, 2, 1, 0, 0] get the same
+# pattern and tsfresh returns 0; with a stable sort (numpy without AVX-512,
+# for short windows) they differ and the result is ln 2. TSFX always ranks
+# ties by position.
+def test_permutation_entropy_ties_deviation():
+    _assert_feature(
+        [2, 2, 1, 0, 0],
+        "val__permutation_entropy__tau_1__dimension_4",
+        math.log(2),
+    )
