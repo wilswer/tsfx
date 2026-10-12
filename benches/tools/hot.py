@@ -9,7 +9,7 @@ the profile is idle threads, copying and allocation.
 Record a profile of a criterion bench with, for example:
 
     cargo bench --no-run   # prints the bench binary path
-    samply record --save-only --unstable-presymbolicate -r 2000 \
+    samply record --save-only --unstable-presymbolicate -r 500 \
         -o efficient.json.gz -- BENCH_BINARY --bench --profile-time 20 \
         stocks_efficient
 """
@@ -30,7 +30,7 @@ def main(path: str, top: int) -> None:
         total += 1
         owner[tsfx_function(chain) or "(outside tsfx feature code)"] += 1
         leaf[chain[0]] += 1
-        kind[leaf_kind(chain[0]) or "other"] += 1
+        kind[leaf_kind(chain) or "other"] += 1
 
     def show(title: str, counts: Counter[str]) -> None:
         print(f"\n== {title}")

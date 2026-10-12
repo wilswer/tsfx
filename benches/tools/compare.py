@@ -22,7 +22,7 @@ def summarise(path: str) -> tuple[int, Counter[str]]:
     counts: Counter[str] = Counter()
     busy = 0
     for _, chain in stacks(path):
-        kind = leaf_kind(chain[0])
+        kind = leaf_kind(chain)
         if kind == "idle":
             continue
         busy += 1

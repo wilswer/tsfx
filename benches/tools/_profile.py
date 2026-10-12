@@ -13,8 +13,17 @@ from pathlib import Path
 from typing import Any
 
 # Leaf functions of a worker thread that is waiting rather than working
-# (macOS and Linux names).
-IDLE_LEAVES = ("swtch_pri", "__psynch_cvwait", "sched_yield", "futex", "syscall")
+# (macOS and Linux names). macOS samples sleeping threads; Linux samples only
+# running ones, so there idle time is rayon spinning while it looks for work.
+IDLE_LEAVES = (
+    "swtch_pri",
+    "__psynch_cvwait",
+    "sched_yield",
+    "futex",
+    "syscall",
+    "crossbeam_epoch",
+    "crossbeam_deque",
+)
 COPY_LEAVES = ("memmove", "memcpy")
 ALLOC_LEAVES = ("malloc", "free", "realloc")
 _TSFX_FUNCTION = re.compile(r"tsfx::(?:feature_extractors|utils)::[A-Za-z_:]+[A-Za-z_]")
@@ -88,8 +97,22 @@ def tsfx_function(chain: list[str]) -> str | None:
     return None
 
 
-def leaf_kind(leaf: str) -> str | None:
-    """Classify a leaf frame as idle, copy or alloc time."""
+def _named_leaf(chain: list[str]) -> str:
+    """Return the innermost frame with a symbol name.
+
+    glibc ships without symbols, so its internals show up as ``fun_<addr>``
+    (or ``<lib+addr>``) below the named function that called them, such as
+    ``malloc``.
+    """
+    for frame in chain:
+        if not frame.startswith(("fun_", "<")) or " as " in frame:
+            return frame
+    return chain[0]
+
+
+def leaf_kind(chain: list[str]) -> str | None:
+    """Classify a sample as idle, copy or alloc time by its innermost frame."""
+    leaf = _named_leaf(chain)
     if any(k in leaf for k in IDLE_LEAVES):
         return "idle"
     if any(k in leaf for k in COPY_LEAVES):
