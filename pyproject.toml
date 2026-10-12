@@ -16,7 +16,7 @@ dynamic = ["version"]
 dependencies = ["polars==1.44.2", "pyarrow"]
 
 [project.optional-dependencies]
-dev = ["maturin", "ruff", "mypy", "pre-commit", "pytest", "bump-my-version", "mkdocs-material", "mkdocstrings[python]"]
+dev = ["maturin", "ruff", "mypy", "pre-commit", "pytest", "hypothesis", "bump-my-version", "mkdocs-material", "mkdocstrings[python]"]
 bench = ["tsfresh", "pandas"]
 examples = [
   "plotly",
@@ -44,6 +44,9 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["python_tests"]
+# The tsfresh fuzz tests are opt-in: pytest -m fuzz
+addopts = "-m 'not fuzz'"
+markers = ["fuzz: differential fuzzing against tsfresh (needs hypothesis and tsfresh)"]
 
 [tool.ruff]
 line-length = 88
