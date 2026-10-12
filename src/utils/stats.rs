@@ -1,11 +1,7 @@
 //! Shared statistical conventions for the feature extractors.
 
-use std::ops::{Add, Div, Mul, Rem, Sub};
-
 use itertools::Itertools;
-use ndarray::{Array1, ArrayView1};
-use ndarray_stats::errors::QuantileError;
-use num::FromPrimitive;
+use ndarray::ArrayView1;
 
 /// Sum of `value(0), ..., value(n - 1)` exactly as numpy's `add.reduce` sums
 /// a contiguous `float64` array (numpy 2.x): pairwise summation with eight
@@ -164,23 +160,6 @@ pub(crate) fn get_length_sequences_where(x: &ndarray::Array1<bool>) -> Vec<usize
         }
     }
     group_lengths
-}
-
-/// Return the median. Sorts its argument in place.
-pub(crate) fn median_mut<T>(xs: &mut Array1<T>) -> Result<T, QuantileError>
-where
-    T: Clone + Copy + Ord + FromPrimitive,
-    T: Add<Output = T> + Sub<Output = T> + Mul<Output = T> + Div<Output = T> + Rem<Output = T>,
-{
-    if xs.is_empty() {
-        return Err(QuantileError::EmptyInput);
-    }
-    xs.as_slice_mut().unwrap().sort_unstable();
-    Ok(if xs.len().is_multiple_of(2) {
-        (xs[xs.len() / 2] + xs[xs.len() / 2 - 1]) / (T::from_u64(2).unwrap())
-    } else {
-        xs[xs.len() / 2]
-    })
 }
 
 /// The `q`-quantile of `sorted` (ascending, not empty), exactly as

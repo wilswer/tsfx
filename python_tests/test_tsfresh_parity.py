@@ -1133,3 +1133,28 @@ _REOCCURRING_X += [3.01266764466243e-06, 3.01266764466243e-06]
 )
 def test_sum_of_reoccurring_exact(kind, expected):
     assert _features(_REOCCURRING_X)[f"val__sum_of_reoccurring_{kind}"] == expected
+
+
+# Found by a targeted search for threshold cases (series where the threshold
+# is hit exactly in real arithmetic), tsfresh 0.21.2 / numpy 2.4.4:
+# index_mass_quantile(np.array(x), [{"q": 0.5}]) divides by np.sum(np.abs(x))
+# and symmetry_looking(np.array(x), [{"r": 0.05}]) compares
+# np.abs(np.mean(x) - np.median(x)), so the comparison flips unless the sums
+# match numpy's bit for bit.
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        (
+            [0.7, 1.7, 0.57, 0.4, 0.57, -1.7, -0.7, 0.4],
+            "index_mass_quantile__q_0.5",
+            0.625,
+        ),
+        (
+            [-1.6, -1.5, -4.4, -2.6, -2.2, -2.0, 4.1, -0.8, -4.5, 1.8],
+            "symmetry_looking__r_0.05",
+            0.0,
+        ),
+    ],
+)
+def test_threshold_exactly_hit(values, column, expected):
+    assert _features(values)[f"val__{column}"] == expected

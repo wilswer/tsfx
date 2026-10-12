@@ -1,14 +1,11 @@
 //! Summaries of the value distribution, independent of order.
 
 use ndarray::Array1;
-use ndarray_stats::QuantileExt;
-use noisy_float::types::n64;
 use polars::lazy::dsl::*;
 
 use super::kernel::{GroupContext, Kernel, extremes, scalar_kernel};
 use crate::utils::stats::{
-    median_mut, numpy_mean, numpy_median, numpy_quantile, numpy_sum, sample_excess_kurtosis,
-    sample_skewness,
+    numpy_mean, numpy_median, numpy_quantile, numpy_sum, sample_excess_kurtosis, sample_skewness,
 };
 /// Length feature.
 ///
@@ -444,13 +441,10 @@ impl Kernel for SymmetryLooking {
             out.extend(self.rs.iter().map(|_| 0.0));
             return;
         }
-        let mut arr = ctx.x().mapv(n64);
-        // Not empty, so median, mean, max and min all exist
-        let median = median_mut(&mut arr).map_or(f64::NAN, f64::from);
-        let mean = arr.mean().map_or(f64::NAN, f64::from);
-        let max = arr.max().map_or(f64::NAN, |m| f64::from(*m));
-        let min = arr.min().map_or(f64::NAN, |m| f64::from(*m));
-        let (mean_median_diff, max_min_diff) = ((mean - median).abs(), max - min);
+        // np.abs(np.mean(x) - np.median(x)) and np.max(x) - np.min(x), exactly
+        let median = numpy_median(&mut ctx.values().to_vec());
+        let mean_median_diff = (ctx.mean() - median).abs();
+        let max_min_diff = ctx.max() - ctx.min();
         out.extend(
             self.rs
                 .iter()

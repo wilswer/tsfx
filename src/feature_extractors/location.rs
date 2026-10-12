@@ -3,7 +3,7 @@
 use ndarray::{Axis, s};
 
 use super::kernel::{GroupContext, Kernel, scalar_kernel};
-use crate::utils::stats::{np_argmax, np_argmin};
+use crate::utils::stats::{np_argmax, np_argmin, numpy_sum};
 
 scalar_kernel! {
 /// First location of maximum feature.
@@ -131,8 +131,10 @@ impl Kernel for IndexMassQuantile {
     }
 
     fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        // np.cumsum(np.abs(x)) / np.sum(np.abs(x)): a sequential cumulative
+        // sum over numpy's pairwise total
         let mut mass = ctx.x().mapv(f64::abs);
-        let total = mass.sum();
+        let total = numpy_sum(mass.len(), |i| mass[i]);
         if total == 0.0 {
             out.extend(self.qs.iter().map(|_| f64::NAN));
             return;

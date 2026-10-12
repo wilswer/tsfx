@@ -18,7 +18,6 @@ pyo3 = "0.29"
 chrono = "0.4.42"
 csv = "1.3"
 ndarray = "0.17"
-ndarray-stats = "0.7"
 polars = { git = "https://github.com/pola-rs/polars.git", rev = "1bd8ec12f42d40fcec62badf32ef2177d2377d8d", features = [
   "polars-io",
   "lazy",
@@ -36,9 +35,7 @@ polars = { git = "https://github.com/pola-rs/polars.git", rev = "1bd8ec12f42d40f
   "object",
 ] }
 pyo3-polars = { git = "https://github.com/pola-rs/polars.git", rev = "1bd8ec12f42d40fcec62badf32ef2177d2377d8d", features = ["lazy", "dtype-struct"] }
-noisy_float = "0.2"
 itertools = "0.14"
-num = "0.4"
 thiserror = "2"
 anyhow = "1"
 
