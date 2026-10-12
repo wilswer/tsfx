@@ -34,9 +34,9 @@ use location::{
 use reoccurrence::{HasDuplicateMax, HasDuplicateMin, ReoccurrenceFeatures};
 use statistics::{
     AbsoluteEnergy, AbsoluteMaximum, Kurtosis, LargeStandardDeviation, Maximum, Mean,
-    MeanNAbsoluteMax, Minimum, RatioBeyondRSigma, RootMeanSquare, Skewness, StandardDeviation,
-    SumValues, SymmetryLooking, Variance, VarianceLargerThanStandardDeviation,
-    VariationCoefficient, count, expr_median, expr_quantile,
+    MeanNAbsoluteMax, Median, Minimum, Quantile, RatioBeyondRSigma, RootMeanSquare, Skewness,
+    StandardDeviation, SumValues, SymmetryLooking, Variance, VarianceLargerThanStandardDeviation,
+    VariationCoefficient, count,
 };
 use trend::{AggLinearTrend, LinearTrend};
 
@@ -59,7 +59,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
     if config.length.is_some() {
         aggregators.push(count(&opts.value_cols[0]));
     }
-    for (col, plan) in opts.value_cols.iter().zip(plans.iter_mut()) {
+    for plan in plans.iter_mut() {
         if config.sum_values.is_some() {
             plan.push(SumValues);
         }
@@ -67,7 +67,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
             plan.push(Mean);
         }
         if config.median.is_some() {
-            aggregators.push(expr_median(col));
+            plan.push(Median);
         }
         if config.minimum.is_some() {
             plan.push(Minimum);
@@ -91,7 +91,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
 
     // Efficient tier
     if *tier >= FeatureSetting::Efficient {
-        for (col, plan) in opts.value_cols.iter().zip(plans.iter_mut()) {
+        for plan in plans.iter_mut() {
             if config.kurtosis.is_some() {
                 plan.push(Kurtosis);
             }
@@ -225,10 +225,8 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 plan.push(Autocorrelation { lags });
             }
             if let Some(feature) = &config.quantile {
-                let params = &feature.parameters;
-                for p in params {
-                    aggregators.push(expr_quantile(col, p.q));
-                }
+                let qs = feature.parameters.iter().map(|p| p.q).collect();
+                plan.push(Quantile { qs });
             }
             if let Some(feature) = &config.number_crossing_m {
                 let ms = feature.parameters.iter().map(|p| p.m).collect();
@@ -297,41 +295,6 @@ pub struct FeatureExprs {
 pub(super) fn f64_values(s: &Column) -> PolarsResult<Float64Chunked> {
     let series = s.as_materialized_series().cast(&DataType::Float64)?;
     Ok(series.f64()?.rechunk().into_owned())
-}
-
-pub(super) fn _make_nan_struct_column(
-    name: &str,
-    parameter_name: &str,
-    rs: &[f64],
-) -> Result<Column, PolarsError> {
-    let mut ss: Vec<Column> = Vec::with_capacity(rs.len());
-    for r in rs.iter() {
-        ss.push(Column::new(
-            format!("{}__{}_{:2}", name, parameter_name, r).into(),
-            &[f64::NAN],
-        ))
-    }
-    let s = DataFrame::new(1, ss)?
-        .into_struct(name.into())
-        .into_column();
-    Ok(s)
-}
-pub(super) fn _make_nan_struct_column_int(
-    name: &str,
-    parameter_name: &str,
-    ns: &[usize],
-) -> Result<Column, PolarsError> {
-    let mut ss: Vec<Column> = Vec::with_capacity(ns.len());
-    for n in ns.iter() {
-        ss.push(Column::new(
-            format!("{}__{}_{}", name, parameter_name, n).into(),
-            &[f64::NAN],
-        ))
-    }
-    let s = DataFrame::new(1, ss)?
-        .into_struct(name.into())
-        .into_column();
-    Ok(s)
 }
 
 #[cfg(test)]

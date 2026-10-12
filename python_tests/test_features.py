@@ -46,6 +46,39 @@ def test_only_nan_group_dropped():
     assert fdf.get_column("id").to_list() == ["a", "b", "c"]
 
 
+def test_all_null_group_gives_nan_not_null():
+    """A group without non-null values gives NaN for every feature, as
+    tsfresh (which sees NaN) does. Median and quantile used to give null."""
+    df = pl.DataFrame({"id": ["a", "a", "b", "b"], "val": [1.0, 2.0, None, None]})
+    opts = ExtractionSettings(
+        grouping_cols=["id"],
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    fdf = extract_features(df.lazy(), opts).filter(pl.col("id") == "b")
+    features = fdf.drop("id", "length").row(0, named=True)
+    assert [name for name, value in features.items() if value is None] == []
+    assert math.isnan(features["val__median"])
+    assert math.isnan(features["val__quantile__q_0.1"])
+
+
+def test_quantile_with_nulls_matches_numpy_exactly():
+    """Nulls are dropped before the quantile, which then equals np.quantile of
+    the remaining values bit for bit. Polars' quantile counted the nulls into
+    its interpolation index and lost the last bits."""
+    values = [1.0, None, 3.0, 3.0, -2.0, None, 7.0, 7.0, 0.0, 1.0]
+    df = pl.DataFrame({"id": ["a"] * len(values), "val": values})
+    opts = ExtractionSettings(
+        grouping_cols=["id"],
+        feature_setting=FeatureSetting.Efficient,
+        value_cols=["val"],
+    )
+    features = extract_features(df.lazy(), opts).row(0, named=True)
+    # np.quantile([1, 3, 3, -2, 7, 7, 0, 1], q) with numpy 2.4.4
+    assert features["val__quantile__q_0.1"] == -0.5999999999999999
+    assert features["val__quantile__q_0.2"] == 0.40000000000000013
+
+
 def test_only_nan_group_dropped_with_date():
     df = pl.DataFrame(
         {

@@ -176,6 +176,27 @@ where
     })
 }
 
+/// The `q`-quantile of `sorted` (ascending, not empty) with linear
+/// interpolation between the two nearest values, like `np.quantile`. Uses
+/// exactly Polars' formula (index $h = (n - 1)\,q$, then
+/// $x_{(\lfloor h \rfloor)} + (h - \lfloor h \rfloor)(x_{(\lceil h \rceil)} - x_{(\lfloor h \rfloor)})$),
+/// so results match the earlier Polars-based median and quantile bit for bit.
+pub fn linear_quantile(sorted: &[f64], q: f64) -> f64 {
+    let n = sorted.len();
+    if n == 1 {
+        return sorted[0];
+    }
+    let float_idx = (n as f64 - 1.0) * q;
+    let idx = (float_idx as usize).min(n - 1);
+    let top = (float_idx.ceil() as usize).min(n - 1);
+    let (lower, upper) = (sorted[idx], sorted[top]);
+    if idx == top || lower == upper {
+        lower
+    } else {
+        (float_idx - idx as f64) * (upper - lower) + lower
+    }
+}
+
 /// Mean of the non-NaN values, like pandas' `mean` (skipna). NaN if every
 /// value is NaN.
 pub(crate) fn skip_nan_mean(x: &ArrayView1<f64>) -> f64 {

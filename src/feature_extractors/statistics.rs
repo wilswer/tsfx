@@ -6,10 +6,9 @@ use ndarray_stats::QuantileExt;
 use noisy_float::types::n64;
 use ordered_float::OrderedFloat;
 use polars::lazy::dsl::*;
-use polars::prelude::*;
 
 use super::kernel::{GroupContext, Kernel, scalar_kernel};
-use crate::utils::stats::{median_mut, sample_excess_kurtosis, sample_skewness};
+use crate::utils::stats::{linear_quantile, median_mut, sample_excess_kurtosis, sample_skewness};
 /// Length feature.
 ///
 /// The number of non-null values in the time series. Only the first value
@@ -287,27 +286,30 @@ scalar_kernel! {
     VariationCoefficient, "variation_coefficient", |ctx| if ctx.mean() == 0.0 { f64::NAN } else { ctx.std() / ctx.mean() }
 }
 
+scalar_kernel! {
 /// Median feature.
 ///
 /// The median of all values in the time series: the middle value after
-/// sorting, or the mean of the two middle values for an even count. Computed
-/// with the native Polars API.
+/// sorting, or the mean of the two middle values for an even count (linear
+/// interpolation at $q = 0.5$, see [`crate::utils::stats::linear_quantile`]).
 ///
 /// # Output column
 /// `{name}__median`
 ///
 /// # Edge cases
-/// - Nulls are ignored; a group with no non-null values gives null (not NaN).
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
 /// - A series containing NaN gives NaN.
 ///
 /// # tsfresh
 /// `feature_calculators.median` (v0.21.2).
-pub fn expr_median(name: &str) -> Expr {
-    // NaN propagation, as np.median in tsfresh
-    when(col(name).is_nan().any(true))
-        .then(lit(f64::NAN))
-        .otherwise(col(name).median().cast(DataType::Float64))
-        .alias(format!("{}__median", name))
+    Median, "median", |ctx| {
+        // NaN propagation, as np.median in tsfresh
+        if ctx.x().iter().any(|x| x.is_nan()) {
+            f64::NAN
+        } else {
+            linear_quantile(ctx.sorted(), 0.5)
+        }
+    }
 }
 
 /// Ratio beyond r sigma feature.
@@ -504,7 +506,7 @@ impl Kernel for MeanNAbsoluteMax {
 /// nearest order statistics (`np.quantile`'s default): for sorted values
 /// $x_{(0)} \le \dots \le x_{(n-1)}$ and $h = (n - 1)\,q$,
 /// $$ Q(q) = x_{(\lfloor h \rfloor)} + (h - \lfloor h \rfloor)\left(x_{(\lceil h \rceil)} - x_{(\lfloor h \rfloor)}\right). $$
-/// Computed with the native Polars API.
+/// See [`crate::utils::stats::linear_quantile`].
 ///
 /// # Parameters
 /// - `q`: quantile in $[0, 1]$. Config: `[quantile] parameters = [{ q = 0.1 }, ...]`;
@@ -514,17 +516,32 @@ impl Kernel for MeanNAbsoluteMax {
 /// `{name}__quantile__q_{q:.1}`
 ///
 /// # Edge cases
-/// - Nulls are ignored; a group with no non-null values gives null (not NaN).
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
 /// - A series containing NaN gives NaN.
 /// - The column name rounds `q` to one decimal, so e.g. 0.25 and 0.2 would
 ///   share a name.
 ///
 /// # tsfresh
 /// `feature_calculators.quantile` (v0.21.2), i.e. `np.quantile`.
-pub fn expr_quantile(name: &str, q: f64) -> Expr {
-    // Linear interpolation and NaN propagation, as np.quantile in tsfresh
-    when(col(name).is_nan().any(true))
-        .then(lit(f64::NAN))
-        .otherwise(quantile(name, lit(q), QuantileMethod::Linear).cast(DataType::Float64))
-        .alias(format!("{}__quantile__q_{:.1}", name, q))
+pub struct Quantile {
+    pub qs: Vec<f64>,
+}
+
+impl Kernel for Quantile {
+    fn names(&self) -> Vec<String> {
+        self.qs
+            .iter()
+            .map(|q| format!("quantile__q_{q:.1}"))
+            .collect()
+    }
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        // Linear interpolation and NaN propagation, as np.quantile in tsfresh
+        if ctx.x().iter().any(|x| x.is_nan()) {
+            out.extend(self.qs.iter().map(|_| f64::NAN));
+            return;
+        }
+        let sorted = ctx.sorted();
+        out.extend(self.qs.iter().map(|&q| linear_quantile(sorted, q)));
+    }
 }

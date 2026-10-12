@@ -31,6 +31,7 @@ pub struct GroupContext<'a> {
     min: OnceCell<f64>,
     max: OnceCell<f64>,
     diffs: OnceCell<Array1<f64>>,
+    sorted: OnceCell<Vec<f64>>,
 }
 
 impl<'a> GroupContext<'a> {
@@ -44,6 +45,7 @@ impl<'a> GroupContext<'a> {
             min: OnceCell::new(),
             max: OnceCell::new(),
             diffs: OnceCell::new(),
+            sorted: OnceCell::new(),
         }
     }
 
@@ -94,6 +96,15 @@ impl<'a> GroupContext<'a> {
     /// Largest value; NaN if any value is NaN (like `np.max`).
     pub fn max(&self) -> f64 {
         *self.max.get_or_init(|| *self.x.max().unwrap_or(&f64::NAN))
+    }
+
+    /// The values sorted ascending (`total_cmp`, so NaN sorts last).
+    pub fn sorted(&self) -> &[f64] {
+        self.sorted.get_or_init(|| {
+            let mut sorted = self.values.to_vec();
+            sorted.sort_unstable_by(f64::total_cmp);
+            sorted
+        })
     }
 
     /// Consecutive differences $x_{i+1} - x_i$ (empty for a single value).
