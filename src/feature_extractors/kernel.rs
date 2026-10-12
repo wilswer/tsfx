@@ -179,19 +179,39 @@ impl KernelPlan {
             .alias(Self::packed_name(column))
     }
 
-    /// Expressions that turn the packed list into one named column per
-    /// feature (`{column}__{name}`), to run after the group-by.
-    pub fn unpack(&self, column: &str) -> Vec<Expr> {
-        let packed = Self::packed_name(column);
-        self.names
+    /// Replace `column`'s packed list column in the aggregated `df` with one
+    /// named column per feature (`{column}__{name}`). Done eagerly on the
+    /// small aggregated frame: a lazy `list.get` per feature would plan a
+    /// second query on every call.
+    pub fn unpack(&self, df: &mut DataFrame, column: &str) -> PolarsResult<()> {
+        let packed = df.drop_in_place(&Self::packed_name(column))?;
+        let list = packed.list()?.rechunk();
+        let inner = list.get_inner();
+        let inner = inner.f64()?.rechunk();
+        let flat = inner.cont_slice()?;
+        let n = self.names.len();
+        let mut columns: Vec<Vec<f64>> = vec![Vec::with_capacity(list.len()); n];
+        for arr in list.downcast_iter() {
+            for row in arr.offsets().buffer().windows(2) {
+                let values = &flat[row[0] as usize..row[1] as usize];
+                polars_ensure!(
+                    values.len() == n,
+                    ComputeError: "a group produced {} feature values for {} names",
+                    values.len(),
+                    n
+                );
+                for (column, &value) in columns.iter_mut().zip(values) {
+                    column.push(value);
+                }
+            }
+        }
+        let columns = self
+            .names
             .iter()
-            .enumerate()
-            .map(|(i, name)| {
-                col(packed.as_str())
-                    .list()
-                    .get(lit(i as i64), false)
-                    .alias(format!("{column}__{name}"))
-            })
-            .collect()
+            .zip(columns)
+            .map(|(name, values)| Column::new(format!("{column}__{name}").into(), values))
+            .collect::<Vec<_>>();
+        df.hstack_mut(&columns)?;
+        Ok(())
     }
 }

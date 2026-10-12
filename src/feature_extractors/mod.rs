@@ -282,21 +282,18 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
         }
     }
 
-    let mut unpack = Vec::new();
-    let mut packed = Vec::new();
+    let mut kernels = Vec::new();
     for (col, plan) in opts.value_cols.iter().zip(plans) {
         if plan.is_empty() {
             continue;
         }
         let plan = Arc::new(plan);
         aggregators.push(plan.aggregation(col));
-        unpack.extend(plan.unpack(col));
-        packed.push(KernelPlan::packed_name(col));
+        kernels.push((col.clone(), plan));
     }
     Ok(FeatureExprs {
         aggregations: aggregators,
-        unpack,
-        packed,
+        kernels,
     })
 }
 
@@ -304,11 +301,9 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
 pub struct FeatureExprs {
     /// Expressions for the group-by aggregation.
     pub aggregations: Vec<Expr>,
-    /// Expressions that turn each value column's packed feature list into
-    /// named columns, to run on the aggregated frame.
-    pub unpack: Vec<Expr>,
-    /// The packed list columns, to drop after unpacking.
-    pub packed: Vec<String>,
+    /// Each value column's kernel plan, whose packed feature list must be
+    /// unpacked ([`KernelPlan::unpack`]) in the aggregated frame.
+    pub kernels: Vec<(String, Arc<KernelPlan>)>,
 }
 
 /// The group's values as one contiguous `Float64` chunk, ready for

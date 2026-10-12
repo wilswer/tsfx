@@ -64,11 +64,11 @@ pub fn lazy_feature_df(
     } else {
         df.select(&selected_cols).group_by(&grouping_cols)
     };
-    let fdf = gdf.agg(features.aggregations).collect()?;
-    Ok(fdf
-        .lazy()
-        .with_columns(features.unpack)
-        .drop(by_name(features.packed, true, false)))
+    let mut fdf = gdf.agg(features.aggregations).collect()?;
+    for (column, plan) in &features.kernels {
+        plan.unpack(&mut fdf, column)?;
+    }
+    Ok(fdf.lazy())
 }
 
 #[cfg(test)]
