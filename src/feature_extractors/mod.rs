@@ -31,7 +31,7 @@ use location::{
     FirstLocationOfMaximum, FirstLocationOfMinimum, IndexMassQuantile, LastLocationOfMaximum,
     LastLocationOfMinimum,
 };
-use reoccurrence::{ReoccurrenceFeatures, has_duplicate_max, has_duplicate_min, reoccurrence};
+use reoccurrence::{HasDuplicateMax, HasDuplicateMin, ReoccurrenceFeatures};
 use statistics::{
     AbsoluteEnergy, AbsoluteMaximum, Kurtosis, LargeStandardDeviation, Maximum, Mean,
     MeanNAbsoluteMax, Minimum, RatioBeyondRSigma, RootMeanSquare, Skewness, StandardDeviation,
@@ -133,10 +133,10 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 plan.push(SymmetryLooking { rs });
             }
             if config.has_duplicate_max.is_some() {
-                aggregators.push(has_duplicate_max(col));
+                plan.push(HasDuplicateMax);
             }
             if config.has_duplicate_min.is_some() {
-                aggregators.push(has_duplicate_min(col));
+                plan.push(HasDuplicateMin);
             }
             if let Some(feature) = &config.cid_ce {
                 let normalize = feature.parameters.iter().map(|p| p.normalize).collect();
@@ -196,7 +196,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                     .is_some(),
             };
             if reoccurring != ReoccurrenceFeatures::default() {
-                aggregators.push(reoccurrence(col, reoccurring));
+                plan.push(reoccurring);
             }
             if config.variation_coefficient.is_some() {
                 plan.push(VariationCoefficient);
