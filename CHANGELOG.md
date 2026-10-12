@@ -26,6 +26,19 @@ All notable changes to TSFX are documented here.
   but threshold features can change where a value sits exactly on the
   threshold: `ratio_beyond_r_sigma` of `[1, 3, 3, -2, 7, 7, 0, 1]` with
   `r = 1.5` is now 0, as in tsfresh (it was 0.375).
+- Found by fuzzing every feature against tsfresh:
+  - `mean_n_absolute_max` is NaN unless there are more than `n` values, and
+    NaN if the series contains NaN (tsfresh sorts NaN last, as the largest
+    absolute value).
+  - `sum_values`, `absolute_sum_of_changes`, `mean_absolute_change`,
+    `root_mean_square`, `autocorrelation`, `c3`,
+    `time_reversal_asymmetry_statistic`, `median` and `quantile` now equal
+    tsfresh's numpy results bit for bit (they differed in the last bits).
+  - **`agg_linear_trend` follows tsfresh's `extract_features`**, which hands
+    the calculator a numpy array: the `var` aggregator is the population
+    variance (`ddof = 0`, was `ddof = 1`), and a NaN in a chunk now makes the
+    result NaN instead of being skipped. The `median` aggregator (a tsfx
+    addition) follows `np.median` likewise.
 - Feature values now match tsfresh v0.21.2 for every feature, which changes
   results for many features compared with 0.3.3, and invalid config files
   raise `ValueError`. See
