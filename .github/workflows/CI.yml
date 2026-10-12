@@ -21,6 +21,9 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    # A version bump is pushed together with its tag, and the tag's run tests
+    # the same commit, so skip the redundant branch run for it.
+    if: ${{ startsWith(github.ref, 'refs/tags/') || !startsWith(github.event.head_commit.message, 'Bump version') }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
