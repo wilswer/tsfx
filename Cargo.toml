@@ -14,7 +14,10 @@ crate-type = ["lib", "cdylib"]
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 toml = "1.1"
-pyo3 = "0.29"
+# abi3: one wheel per platform for every CPython >= 3.11, including future
+# versions (free-threaded builds, which have no stable ABI, still get
+# version-specific wheels)
+pyo3 = { version = "0.29", features = ["abi3-py311"] }
 chrono = "0.4.42"
 csv = "1.3"
 ndarray = "0.17"
@@ -48,3 +51,12 @@ rustdoc-args = ["--html-in-header", "./src/html/docs-header.html"]
 [[bench]]
 name = "bench_main"
 harness = false
+
+# Strip symbols from release builds: smaller wheels (PyPI limits a project's
+# total size), no effect on speed
+[profile.release]
+strip = true
+
+# Benches inherit the release profile; keep their symbols for profiling
+[profile.bench]
+strip = false
