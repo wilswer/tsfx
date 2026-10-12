@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["extractors","extras","high_comp_cost","minimal"]};
+window.SIDEBAR_ITEMS = {"fn":["aggregators","f64_values"],"mod":["autocorrelation","change","counting","entropy","kernel","location","reoccurrence","statistics","trend"],"struct":["FeatureExprs"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["FeatureSetting"],"fn":["get_aggregators","lazy_feature_df"],"struct":["DynamicGroupBySettings","ExtractionSettings"]};
+window.SIDEBAR_ITEMS = {"enum":["FeatureSetting"],"fn":["lazy_feature_df"],"struct":["DynamicGroupBySettings","ExtractionSettings"]};

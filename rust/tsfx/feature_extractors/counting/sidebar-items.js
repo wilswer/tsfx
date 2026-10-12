@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["peak_counts"],"struct":["CountAbove","CountAboveMean","CountBelow","CountBelowMean","LongestStrikeAboveMean","LongestStrikeBelowMean","NumberCrossingM","NumberPeaks","RangeCount"]};

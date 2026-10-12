@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["lagged_mean"],"struct":["Autocorrelation","C3","TimeReversalAsymmetryStatistic"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["toml_reader"]};
+window.SIDEBAR_ITEMS = {"mod":["stats","toml_reader"]};

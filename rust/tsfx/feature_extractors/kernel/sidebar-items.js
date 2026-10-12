@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["extremes"],"macro":[["scalar_kernel",1]],"struct":["GroupContext","KernelPlan"],"trait":["Kernel"]};

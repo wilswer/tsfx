@@ -1,2 +1,2 @@
-createSrcSidebar('[["tsfx",["",[["feature_extractors",[],["extractors.rs","extras.rs","high_comp_cost.rs","minimal.rs","mod.rs"]],["utils",[],["mod.rs","toml_reader.rs"]]],["error.rs","extract.rs","lib.rs"]]]]');
-//{"start":19,"fragment_lengths":[189]}
+createSrcSidebar('[["tsfx",["",[["feature_extractors",[],["autocorrelation.rs","change.rs","counting.rs","entropy.rs","kernel.rs","location.rs","mod.rs","reoccurrence.rs","statistics.rs","trend.rs"]],["utils",[],["mod.rs","stats.rs","toml_reader.rs"]]],["error.rs","extract.rs","lib.rs"]]]]');
+//{"start":19,"fragment_lengths":[270]}

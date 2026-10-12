@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["count"],"struct":["AbsoluteEnergy","AbsoluteMaximum","Kurtosis","LargeStandardDeviation","Maximum","Mean","MeanNAbsoluteMax","Median","Minimum","Quantile","RatioBeyondRSigma","RootMeanSquare","Skewness","StandardDeviation","SumValues","SymmetryLooking","Variance","VarianceLargerThanStandardDeviation","VariationCoefficient"]};
