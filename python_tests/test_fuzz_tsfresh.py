@@ -20,6 +20,7 @@ no counterpart for in ``_tsfx_only``. Calculators get what tsfresh's
 the calculator asks for one.
 """
 
+import itertools
 import math
 import re
 import warnings
@@ -48,6 +49,11 @@ TOLERANT = {
     "absolute_energy",
     "cid_ce",
     "sample_entropy",
+    # statsmodels (np.correlate / BLAS dot, LAPACK SVD least squares)
+    "agg_autocorrelation",
+    "partial_autocorrelation",
+    "ar_coefficient",
+    "augmented_dickey_fuller",
 }
 
 # tsfx names that tsfresh spells differently
@@ -58,6 +64,9 @@ TSFRESH_NAMES = {
         "percentage_of_reoccurring_datapoints_to_all_datapoints"
     ),
 }
+
+# The largest partial_autocorrelation lag in the parity config
+PACF_MAX_LAG = 9
 
 SPECIAL = [0.0, -0.0, 1.0, -1.0, math.nan, math.inf, -math.inf]
 
@@ -138,7 +147,22 @@ def _tsfresh(x: object, column: str) -> float:
     if m:
         return _combiner(fc.linear_trend, x, {"attr": m.group(2)})
     name, _, rest = column.partition("__")
+    if name == "agg_autocorrelation":
+        f_agg, maxlag = re.fullmatch(r"f_agg_(\w+)__maxlag_(\d+)", rest).groups()
+        param = {"f_agg": f_agg, "maxlag": int(maxlag)}
+        return _combiner(fc.agg_autocorrelation, x, param)
     params = dict(p.split("_", 1) for p in rest.split("__")) if rest else {}
+    if name == "partial_autocorrelation":
+        # tsfresh's lag 0 depends on the largest lag requested alongside it
+        lags = [{"lag": int(params["lag"])}, {"lag": PACF_MAX_LAG}]
+        return list(fc.partial_autocorrelation(x, lags))[0][1]
+    if name == "ar_coefficient":
+        param = {"coeff": int(params["coeff"]), "k": int(params["k"])}
+        return _combiner(fc.ar_coefficient, x, param)
+    if name == "augmented_dickey_fuller":
+        autolag = None if params["autolag"] == "None" else params["autolag"]
+        param = {"attr": params["attr"], "autolag": autolag}
+        return _combiner(fc.augmented_dickey_fuller, x, param)
     if name == "symmetry_looking":
         return _combiner(fc.symmetry_looking, x, {"r": float(params["r"])})
     if name == "index_mass_quantile":
@@ -175,7 +199,42 @@ def _deviation(feature: str, x: list[float]) -> bool:
             sum(1 for w in odd if (math.isnan(v) and math.isnan(w)) or v == w) == 1
             for v in odd
         )
+    if feature == "ar_coefficient":
+        # tsfresh raises on NaN / ±inf (MissingDataError); tsfx gives NaN
+        return not all(math.isfinite(v) for v in x)
+    if feature == "augmented_dickey_fuller":
+        return _adf_rounding_decides(x)
     return False
+
+
+def _adf_rounding_decides(values: list[float]) -> bool:
+    """Whether rounding noise decides statsmodels' ADF result: the largest
+    regression fits (nearly) exactly (tsfx takes the residual variance as 0
+    below a relative residual of 1e-10; between that and 1e-5 both compute
+    the same, but the residual's rounding noise can exceed the comparison
+    tolerance), or an extra lag is collinear with the others, so the
+    information criteria of two candidates tie (tsfx takes the smaller
+    lag)."""
+    x = np.array(values, dtype=float)
+    n = len(x)
+    if n < 4 or not np.isfinite(x).all():
+        return False
+    maxlag = min(math.ceil(12 * (n / 100) ** 0.25), n // 2 - 2)
+    if maxlag < 0:
+        return False
+    xd = np.diff(x)
+    nobs = n - 1 - maxlag
+    cols = [np.ones(nobs), x[maxlag : maxlag + nobs]]
+    cols += [xd[maxlag - lag : maxlag - lag + nobs] for lag in range(1, maxlag + 1)]
+    design = np.column_stack(cols)
+    ranks = [np.linalg.matrix_rank(design[:, : lags + 2]) for lags in range(maxlag + 1)]
+    if any(a == b for a, b in itertools.pairwise(ranks)):
+        return True
+    y = xd[maxlag:]
+    beta = np.linalg.lstsq(design, y, rcond=None)[0]
+    terms = np.abs(y) + np.abs(design * beta).sum(axis=1)
+    rms = np.sqrt(np.mean((y - design @ beta) ** 2))
+    return bool(rms <= 1e-5 * terms.max())
 
 
 def _same(a: float, b: float, tolerant: bool) -> bool:
