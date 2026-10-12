@@ -185,3 +185,24 @@ parameters = [
     { query = [1.0, 1.0, 1.0], threshold = 0.5 },
     { query = [1.0, 2.0], threshold = 1.0 },
 ]
+[fft_coefficient]
+parameters = [
+    { attr = "real", coeff = 0 }, { attr = "real", coeff = 1 }, { attr = "real", coeff = 2 }, { attr = "real", coeff = 3 }, { attr = "real", coeff = 10 },
+    { attr = "imag", coeff = 0 }, { attr = "imag", coeff = 1 }, { attr = "imag", coeff = 2 }, { attr = "imag", coeff = 3 }, { attr = "imag", coeff = 10 },
+    { attr = "abs", coeff = 0 }, { attr = "abs", coeff = 1 }, { attr = "abs", coeff = 2 }, { attr = "abs", coeff = 3 }, { attr = "abs", coeff = 10 },
+    { attr = "angle", coeff = 0 }, { attr = "angle", coeff = 1 }, { attr = "angle", coeff = 2 }, { attr = "angle", coeff = 3 }, { attr = "angle", coeff = 10 },
+]
+
+[fft_aggregated]
+parameters = [
+    { aggtype = "centroid" },
+    { aggtype = "variance" },
+    { aggtype = "skew" },
+    { aggtype = "kurtosis" },
+]
+
+[spkt_welch_density]
+parameters = [{ coeff = 1 }, { coeff = 2 }, { coeff = 5 }, { coeff = 8 }, { coeff = 10 }]
+
+[fourier_entropy]
+parameters = [{ bins = 2 }, { bins = 3 }, { bins = 5 }, { bins = 10 }, { bins = 100 }]

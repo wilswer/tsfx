@@ -12,6 +12,7 @@ pub mod kernel;
 pub mod location;
 pub mod reoccurrence;
 pub mod similarity;
+pub mod spectral;
 pub mod statistics;
 pub mod trend;
 
@@ -38,6 +39,7 @@ use location::{
 };
 use reoccurrence::{HasDuplicateMax, HasDuplicateMin, ReoccurrenceFeatures};
 use similarity::{Query, QuerySimilarityCount};
+use spectral::{FftAggregated, FftCoefficient, FourierEntropy, SpktWelchDensity};
 use statistics::{
     AbsoluteEnergy, AbsoluteMaximum, BenfordCorrelation, EnergyRatioByChunks, Kurtosis,
     LargeStandardDeviation, Maximum, Mean, MeanNAbsoluteMax, Median, Minimum, Quantile,
@@ -296,6 +298,30 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                     })
                     .collect();
                 plan.push(QuerySimilarityCount { queries });
+            }
+            if let Some(feature) = &config.fft_coefficient {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.attr.clone(), p.coeff))
+                    .collect();
+                plan.push(FftCoefficient { params });
+            }
+            if let Some(feature) = &config.fft_aggregated {
+                let aggtypes = feature
+                    .parameters
+                    .iter()
+                    .map(|p| p.aggtype.clone())
+                    .collect();
+                plan.push(FftAggregated { aggtypes });
+            }
+            if let Some(feature) = &config.spkt_welch_density {
+                let coeffs = feature.parameters.iter().map(|p| p.coeff).collect();
+                plan.push(SpktWelchDensity { coeffs });
+            }
+            if let Some(feature) = &config.fourier_entropy {
+                let bins = feature.parameters.iter().map(|p| p.bins).collect();
+                plan.push(FourierEntropy { bins });
             }
         }
     }

@@ -33,6 +33,7 @@ hypothesis = pytest.importorskip("hypothesis")
 fc = pytest.importorskip("tsfresh.feature_extraction.feature_calculators")
 np = pytest.importorskip("numpy")
 pd = pytest.importorskip("pandas")
+signal = pytest.importorskip("scipy.signal")
 st = hypothesis.strategies
 
 pytestmark = pytest.mark.fuzz
@@ -50,6 +51,17 @@ TOLERANT = {
     "cid_ce",
     "sample_entropy",
     "benford_correlation",
+    "fft_aggregated",
+    "fourier_entropy",
+}
+
+# FFT-based features, compared with tolerances that scale with the series
+# (see _same_spectral)
+SPECTRAL = {
+    "fft_coefficient",
+    "fft_aggregated",
+    "spkt_welch_density",
+    "fourier_entropy",
 }
 
 # tsfx names that tsfresh spells differently
@@ -153,6 +165,15 @@ def _tsfresh(x: object, column: str) -> float:
         return fc.range_count(x, float(params["min"]), float(params["max"]))
     if name == "mean_n_absolute_max":
         return fc.mean_n_absolute_max(x, int(params["n"]))
+    if name == "fft_coefficient":
+        param = {"attr": params["attr"], "coeff": int(params["coeff"])}
+        return _combiner(fc.fft_coefficient, x, param)
+    if name == "fft_aggregated":
+        return _combiner(fc.fft_aggregated, x, {"aggtype": params["aggtype"]})
+    if name == "spkt_welch_density":
+        return _combiner(fc.spkt_welch_density, x, {"coeff": int(params["coeff"])})
+    if name == "fourier_entropy":
+        return fc.fourier_entropy(x, int(params["bins"]))
     fn = getattr(fc, TSFRESH_NAMES.get(name, name))
     if params:
         ((key, value),) = params.items()
@@ -205,6 +226,9 @@ def _deviation(feature: str, x: list[float]) -> bool:
     """Documented deliberate deviations from tsfresh (see the parity tests)."""
     if feature == "sample_entropy":
         return any(math.isinf(v) for v in x)
+    if feature == "fft_coefficient":
+        # tsfx: NaN for every attribute; numpy keeps some parts finite
+        return any(not math.isfinite(v) for v in x)
     if feature in ("sum_of_reoccurring_values", "sum_of_reoccurring_data_points"):
         # a NaN or ±inf that occurs only once is left out by tsfx
         odd = [v for v in x if not math.isfinite(v)]
@@ -224,6 +248,45 @@ def _same(a: float, b: float, tolerant: bool) -> bool:
     if tolerant:
         return math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-9)
     return a == b
+
+
+def _same_spectral(column: str, a: float, b: float, x: object) -> bool:
+    """FFT-based columns: tsfx's FFT (rustfft) rounds differently from
+    numpy's (pocketfft), so the absolute error scales with the whole series,
+    not the value. Values that are 0 in exact arithmetic come out as rounding
+    noise, so their angle is arbitrary and not compared."""
+    if a is None or b is None or math.isnan(a) or math.isnan(b):
+        return _same(a, b, tolerant=True)
+    if column.startswith("fft_coefficient__attr_angle"):
+        coeff = int(column.rsplit("_", 1)[1])
+        magnitude = abs(np.fft.rfft(x)[coeff])
+        noise = 1e-12 * np.sum(np.abs(x))
+        if magnitude <= 1e4 * noise:
+            return True
+        diff = abs((a - b + 180.0) % 360.0 - 180.0)
+        return diff <= 1e-4
+    if column.startswith("fft_coefficient"):
+        return math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-12 * np.sum(np.abs(x)))
+    if column.startswith("spkt_welch_density"):
+        scale = len(x) * np.sum((x - np.mean(x)) ** 2)
+        return math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-13 * scale)
+    if column.startswith("fourier_entropy") and _on_bin_edge(
+        x, int(column.rsplit("_", 1)[1])
+    ):
+        return True
+    return _same(a, b, tolerant=True)
+
+
+def _on_bin_edge(x: object, bins: int) -> bool:
+    """Whether a value of fourier_entropy's scaled spectrum is within rounding
+    of an inner histogram bin edge, so that the FFT's rounding decides its
+    bin (for example a bin with exactly half the peak power and 2 bins)."""
+    _, pxx = signal.welch(x, nperseg=min(len(x), 256))
+    scaled = pxx / np.max(pxx)
+    if not np.all(np.isfinite(scaled)):
+        return False
+    edges = np.histogram_bin_edges(scaled, bins)[1:-1]
+    return bool(np.any(np.abs(scaled[:, None] - edges[None, :]) <= 1e-9))
 
 
 def _feature(column: str) -> str:
@@ -250,7 +313,11 @@ def test_matches_tsfresh(feature: str) -> None:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 expected = _tsfresh(x, column)
-            if not _same(value, expected, tolerant):
+            if feature in SPECTRAL:
+                same = _same_spectral(column, value, expected, x)
+            else:
+                same = _same(value, expected, tolerant)
+            if not same:
                 mismatches.append(f"{column}: tsfx {value!r}, tsfresh {expected!r}")
         assert not mismatches, "\n".join(mismatches)
 

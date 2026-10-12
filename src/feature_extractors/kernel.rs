@@ -15,7 +15,9 @@ use ndarray::ArrayView1;
 use polars::prelude::*;
 
 use super::f64_values;
+use super::spectral;
 use crate::utils::stats::{numpy_mean, population_var};
+use rustfft::num_complex::Complex64;
 
 /// One group's values (nulls dropped) and the statistics features share.
 ///
@@ -29,6 +31,8 @@ pub struct GroupContext<'a> {
     var: OnceCell<f64>,
     extremes: OnceCell<(f64, f64)>,
     sorted: OnceCell<Vec<f64>>,
+    rfft: OnceCell<Vec<Complex64>>,
+    welch_psd: OnceCell<Vec<f64>>,
 }
 
 impl<'a> GroupContext<'a> {
@@ -41,6 +45,8 @@ impl<'a> GroupContext<'a> {
             var: OnceCell::new(),
             extremes: OnceCell::new(),
             sorted: OnceCell::new(),
+            rfft: OnceCell::new(),
+            welch_psd: OnceCell::new(),
         }
     }
 
@@ -110,6 +116,18 @@ impl<'a> GroupContext<'a> {
             sorted.sort_unstable_by(f64::total_cmp);
             sorted
         })
+    }
+
+    /// The one-sided DFT of the values, see [`spectral::rfft`].
+    pub fn rfft(&self) -> &[Complex64] {
+        self.rfft.get_or_init(|| spectral::rfft(self.values))
+    }
+
+    /// Welch's power spectral density of the values, see
+    /// [`spectral::welch_psd`].
+    pub fn welch_psd(&self) -> &[f64] {
+        self.welch_psd
+            .get_or_init(|| spectral::welch_psd(self.values))
     }
 }
 

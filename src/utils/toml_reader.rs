@@ -65,6 +65,10 @@ pub struct Config {
     pub change_quantiles: Option<ChangeQuantiles>,
     pub benford_correlation: Option<BenfordCorrelation>,
     pub query_similarity_count: Option<QuerySimilarityCount>,
+    pub fft_coefficient: Option<FftCoefficient>,
+    pub fft_aggregated: Option<FftAggregated>,
+    pub spkt_welch_density: Option<SpktWelchDensity>,
+    pub fourier_entropy: Option<FourierEntropy>,
 }
 
 impl Default for Config {
@@ -136,6 +140,10 @@ impl Default for Config {
             benford_correlation: Some(BenfordCorrelation::default()),
             // Needs a query; tsfresh's default (no query) only gives NaN
             query_similarity_count: None,
+            fft_coefficient: Some(FftCoefficient::default()),
+            fft_aggregated: Some(FftAggregated::default()),
+            spkt_welch_density: Some(SpktWelchDensity::default()),
+            fourier_entropy: Some(FourierEntropy::default()),
         }
     }
 }
@@ -870,6 +878,153 @@ fn default_true() -> bool {
     true
 }
 
+#[derive(Deserialize, Clone, Debug)]
+pub struct FftCoefficient {
+    pub parameters: Vec<FftCoefficientParams>,
+}
+impl Default for FftCoefficient {
+    fn default() -> Self {
+        let attrs = [FftAttr::Real, FftAttr::Imag, FftAttr::Abs, FftAttr::Angle];
+        FftCoefficient {
+            parameters: attrs
+                .into_iter()
+                .flat_map(|attr| {
+                    (0..100).map(move |coeff| FftCoefficientParams {
+                        attr: attr.clone(),
+                        coeff,
+                    })
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct FftCoefficientParams {
+    pub attr: FftAttr,
+    pub coeff: usize,
+}
+
+/// Which part of a Fourier coefficient `fft_coefficient` returns. Unknown
+/// names are rejected when the config is loaded.
+#[derive(Deserialize, Debug, PartialEq, Clone, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum FftAttr {
+    #[default]
+    Real,
+    Imag,
+    Abs,
+    Angle,
+}
+
+impl Display for FftAttr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            FftAttr::Real => write!(f, "real"),
+            FftAttr::Imag => write!(f, "imag"),
+            FftAttr::Abs => write!(f, "abs"),
+            FftAttr::Angle => write!(f, "angle"),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct FftAggregated {
+    pub parameters: Vec<FftAggregatedParams>,
+}
+impl Default for FftAggregated {
+    fn default() -> Self {
+        FftAggregated {
+            parameters: vec![
+                FftAggregatedParams {
+                    aggtype: FftAggType::Centroid,
+                },
+                FftAggregatedParams {
+                    aggtype: FftAggType::Variance,
+                },
+                FftAggregatedParams {
+                    aggtype: FftAggType::Skew,
+                },
+                FftAggregatedParams {
+                    aggtype: FftAggType::Kurtosis,
+                },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct FftAggregatedParams {
+    pub aggtype: FftAggType,
+}
+
+/// Which statistic of the Fourier spectrum `fft_aggregated` returns.
+/// Unknown names are rejected when the config is loaded.
+#[derive(Deserialize, Debug, PartialEq, Clone, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum FftAggType {
+    #[default]
+    Centroid,
+    Variance,
+    Skew,
+    Kurtosis,
+}
+
+impl Display for FftAggType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            FftAggType::Centroid => write!(f, "centroid"),
+            FftAggType::Variance => write!(f, "variance"),
+            FftAggType::Skew => write!(f, "skew"),
+            FftAggType::Kurtosis => write!(f, "kurtosis"),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct SpktWelchDensity {
+    pub parameters: Vec<SpktWelchDensityParams>,
+}
+impl Default for SpktWelchDensity {
+    fn default() -> Self {
+        SpktWelchDensity {
+            parameters: vec![
+                SpktWelchDensityParams { coeff: 2 },
+                SpktWelchDensityParams { coeff: 5 },
+                SpktWelchDensityParams { coeff: 8 },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct SpktWelchDensityParams {
+    pub coeff: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct FourierEntropy {
+    pub parameters: Vec<FourierEntropyParams>,
+}
+impl Default for FourierEntropy {
+    fn default() -> Self {
+        FourierEntropy {
+            parameters: vec![
+                FourierEntropyParams { bins: 2 },
+                FourierEntropyParams { bins: 3 },
+                FourierEntropyParams { bins: 5 },
+                FourierEntropyParams { bins: 10 },
+                FourierEntropyParams { bins: 100 },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct FourierEntropyParams {
+    pub bins: usize,
+}
+
 /// A config file that could not be read or parsed.
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -1287,6 +1442,61 @@ mod tests {
         assert!(change.iter().all(|p| p.ql < p.qh));
         assert!(config.benford_correlation.is_some());
         assert!(config.query_similarity_count.is_none());
+        assert!(config.fft_coefficient.is_some());
+        let fft_coefficient = config.clone().fft_coefficient.unwrap().parameters;
+        assert_eq!(fft_coefficient.len(), 400);
+        assert_eq!(
+            fft_coefficient[0],
+            FftCoefficientParams {
+                attr: FftAttr::Real,
+                coeff: 0
+            }
+        );
+        assert_eq!(
+            fft_coefficient[399],
+            FftCoefficientParams {
+                attr: FftAttr::Angle,
+                coeff: 99
+            }
+        );
+        assert!(config.fft_aggregated.is_some());
+        assert_eq!(
+            config.clone().fft_aggregated.unwrap().parameters[..],
+            [
+                FftAggregatedParams {
+                    aggtype: FftAggType::Centroid
+                },
+                FftAggregatedParams {
+                    aggtype: FftAggType::Variance
+                },
+                FftAggregatedParams {
+                    aggtype: FftAggType::Skew
+                },
+                FftAggregatedParams {
+                    aggtype: FftAggType::Kurtosis
+                },
+            ]
+        );
+        assert!(config.spkt_welch_density.is_some());
+        assert_eq!(
+            config.clone().spkt_welch_density.unwrap().parameters[..],
+            [
+                SpktWelchDensityParams { coeff: 2 },
+                SpktWelchDensityParams { coeff: 5 },
+                SpktWelchDensityParams { coeff: 8 },
+            ]
+        );
+        assert!(config.fourier_entropy.is_some());
+        assert_eq!(
+            config.clone().fourier_entropy.unwrap().parameters[..],
+            [
+                FourierEntropyParams { bins: 2 },
+                FourierEntropyParams { bins: 3 },
+                FourierEntropyParams { bins: 5 },
+                FourierEntropyParams { bins: 10 },
+                FourierEntropyParams { bins: 100 },
+            ]
+        );
     }
 
     #[test]
