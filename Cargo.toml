@@ -38,7 +38,6 @@ polars = { git = "https://github.com/pola-rs/polars.git", rev = "1bd8ec12f42d40f
 pyo3-polars = { git = "https://github.com/pola-rs/polars.git", rev = "1bd8ec12f42d40fcec62badf32ef2177d2377d8d", features = ["lazy", "dtype-struct"] }
 noisy_float = "0.2"
 itertools = "0.14"
-ordered-float = "5.1"
 num = "0.4"
 thiserror = "2"
 anyhow = "1"

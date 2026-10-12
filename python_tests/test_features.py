@@ -878,10 +878,13 @@ def test_agg_linear_trend_slope():
 
 
 def test_mean_n_absolute_max():
+    # tsfresh needs more than n values: 7 values with n = 7 give NaN
     df = pl.DataFrame(
         {
-            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b"],
-            "val": [1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+            "id": ["a", "a", "b", "b", "b", "b", "b", "b", "b", "b", "c", "c"]
+            + ["c"] * 5,
+            "val": [1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+            + [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
         },
     ).lazy()
 
@@ -893,8 +896,10 @@ def test_mean_n_absolute_max():
     fdf = extract_features(df, opts)
     fdf = fdf.sort("id")
 
-    assert math.isnan(fdf.get_column("val__mean_n_absolute_max__n_7").to_list()[0])
-    assert fdf.get_column("val__mean_n_absolute_max__n_7").to_list()[1] == 4.0
+    result = fdf.get_column("val__mean_n_absolute_max__n_7").to_list()
+    assert math.isnan(result[0])
+    assert result[1] == 5.0
+    assert math.isnan(result[2])
 
 
 def test_mean_change():

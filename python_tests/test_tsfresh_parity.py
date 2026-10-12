@@ -655,6 +655,17 @@ def test_mean_n_absolute_max(values, n, expected):
     _assert_feature(values, f"val__mean_n_absolute_max__n_{n}", expected, 1e-7)
 
 
+# mean_n_absolute_max(np.array(x), n) with tsfresh 0.21.2 / numpy 2.4.4: it
+# needs more than n values, and a NaN sorts last in np.sort, so it is the
+# largest absolute value. Found by the tsfresh fuzzer.
+@pytest.mark.parametrize(
+    ("values", "n", "expected"),
+    [([0.0], 1, math.nan), ([0, 0, 0], 3, math.nan), ([1, math.nan, 2], 1, math.nan)],
+)
+def test_mean_n_absolute_max_generated(values, n, expected):
+    _assert_feature(values, f"val__mean_n_absolute_max__n_{n}", expected)
+
+
 # tsfresh checks index_mass_quantile to one decimal place (places=1).
 @pytest.mark.parametrize(
     ("values", "q", "expected"),

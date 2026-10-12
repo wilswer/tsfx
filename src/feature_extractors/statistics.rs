@@ -1,15 +1,14 @@
 //! Summaries of the value distribution, independent of order.
 
-use itertools::Itertools;
 use ndarray::Array1;
 use ndarray_stats::QuantileExt;
 use noisy_float::types::n64;
-use ordered_float::OrderedFloat;
 use polars::lazy::dsl::*;
 
 use super::kernel::{GroupContext, Kernel, extremes, scalar_kernel};
 use crate::utils::stats::{
-    linear_quantile, linear_quantile_select, median_mut, sample_excess_kurtosis, sample_skewness,
+    linear_quantile, linear_quantile_select, median_mut, numpy_mean, sample_excess_kurtosis,
+    sample_skewness,
 };
 /// Length feature.
 ///
@@ -469,10 +468,14 @@ impl Kernel for SymmetryLooking {
 ///
 /// # Edge cases
 /// - Nulls are dropped first; a group with no non-null values gives NaN.
-/// - A series with fewer than $n$ values gives NaN.
+/// - A series with $n$ or fewer values gives NaN (tsfresh requires more than
+///   $n$ values).
+/// - A NaN counts as the largest absolute value (it sorts last, as in
+///   `np.sort`), so with a NaN the result is NaN.
 ///
 /// # tsfresh
-/// `feature_calculators.mean_n_absolute_max` (v0.21.2).
+/// `feature_calculators.mean_n_absolute_max` (v0.21.2): the `np.mean` of the
+/// last $n$ values of `np.sort(np.abs(x))`, summed as numpy does.
 pub struct MeanNAbsoluteMax {
     pub ns: Vec<usize>,
 }
@@ -486,18 +489,14 @@ impl Kernel for MeanNAbsoluteMax {
     }
 
     fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
-        let largest = ctx
-            .x()
-            .iter()
-            .map(|x| -OrderedFloat::from(x.abs()))
-            .k_smallest(self.ns.iter().copied().max().unwrap_or(0))
-            .map(|x| -f64::from(x))
-            .collect::<Vec<f64>>();
+        // np.sort(np.abs(x)): ascending, NaN last
+        let mut abs = ctx.values().iter().map(|x| x.abs()).collect::<Vec<f64>>();
+        abs.sort_unstable_by(f64::total_cmp);
         for &n in &self.ns {
-            out.push(if ctx.len() < n {
-                f64::NAN
+            out.push(if ctx.len() > n {
+                numpy_mean(&abs[abs.len() - n..])
             } else {
-                largest.iter().take(n).sum::<f64>() / n as f64
+                f64::NAN
             });
         }
     }
