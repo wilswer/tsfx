@@ -28,6 +28,9 @@ Current deviations:
 - ``query_similarity_count`` of a series shorter than the query (tsfresh
   raises; TSFX gives NaN)
 - ``fft_coefficient`` with a NaN or +-inf in the series
+- ``number_cwt_peaks`` where neighbouring wavelet coefficients are tied in
+  real arithmetic (rounding decides; tsfx's arithmetic is portable, numpy's
+  depends on its BLAS and CPU)
 
 Cases that still fail are marked with ``_bug`` (strict xfail), so the marker
 must be removed once the fix lands.
@@ -1482,6 +1485,15 @@ _SINE_60 = [math.sin(i / 2) for i in range(60)]
 )
 def test_number_cwt_peaks_generated(values, n, expected):
     _assert_feature(values, f"val__number_cwt_peaks__n_{n}", expected)
+
+
+def test_number_cwt_peaks_tied_bump_deviation():
+    # A Gaussian bump centred on a sample: with even-length wavelets two
+    # neighbouring coefficients are tied, and rounding picks the maximum.
+    # tsfresh (numpy 2.4.4 / OpenBLAS on AVX-512) counts 1 peak at n = 5.
+    x = [math.exp(-((i - 25) ** 2) / 20) for i in range(50)]
+    _assert_feature(x, "val__number_cwt_peaks__n_1", 1)
+    _assert_feature(x, "val__number_cwt_peaks__n_5", 2)
 
 
 def test_cwt_coefficients():

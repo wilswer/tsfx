@@ -15,7 +15,10 @@ Features tsfresh computes with numpy must match bit for bit; the families in
 ``TOLERANT`` (pandas, scipy or BLAS arithmetic tsfx does not reproduce) are
 compared with a relative and absolute tolerance of 1e-9. The documented
 deliberate deviations are excluded in ``_deviation``, and columns tsfresh has
-no counterpart for in ``_tsfx_only``. Calculators get what tsfresh's
+no counterpart for in ``_tsfx_only``. ``number_cwt_peaks`` is compared with
+scipy's peak finder run on tsfx's portable arithmetic (``_number_cwt_peaks``),
+because tied coefficients make the count depend on rounding. Calculators get
+what tsfresh's
 ``extract_features`` passes them: a numpy array, or a pandas Series where
 the calculator asks for one.
 """
@@ -53,6 +56,7 @@ TOLERANT = {
     "benford_correlation",
     "fft_aggregated",
     "fourier_entropy",
+    "cwt_coefficients",
 }
 
 # FFT-based features, compared with tolerances that scale with the series
@@ -141,6 +145,46 @@ def _input(fn: object, x: object) -> object:
     return x
 
 
+def _plain_convolve(a: object, v: object, mode: str = "same") -> object:
+    """``np.convolve`` with each output a plain sequential sum, as tsfx."""
+    a, v = (v, a) if len(v) > len(a) else (a, v)
+    n1, n2 = len(a), len(v)
+    full = []
+    for k in range(n1 + n2 - 1):
+        r = 0.0
+        for j in range(max(0, k - n1 + 1), min(k, n2 - 1) + 1):
+            r += a[k - j] * v[j]
+        full.append(r)
+    start = 0 if mode == "full" else (n2 - 1) // 2
+    return np.array(full[start : start + (n1 + n2 - 1 if mode == "full" else n1)])
+
+
+def _ricker(points: int, a: float) -> object:
+    """tsfresh's ``_ricker`` with the C library's ``exp`` per value, as tsfx."""
+    amp = 2 / (math.sqrt(3 * a) * math.pi**0.25)
+    wsq = a**2
+    vec = np.arange(0, points) - (points - 1.0) / 2
+    return np.array(
+        [amp * (1 - v * v / wsq) * math.exp(-v * v / (2 * wsq)) for v in vec]
+    )
+
+
+def _number_cwt_peaks(x: object, n: int) -> int:
+    """tsfresh's ``number_cwt_peaks`` (scipy's ``find_peaks_cwt``) evaluated
+    with tsfx's portable convolution and ``exp``: tied neighbouring
+    coefficients are common (any series symmetric about a point between two
+    samples), and which one wins is decided by rounding."""
+    import scipy.signal._wavelets as wavelets
+    from scipy.signal import find_peaks_cwt
+
+    original = wavelets.convolve
+    wavelets.convolve = _plain_convolve
+    try:
+        return len(find_peaks_cwt(x, np.arange(1, n + 1), wavelet=_ricker))
+    finally:
+        wavelets.convolve = original
+
+
 def _tsfresh(x: object, column: str) -> float:
     """tsfresh's value for a tsfx output column."""
     m = re.fullmatch(
@@ -163,6 +207,8 @@ def _tsfresh(x: object, column: str) -> float:
         return fc.cid_ce(x, params["normalize"] == "t")
     if name == "range_count":
         return fc.range_count(x, float(params["min"]), float(params["max"]))
+    if name == "number_cwt_peaks":
+        return _number_cwt_peaks(x, int(params["n"]))
     if name == "cwt_coefficients":
         param = {
             "widths": tuple(int(w) for w in params["widths"].split("_")),

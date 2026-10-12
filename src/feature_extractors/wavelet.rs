@@ -1,125 +1,42 @@
 //! Continuous wavelet transforms with the Ricker ("Mexican hat") wavelet.
 //!
-//! Both features convolve the series with sampled wavelets. The convolution
-//! reproduces `np.convolve` as numpy (with OpenBLAS) evaluates it on x86-64,
-//! summation order and fused multiply-adds included, and the wavelets are
-//! sampled with numpy's and pywt's exact `exp` / `pow` results, so that
-//! tsfresh's comparisons between neighbouring coefficients (which decide
-//! [`NumberCwtPeaks`], and which ties in real arithmetic leave to rounding)
-//! come out the same. On that platform both features equal tsfresh's bit
-//! for bit; with another BLAS or CPU, numpy's own rounding differs, and so
-//! may tied comparisons.
+//! Both features convolve the series with sampled wavelets, using one
+//! portable direct convolution, so results are the same on every platform.
+//! They equal tsfresh's within rounding. [`NumberCwtPeaks`] compares
+//! neighbouring coefficients; where two are tied in real arithmetic (for
+//! example on a series symmetric about a point between two samples),
+//! rounding decides, and the count can differ from tsfresh's. numpy's own
+//! result there depends on its BLAS and CPU.
 
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
 use super::kernel::{GroupContext, Kernel};
 
-/// Dot product as OpenBLAS's x86-64 `ddot` kernels (Haswell / SkylakeX)
-/// evaluate it: blocks of 32 values in four 8-wide FMA accumulators (each
-/// folded to 4 wide afterwards), then blocks of 16 in four 4-wide ones,
-/// a fixed reduction tree, and the tail with scalar FMAs. numpy adds the
-/// result to `0.0`.
-#[inline(always)]
-fn ddot_impl(x: &[f64], y: &[f64]) -> f64 {
-    let n = x.len();
-    let n1 = n & !15;
-    let mut i = 0;
-    let mut dot = 0.0;
-    if n1 > 0 {
-        let mut wide = [[0.0_f64; 8]; 4];
-        let n32 = n1 & !31;
-        while i < n32 {
-            for (r, acc) in wide.iter_mut().enumerate() {
-                for (l, a) in acc.iter_mut().enumerate() {
-                    let k = i + 8 * r + l;
-                    *a = x[k].mul_add(y[k], *a);
-                }
-            }
-            i += 32;
-        }
-        let mut acc: [[f64; 4]; 4] =
-            std::array::from_fn(|r| std::array::from_fn(|l| wide[r][l] + wide[r][l + 4]));
-        while i < n1 {
-            for (r, a4) in acc.iter_mut().enumerate() {
-                for (l, a) in a4.iter_mut().enumerate() {
-                    let k = i + 4 * r + l;
-                    *a = x[k].mul_add(y[k], *a);
-                }
-            }
-            i += 16;
-        }
-        let a0: [f64; 4] =
-            std::array::from_fn(|l| ((acc[0][l] + acc[1][l]) + acc[2][l]) + acc[3][l]);
-        dot = (a0[0] + a0[2]) + (a0[1] + a0[3]);
-    }
-    for k in i..n {
-        dot = y[k].mul_add(x[k], dot);
-    }
-    0.0 + dot
-}
-
-#[cfg(target_arch = "x86_64")]
-#[target_feature(enable = "fma")]
-fn ddot_fma(x: &[f64], y: &[f64]) -> f64 {
-    ddot_impl(x, y)
-}
-
-/// See [`ddot_impl`]; uses hardware FMA when available (same results,
-/// `mul_add` is exact either way).
-fn ddot(x: &[f64], y: &[f64]) -> f64 {
-    #[cfg(target_arch = "x86_64")]
-    if std::arch::is_x86_feature_detected!("fma") {
-        // SAFETY: the CPU supports FMA
-        return unsafe { ddot_fma(x, y) };
-    }
-    ddot_impl(x, y)
-}
-
-/// `np.convolve(a, v, mode)` for `mode` `"full"` or `"same"`.
-///
-/// numpy swaps the inputs so that `a` is the longer one, then correlates
-/// `a` with the reversed `v`: edge outputs (and all outputs for kernels
-/// longer than 11 values) with BLAS `ddot`, the rest with a plain
-/// sequential loop (numpy's `small_correlate`).
+/// `np.convolve(a, v, mode)` for `mode` `"full"` or `"same"`: each output
+/// is a plain sequential sum over the overlapping samples.
 fn np_convolve(a: &[f64], v: &[f64], full: bool) -> Vec<f64> {
     let (a, v) = if v.len() > a.len() { (v, a) } else { (a, v) };
-    let k: Vec<f64> = v.iter().rev().copied().collect();
-    let (n1, n2) = (a.len(), k.len());
-    let (n_left, n_right) = if full {
-        (n2 - 1, n2 - 1)
+    let (n1, n2) = (a.len(), v.len());
+    // Index into the full convolution (length n1 + n2 - 1) of the first
+    // output, and the number of outputs
+    let (first, len) = if full {
+        (0, n1 + n2 - 1)
     } else {
-        (n2 / 2, n2 - n2 / 2 - 1)
+        ((n2 - 1) / 2, n1)
     };
-    let mut out = Vec::with_capacity(n1 + n_left + n_right + 1 - n2);
-    let mut ip2 = n_left;
-    let mut n = n2 - n_left;
-    let mut p1 = 0;
-    for _ in 0..n_left {
-        out.push(ddot(&a[p1..p1 + n], &k[ip2..ip2 + n]));
-        n += 1;
-        ip2 -= 1;
-    }
-    if n2 <= 11 {
-        for i in 0..=n1 - n2 {
+    (first..first + len)
+        .map(|k| {
+            // full[k] = sum over j of a[k - j] * v[j], for valid indices
+            let lo = k.saturating_sub(n1 - 1);
+            let hi = k.min(n2 - 1);
             let mut r = 0.0;
-            for (j, kj) in k.iter().enumerate() {
-                r += a[i + j] * kj;
+            for j in lo..=hi {
+                r += a[k - j] * v[j];
             }
-            out.push(r);
-        }
-    } else {
-        for i in 0..=n1 - n2 {
-            out.push(ddot(&a[i..i + n], &k));
-        }
-    }
-    p1 += n1 - n2 + 1;
-    for _ in 0..n_right {
-        n -= 1;
-        out.push(ddot(&a[p1..p1 + n], &k[ip2..ip2 + n]));
-        p1 += 1;
-    }
-    out
+            r
+        })
+        .collect()
 }
 
 /// Number of samples of the integrated wavelet table (`precision = 12`).
@@ -145,17 +62,13 @@ fn compute_integrated_mexh() -> (Vec<f64>, f64) {
             i as f64 * step + lo
         }
     };
-    // Evaluated as pywt's C code does (bitwise equal to its table), with
-    // t^2 from the C library's pow, which is not always t * t; black_box
-    // keeps the compiler from turning pow(t, 2) into t * t
     let norm = 3.0_f64.sqrt() * PI.sqrt().sqrt();
-    let two = std::hint::black_box(2.0);
     let dx = grid(1) - grid(0);
     let mut acc = 0.0;
     let table = (0..PSI_POINTS)
         .map(|i| {
             let t = grid(i);
-            let t2 = t.powf(two);
+            let t2 = t * t;
             acc += (1.0 - t2) * (-t2 / 2.0).exp() * 2.0 / norm;
             acc * dx
         })
@@ -276,121 +189,10 @@ fn ricker(points: usize, a: usize) -> Vec<f64> {
             let v = i as f64 - half;
             let xsq = v * v;
             let modulation = 1.0 - xsq / wsq;
-            let gauss = np_exp(-xsq / (2.0 * wsq));
+            let gauss = (-xsq / (2.0 * wsq)).exp();
             amp * modulation * gauss
         })
         .collect()
-}
-
-/// `np.exp` of one value as numpy evaluates arrays: on x86-64 CPUs with
-/// AVX-512 (Skylake-X and later) numpy calls Intel SVML's `__svml_exp8_ha`,
-/// which this reproduces bit for bit (its 16-entry table and polynomial,
-/// from numpy's vendored SVML); elsewhere numpy uses the C library's `exp`,
-/// as does this.
-///
-/// The Ricker wavelet's exact bits decide which of two tied neighbouring
-/// coefficients wins (for example on a series symmetric around a point
-/// between two samples), so they must match numpy's.
-fn np_exp(x: f64) -> f64 {
-    #[cfg(target_arch = "x86_64")]
-    {
-        use std::sync::OnceLock;
-        static SVML: OnceLock<bool> = OnceLock::new();
-        let svml = *SVML.get_or_init(|| {
-            std::arch::is_x86_feature_detected!("avx512f")
-                && std::arch::is_x86_feature_detected!("avx512cd")
-                && std::arch::is_x86_feature_detected!("avx512bw")
-                && std::arch::is_x86_feature_detected!("avx512dq")
-                && std::arch::is_x86_feature_detected!("avx512vl")
-        });
-        // Beyond SVML's threshold it calls out to a scalar routine
-        if svml && x.abs() < 707.0 {
-            return svml_exp_ha(x);
-        }
-    }
-    x.exp()
-}
-
-/// `__svml_exp8_ha` (one lane) for $|x| < 707$: $x = (M + j/16 + ...)\ln 2$
-/// with $N = M + j/16$ rounded towards $-\infty$ to 1/16, then
-/// $e^x = 2^M\, T_h[j]\,(1 + p)$ with
-/// $p = T_l[j] + r\,(c_1 + c_2 r + \dots + c_6 r^5)$, $r = x - N \ln 2$.
-fn svml_exp_ha(x: f64) -> f64 {
-    const TH: [u64; 16] = [
-        0x3ff0000000000000,
-        0x3ff0b5586cf9890f,
-        0x3ff172b83c7d517b,
-        0x3ff2387a6e756238,
-        0x3ff306fe0a31b715,
-        0x3ff3dea64c123422,
-        0x3ff4bfdad5362a27,
-        0x3ff5ab07dd485429,
-        0x3ff6a09e667f3bcd,
-        0x3ff7a11473eb0187,
-        0x3ff8ace5422aa0db,
-        0x3ff9c49182a3f090,
-        0x3ffae89f995ad3ad,
-        0x3ffc199bdd85529c,
-        0x3ffd5818dcfba487,
-        0x3ffea4afa2a490da,
-    ];
-    const TLR: [u64; 16] = [
-        0x0000000000000000,
-        0x3c979aa65d837b6d,
-        0xbc801b15eaa59348,
-        0x3c968efde3a8a894,
-        0x3c834d754db0abb6,
-        0x3c859f48a72a4c6d,
-        0x3c7690cebb7aafb0,
-        0x3c9063e1e21c5409,
-        0xbc93b3efbf5e2228,
-        0xbc7b32dcb94da51d,
-        0x3c8db72fc1f0eab4,
-        0x3c71affc2b91ce27,
-        0x3c8c1a7792cb3387,
-        0x3c736eae30af0cb3,
-        0x3c74a385a63d07a7,
-        0xbc8ff7128fd391f0,
-    ];
-    let c = f64::from_bits;
-    let log2e = c(0x3ff71547652b82fe);
-    let (ln2_hi, ln2_lo) = (c(0x3fe62e42fefa39ef), c(0x3c7abc9e3b39803f));
-    let [c6, c5, c4, c3, c2, c1] = [
-        0x3f57411836940c04,
-        0x3f81101cbbc265c0,
-        0x3fa55557242d68fe,
-        0x3fc5555553939732,
-        0x3fe000000000d008,
-        0x3fefffffffffff70,
-    ]
-    .map(c);
-    // floor(16 x log2(e)) of the exact product (SVML: a round-to-zero FMA
-    // onto a large positive shifter)
-    let hi = x * log2e;
-    let lo = x.mul_add(log2e, -hi);
-    let mut f = (hi * 16.0).floor();
-    if hi * 16.0 == f && lo < 0.0 {
-        f -= 1.0;
-    }
-    let f = f as i64;
-    let n = f as f64 / 16.0;
-    let j = (f & 15) as usize;
-    let m = f >> 4;
-    let r = (-n).mul_add(ln2_hi, x);
-    let r = (-ln2_lo).mul_add(n, r);
-    // SVML masks the exponent so that |r| < 2 even for special inputs
-    let r = c(r.to_bits() & 0xbfffffffffffffff);
-    let r2 = r * r;
-    let p56 = c6.mul_add(r, c5);
-    let p34 = c4.mul_add(r, c3);
-    let p12 = c2.mul_add(r, c1);
-    let p = r2.mul_add(p56, p34);
-    let p = r2.mul_add(p, p12);
-    let p = p.mul_add(r, c(TLR[j]));
-    let th = c(TH[j]);
-    let res = th.mul_add(p, th);
-    // vscalefpd: res * 2^m, exact for normal results
-    res * 2.0_f64.powi(m as i32)
 }
 
 /// `scipy.stats.scoreatpercentile(values, per)` (`interpolation_method =
@@ -559,6 +361,14 @@ fn count_cwt_peaks(x: &[f64], n: usize) -> usize {
 ///   wavelet is very long (widths of roughly 30 and more on long series);
 ///   there, scipy's FFT rounding noise (and its spreading of NaN or
 ///   $\pm\infty$ over the whole row) can change the count.
+/// - **Deliberate deviation from tsfresh:** where two neighbouring
+///   coefficients are tied in real arithmetic, rounding decides which is the
+///   maximum. tsfx uses one portable convolution and the standard `exp`, so
+///   its counts are the same on every platform, while numpy's rounding (and
+///   so tsfresh's count) depends on its BLAS and CPU. Ties are common for
+///   smooth series symmetric about a point between two samples: a Gaussian
+///   bump centred on a sample counts 2 peaks with `n = 5`, tsfresh 1.
+///   Irregular series are not affected.
 ///
 /// # Cost
 /// $O(\text{len} \cdot n^2)$.
@@ -602,8 +412,9 @@ mod tests {
 
     #[test]
     fn test_cwt_peaks_of_bump() {
+        // Off-centre, so no two neighbouring coefficients are tied
         let x: Vec<f64> = (0..50)
-            .map(|i| (-((i as f64 - 25.0).powi(2)) / 20.0).exp())
+            .map(|i| (-((i as f64 - 25.3).powi(2)) / 20.0).exp())
             .collect();
         assert_eq!(count_cwt_peaks(&x, 1), 1);
         assert_eq!(count_cwt_peaks(&x, 5), 1);
