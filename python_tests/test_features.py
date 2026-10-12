@@ -79,6 +79,27 @@ def test_quantile_with_nulls_matches_numpy_exactly():
     assert features["val__quantile__q_0.2"] == 0.40000000000000013
 
 
+@pytest.mark.parametrize("n", [5, 9, 100, 129, 1259])
+def test_mean_variance_std_match_numpy_exactly(n):
+    """mean, variance and standard_deviation equal np.mean, np.var and np.std
+    bit for bit (numpy's pairwise summation, as tsfresh computes them). The
+    earlier Welford variance and unrolled mean differed in the last bits."""
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(n)
+    values = list(100 + 5 * rng.standard_normal(n))
+    df = pl.DataFrame({"id": ["a"] * n, "val": values})
+    opts = ExtractionSettings(
+        grouping_cols=["id"],
+        feature_setting=FeatureSetting.Minimal,
+        value_cols=["val"],
+    )
+    features = extract_features(df.lazy(), opts).row(0, named=True)
+    x = np.array(values)
+    assert features["val__mean"] == float(np.mean(x))
+    assert features["val__variance"] == float(np.var(x))
+    assert features["val__standard_deviation"] == float(np.std(x))
+
+
 def test_only_nan_group_dropped_with_date():
     df = pl.DataFrame(
         {

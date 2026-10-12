@@ -17,6 +17,15 @@ All notable changes to TSFX are documented here.
   (they were null), like every other feature and like tsfresh.
 - `quantile` of a group that contains nulls now equals `np.quantile` of its
   non-null values exactly; it could differ in the last bits before.
+- `mean`, `variance`, `standard_deviation` and every feature built on the
+  mean or variance (for example `variation_coefficient`,
+  `ratio_beyond_r_sigma`, `large_standard_deviation`, `autocorrelation`,
+  normalised `cid_ce`, `count_above_mean`) now use numpy's summation and
+  equal tsfresh's `np.mean` / `np.var` / `np.std` bit for bit (before: in
+  29% of cases for the variance). Most values change only in the last bits,
+  but threshold features can change where a value sits exactly on the
+  threshold: `ratio_beyond_r_sigma` of `[1, 3, 3, -2, 7, 7, 0, 1]` with
+  `r = 1.5` is now 0, as in tsfresh (it was 0.375).
 - Feature values now match tsfresh v0.21.2 for every feature, which changes
   results for many features compared with 0.3.3, and invalid config files
   raise `ValueError`. See

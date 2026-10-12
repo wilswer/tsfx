@@ -425,9 +425,12 @@ def test_agg_linear_trend_var_generated(values, attr, expected):
 
 
 # ratio_beyond_r_sigma(np.array([0, 0, 0, 1.0]), r=1.5)
+# ratio_beyond_r_sigma(np.array([1, 3, 3, -2, 7, 7, 0, 1.0]), r=1.5) with
+# tsfresh 0.21.2 / numpy 2.4.4: std is exactly 3, so the three values exactly
+# 4.5 from the mean are not beyond 1.5 sigma (needs np.std bit for bit).
 @pytest.mark.parametrize(
     ("values", "r", "expected"),
-    [([0, 0, 0, 1], "1.50", 0.25)],
+    [([0, 0, 0, 1], "1.50", 0.25), ([1, 3, 3, -2, 7, 7, 0, 1], "1.50", 0.0)],
 )
 def test_ratio_beyond_r_sigma_generated(values, r, expected):
     _assert_feature(values, f"val__ratio_beyond_r_sigma__r_{r}", expected)

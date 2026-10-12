@@ -15,12 +15,12 @@ use ndarray::{Array1, ArrayView1, s};
 use polars::prelude::*;
 
 use super::f64_values;
-use crate::utils::stats::population_var;
+use crate::utils::stats::{numpy_mean, population_var};
 
 /// One group's values (nulls dropped) and the statistics features share.
 ///
-/// Shared statistics are computed on first use, with exactly the code the
-/// features used before, so sharing does not change any value.
+/// Shared statistics are computed at most once, on first use; mean and
+/// variance exactly as numpy computes them.
 pub struct GroupContext<'a> {
     values: &'a [f64],
     has_nulls: bool,
@@ -69,9 +69,10 @@ impl<'a> GroupContext<'a> {
         self.x.is_empty()
     }
 
-    /// Arithmetic mean; NaN if any value is NaN.
+    /// Arithmetic mean, exactly as `np.mean` ([`numpy_mean`]); NaN if any
+    /// value is NaN.
     pub fn mean(&self) -> f64 {
-        *self.mean.get_or_init(|| self.x.mean().unwrap_or(f64::NAN))
+        *self.mean.get_or_init(|| numpy_mean(self.values))
     }
 
     /// Population variance (`ddof = 0`), see [`population_var`].
@@ -80,7 +81,7 @@ impl<'a> GroupContext<'a> {
     }
 
     /// Population standard deviation (`ddof = 0`): the square root of
-    /// [`Self::var`], exactly as `ndarray`'s `std` computes it.
+    /// [`Self::var`], exactly as `np.std` computes it.
     pub fn std(&self) -> f64 {
         self.var().sqrt()
     }

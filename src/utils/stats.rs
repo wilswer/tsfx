@@ -7,20 +7,66 @@ use ndarray::{Array1, ArrayView1, Axis};
 use ndarray_stats::errors::QuantileError;
 use num::FromPrimitive;
 
-/// Population variance (`ddof = 0`) of a series.
-///
-/// Matches `np.var` as used by tsfresh. Returns the raw value; how a zero
-/// variance is handled is up to each feature.
-pub fn population_var(arr: &ArrayView1<f64>) -> f64 {
-    arr.var(0.0)
+/// Sum of `value(0), ..., value(n - 1)` exactly as numpy's `add.reduce` sums
+/// a contiguous `float64` array (numpy 2.x): pairwise summation with eight
+/// accumulators for blocks of up to 128 values, split in halves above that,
+/// added to an initial `0.0`. Results equal numpy's bit for bit, which a
+/// straight or Welford sum does not.
+pub fn numpy_sum(n: usize, value: impl Fn(usize) -> f64) -> f64 {
+    0.0 + pairwise_sum(0, n, &value)
 }
 
-/// Population standard deviation (`ddof = 0`) of a series.
+fn pairwise_sum(start: usize, n: usize, value: &impl Fn(usize) -> f64) -> f64 {
+    if n < 8 {
+        (start..start + n).fold(0.0, |res, i| res + value(i))
+    } else if n <= 128 {
+        let mut r: [f64; 8] = std::array::from_fn(|j| value(start + j));
+        let mut i = 8;
+        while i < n - n % 8 {
+            for (j, acc) in r.iter_mut().enumerate() {
+                *acc += value(start + i + j);
+            }
+            i += 8;
+        }
+        let mut res = ((r[0] + r[1]) + (r[2] + r[3])) + ((r[4] + r[5]) + (r[6] + r[7]));
+        for k in i..n {
+            res += value(start + k);
+        }
+        res
+    } else {
+        let mut n2 = n / 2;
+        n2 -= n2 % 8;
+        pairwise_sum(start, n2, value) + pairwise_sum(start + n2, n - n2, value)
+    }
+}
+
+/// Arithmetic mean, exactly as `np.mean` (see [`numpy_sum`]). NaN for an
+/// empty series or if any value is NaN.
+pub fn numpy_mean(x: &[f64]) -> f64 {
+    numpy_sum(x.len(), |i| x[i]) / x.len() as f64
+}
+
+/// Population variance (`ddof = 0`) of a series.
 ///
-/// Matches `np.std` as used by tsfresh. Returns the raw value; how a zero
-/// standard deviation is handled is up to each feature.
+/// Exactly `np.var` as used by tsfresh: the mean, then the mean of the
+/// squared deviations, both summed as numpy does (see [`numpy_sum`]).
+/// Returns the raw value; how a zero variance is handled is up to each
+/// feature.
+pub fn population_var(arr: &ArrayView1<f64>) -> f64 {
+    let n = arr.len();
+    let mean = numpy_sum(n, |i| arr[i]) / n as f64;
+    numpy_sum(n, |i| {
+        let d = arr[i] - mean;
+        d * d
+    }) / n as f64
+}
+
+/// Population standard deviation (`ddof = 0`) of a series: the square root
+/// of [`population_var`], exactly `np.std` as used by tsfresh. Returns the
+/// raw value; how a zero standard deviation is handled is up to each
+/// feature.
 pub fn population_std(arr: &ArrayView1<f64>) -> f64 {
-    arr.std(0.0)
+    population_var(arr).sqrt()
 }
 
 /// Treat a sum of `k`-th power deviations as zero when it is within
