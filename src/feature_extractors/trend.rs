@@ -1,40 +1,11 @@
 //! Linear fits over time.
 
-use anyhow::Result;
-use ndarray::ArrayView1;
-use polars::lazy::dsl::*;
-use polars::prelude::*;
-
-use super::f64_values;
+use super::kernel::{GroupContext, Kernel};
 use crate::utils::stats::{
     aggregate_on_chunks, calculate_sequential_ols, skip_nan_mean, skip_nan_median, skip_nan_reduce,
     skip_nan_sample_var,
 };
 use crate::utils::toml_reader::ChunkAggregator;
-
-fn _linear_trend(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-
-    // Cast the column to Float64
-    let series = s.as_materialized_series().cast(&DataType::Float64)?;
-    let ca = series.f64()?;
-
-    // Call our decoupled OLS function
-    let (intercept, slope) = calculate_sequential_ols(ca.into_no_null_iter(), ca.len());
-
-    // Build the Struct column result
-    let result = DataFrame::new(
-        1,
-        vec![
-            Column::new("intercept".into(), &[intercept]),
-            Column::new("slope".into(), &[slope]),
-        ],
-    )?
-    .into_struct("linear_trend".into())
-    .into_column();
-
-    Ok(result)
-}
 
 /// Linear trend feature.
 ///
@@ -55,78 +26,20 @@ fn _linear_trend(s: Column) -> Result<Column, PolarsError> {
 /// # tsfresh
 /// `feature_calculators.linear_trend` (v0.21.2) with `attr` = `"intercept"`
 /// or `"slope"`.
-pub fn linear_trend(name: &str) -> Expr {
-    let name = name.to_string();
-    col(&name)
-        .apply(_linear_trend, |_, _| {
-            Ok(Field::new(
-                "".into(),
-                DataType::Struct(vec![
-                    Field::new("intercept".into(), DataType::Float64),
-                    Field::new("slope".into(), DataType::Float64),
-                ]),
-            ))
-        })
-        .struct_()
-        .rename_fields(
-            [
-                format!("{}__linear_trend_intercept", name),
-                format!("{}__linear_trend_slope", name),
-            ]
-            .to_vec(),
-        )
-        .get(0, true)
-        .alias(format!("{}__linear_trend", name))
-}
+pub struct LinearTrend;
 
-fn _agg_linear_trend(
-    s: Column,
-    chunk_size: usize,
-    aggregator: ChunkAggregator,
-) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() || s.len() < chunk_size {
-        let s_i = f64::NAN;
-        let s_s = f64::NAN;
-        let s = DataFrame::new(
-            1,
-            vec![
-                Column::new("agg_intercept".into(), &[s_i]),
-                Column::new("agg_slope".into(), &[s_s]),
-            ],
-        )?
-        .into_struct("agg_linear_trend".into())
-        .into_column();
-        return Ok(s);
-    }
-    let ca = f64_values(&s)?;
-    let arr = ArrayView1::from(ca.cont_slice()?);
-    let agg_arr = match aggregator {
-        ChunkAggregator::Mean => aggregate_on_chunks(&arr, chunk_size, skip_nan_mean),
-        ChunkAggregator::Median => aggregate_on_chunks(&arr, chunk_size, skip_nan_median),
-        ChunkAggregator::Max => {
-            aggregate_on_chunks(&arr, chunk_size, |x| skip_nan_reduce(x, f64::max))
-        }
-        ChunkAggregator::Min => {
-            aggregate_on_chunks(&arr, chunk_size, |x| skip_nan_reduce(x, f64::min))
-        }
-        // ddof=1 on purpose: tsfresh aggregates chunks with pandas' Series.var
-        ChunkAggregator::Var => aggregate_on_chunks(&arr, chunk_size, skip_nan_sample_var),
-    };
-    let agg_len = agg_arr.len();
-    let (s_i, s_s) = calculate_sequential_ols(agg_arr, agg_len);
-
-    let s = DataFrame::new(
-        1,
+impl Kernel for LinearTrend {
+    fn names(&self) -> Vec<String> {
         vec![
-            Column::new("agg_intercept".into(), &[s_i]),
-            Column::new("agg_slope".into(), &[s_s]),
-        ],
-    )?
-    .into_struct("agg_linear_trend".into())
-    .into_column();
+            "linear_trend_intercept".to_string(),
+            "linear_trend_slope".to_string(),
+        ]
+    }
 
-    Ok(s)
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        let (intercept, slope) = calculate_sequential_ols(ctx.values().iter().copied(), ctx.len());
+        out.extend([intercept, slope]);
+    }
 }
 
 /// Aggregated linear trend feature.
@@ -134,7 +47,7 @@ fn _agg_linear_trend(
 /// Split the series into consecutive chunks of `chunk_size` values (the last
 /// chunk may be shorter), aggregate each chunk to one number, and fit a
 /// least-squares line through the aggregates against the chunk index, as in
-/// [`linear_trend`]. Returns the intercept and slope of that line.
+/// [`LinearTrend`]. Returns the intercept and slope of that line.
 ///
 /// # Parameters
 /// - `chunk_size`: values per chunk.
@@ -159,40 +72,46 @@ fn _agg_linear_trend(
 /// # tsfresh
 /// `feature_calculators.agg_linear_trend` (v0.21.2) with `chunk_len`,
 /// `f_agg` and `attr` = `"intercept"` or `"slope"`.
-pub fn agg_linear_trend(name: &str, chunk_size: usize, aggregator: ChunkAggregator) -> Expr {
-    let agg_str = aggregator.to_string();
-    let agg_enum = aggregator;
-    let name = name.to_string();
-    col(&name)
-        .apply(
-            move |s| _agg_linear_trend(s, chunk_size, agg_enum.clone()),
-            |_, _| {
-                Ok(Field::new(
-                    "".into(),
-                    DataType::Struct(vec![
-                        Field::new("agg_intercept".into(), DataType::Float64),
-                        Field::new("agg_slope".into(), DataType::Float64),
-                    ]),
-                ))
-            },
-        )
-        .struct_()
-        .rename_fields(
-            [
-                format!(
-                    "{}__agg_linear_trend_intercept__chunk_size_{:.1}__agg_{}",
-                    name, chunk_size, agg_str
-                ),
-                format!(
-                    "{}__agg_linear_trend_slope__chunk_size_{:.1}__agg_{}",
-                    name, chunk_size, agg_str
-                ),
-            ]
-            .to_vec(),
-        )
-        .get(0, true)
-        .alias(format!(
-            "{}__agg_linear_trend__chunk_size_{:.1}__agg_{}",
-            name, chunk_size, agg_str
-        ))
+pub struct AggLinearTrend {
+    /// `(chunk_size, aggregator)` per config entry.
+    pub params: Vec<(usize, ChunkAggregator)>,
+}
+
+impl Kernel for AggLinearTrend {
+    fn names(&self) -> Vec<String> {
+        self.params
+            .iter()
+            .flat_map(|(chunk_size, aggregator)| {
+                ["intercept", "slope"].map(|attr| {
+                    format!("agg_linear_trend_{attr}__chunk_size_{chunk_size:.1}__agg_{aggregator}")
+                })
+            })
+            .collect()
+    }
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        let x = ctx.x();
+        for (chunk_size, aggregator) in &self.params {
+            let chunk_size = *chunk_size;
+            if x.len() < chunk_size {
+                out.extend([f64::NAN, f64::NAN]);
+                continue;
+            }
+            let aggregates = match aggregator {
+                ChunkAggregator::Mean => aggregate_on_chunks(x, chunk_size, skip_nan_mean),
+                ChunkAggregator::Median => aggregate_on_chunks(x, chunk_size, skip_nan_median),
+                ChunkAggregator::Max => {
+                    aggregate_on_chunks(x, chunk_size, |c| skip_nan_reduce(c, f64::max))
+                }
+                ChunkAggregator::Min => {
+                    aggregate_on_chunks(x, chunk_size, |c| skip_nan_reduce(c, f64::min))
+                }
+                // ddof=1 on purpose: tsfresh aggregates chunks with pandas' Series.var
+                ChunkAggregator::Var => aggregate_on_chunks(x, chunk_size, skip_nan_sample_var),
+            };
+            let n = aggregates.len();
+            let (intercept, slope) = calculate_sequential_ols(aggregates, n);
+            out.extend([intercept, slope]);
+        }
+    }
 }

@@ -38,7 +38,7 @@ use statistics::{
     SumValues, SymmetryLooking, Variance, VarianceLargerThanStandardDeviation,
     VariationCoefficient, count, expr_median, expr_quantile,
 };
-use trend::{agg_linear_trend, linear_trend};
+use trend::{AggLinearTrend, LinearTrend};
 
 /// Feature expressions for the configured features of the selected tier.
 ///
@@ -102,7 +102,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 plan.push(MeanAbsoluteChange);
             }
             if config.linear_trend.is_some() {
-                aggregators.push(linear_trend(col));
+                plan.push(LinearTrend);
             }
             if config.variance_larger_than_standard_deviation.is_some() {
                 plan.push(VarianceLargerThanStandardDeviation);
@@ -205,10 +205,12 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 plan.push(MeanChange);
             }
             if let Some(feature) = &config.agg_linear_trend {
-                let params = &feature.parameters;
-                for p in params {
-                    aggregators.push(agg_linear_trend(col, p.chunk_size, p.aggregator.clone()));
-                }
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.chunk_size, p.aggregator.clone()))
+                    .collect();
+                plan.push(AggLinearTrend { params });
             }
             if let Some(feature) = &config.mean_n_absolute_max {
                 let params = &feature.parameters;
