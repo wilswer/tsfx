@@ -1092,6 +1092,11 @@ def test_numpy_summation_exact(values, column, expected):
         ([131073.0, 0.99999], "median", 65536.999995),
         ([0.0, -3.0], "quantile__q_0.8", -0.5999999999999999),
         ([1.0, 2.0, math.inf], "quantile__q_0.5", math.nan),
+        # at the last index numpy interpolates the last value with itself
+        ([math.inf], "quantile__q_0.1", math.nan),
+        ([1.0, math.inf], "quantile__q_1.0", math.nan),
+        ([1.0, 2.0], "quantile__q_1.0", 2.0),
+
         ([1.0, 2.0, math.inf], "median", 2.0),
     ],
 )

@@ -201,21 +201,23 @@ where
 }
 
 /// The `q`-quantile of `sorted` (ascending, not empty), exactly as
-/// `np.quantile` computes it (method "linear"): index $h = (n - 1)\,q$; at
-/// or beyond the last index the largest value; otherwise, with neighbours
-/// $a = x_{(\lfloor h \rfloor)}$, $b = x_{(\lfloor h \rfloor + 1)}$ and
-/// $t = h - \lfloor h \rfloor$, numpy's `_lerp`: $a + (b - a)\,t$ for
-/// $t < 0.5$, $b - (b - a)(1 - t)$ otherwise. (So an infinite neighbour with
-/// $t = 0$ gives NaN, as in numpy.)
+/// `np.quantile` computes it (method "linear"): index $h = (n - 1)\,q$,
+/// neighbours $a = x_{(\lfloor h \rfloor)}$, $b = x_{(\lfloor h \rfloor + 1)}$
+/// and weight $t = h - \lfloor h \rfloor$, then numpy's `_lerp`:
+/// $a + (b - a)\,t$ for $t < 0.5$, $b - (b - a)(1 - t)$ otherwise. At or
+/// beyond the last index numpy uses the last value for both neighbours with
+/// $t = h + 1$ (it computes the weight from the replacement index $-1$).
+/// So an infinite neighbour can give NaN, exactly as in numpy.
 pub fn numpy_quantile(sorted: &[f64], q: f64) -> f64 {
     let n = sorted.len();
     let h = (n as f64 - 1.0) * q;
-    if h >= (n - 1) as f64 {
-        return sorted[n - 1];
-    }
-    let previous = h.floor();
-    let i = previous as usize;
-    let (a, b, t) = (sorted[i], sorted[i + 1], h - previous);
+    let (i, j, t) = if h >= (n - 1) as f64 {
+        (n - 1, n - 1, h + 1.0)
+    } else {
+        let previous = h.floor();
+        (previous as usize, previous as usize + 1, h - previous)
+    };
+    let (a, b) = (sorted[i], sorted[j]);
     let diff = b - a;
     if t >= 0.5 {
         b - diff * (1.0 - t)
