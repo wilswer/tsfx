@@ -275,3 +275,59 @@ parameters = [
 
 [number_cwt_peaks]
 parameters = [{ n = 1 }, { n = 2 }, { n = 5 }, { n = 10 }]
+[agg_autocorrelation]
+parameters = [
+    { f_agg = "mean", maxlag = 0 },
+    { f_agg = "mean", maxlag = 1 },
+    { f_agg = "mean", maxlag = 3 },
+    { f_agg = "mean", maxlag = 10 },
+    { f_agg = "mean", maxlag = 40 },
+    { f_agg = "median", maxlag = 3 },
+    { f_agg = "median", maxlag = 10 },
+    { f_agg = "median", maxlag = 40 },
+    { f_agg = "var", maxlag = 3 },
+    { f_agg = "var", maxlag = 10 },
+    { f_agg = "var", maxlag = 40 },
+    { f_agg = "std", maxlag = 3 },
+    { f_agg = "std", maxlag = 10 },
+]
+
+[partial_autocorrelation]
+parameters = [
+    { lag = 0 },
+    { lag = 1 },
+    { lag = 2 },
+    { lag = 3 },
+    { lag = 4 },
+    { lag = 5 },
+    { lag = 6 },
+    { lag = 9 },
+]
+
+[ar_coefficient]
+parameters = [
+    { coeff = 0, k = 0 },
+    { coeff = 0, k = 1 },
+    { coeff = 1, k = 1 },
+    { coeff = 2, k = 1 },
+    { coeff = 0, k = 2 },
+    { coeff = 1, k = 2 },
+    { coeff = 2, k = 2 },
+    { coeff = 0, k = 4 },
+    { coeff = 3, k = 4 },
+    { coeff = 4, k = 4 },
+]
+
+[augmented_dickey_fuller]
+parameters = [
+    { attr = "teststat" },
+    { attr = "pvalue" },
+    { attr = "usedlag" },
+    { attr = "teststat", autolag = "BIC" },
+    { attr = "usedlag", autolag = "BIC" },
+    { attr = "teststat", autolag = "t-stat" },
+    { attr = "usedlag", autolag = "t-stat" },
+    { attr = "teststat", autolag = "None" },
+    { attr = "pvalue", autolag = "None" },
+    { attr = "usedlag", autolag = "None" },
+]

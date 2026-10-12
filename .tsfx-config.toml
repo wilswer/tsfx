@@ -486,3 +486,41 @@ parameters = [
 
 [number_cwt_peaks]
 parameters = [{ n = 1 }, { n = 5 }]
+[agg_autocorrelation]
+parameters = [
+    { f_agg = "mean", maxlag = 40 },
+    { f_agg = "median", maxlag = 40 },
+    { f_agg = "var", maxlag = 40 },
+]
+
+[partial_autocorrelation]
+parameters = [
+    { lag = 0 },
+    { lag = 1 },
+    { lag = 2 },
+    { lag = 3 },
+    { lag = 4 },
+    { lag = 5 },
+    { lag = 6 },
+    { lag = 7 },
+    { lag = 8 },
+    { lag = 9 },
+]
+
+[ar_coefficient]
+parameters = [
+    { coeff = 0, k = 10 },
+    { coeff = 1, k = 10 },
+    { coeff = 2, k = 10 },
+    { coeff = 3, k = 10 },
+    { coeff = 4, k = 10 },
+    { coeff = 5, k = 10 },
+    { coeff = 6, k = 10 },
+    { coeff = 7, k = 10 },
+    { coeff = 8, k = 10 },
+    { coeff = 9, k = 10 },
+    { coeff = 10, k = 10 },
+]
+
+[augmented_dickey_fuller]
+parameters = [{ attr = "teststat" }, { attr = "pvalue" }, { attr = "usedlag" }]

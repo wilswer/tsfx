@@ -10,6 +10,7 @@ pub mod counting;
 pub mod entropy;
 pub mod kernel;
 pub mod location;
+pub mod regression;
 pub mod reoccurrence;
 pub mod similarity;
 pub mod spectral;
@@ -23,7 +24,9 @@ use polars::prelude::*;
 
 use crate::extract::{ExtractionSettings, FeatureSetting};
 use crate::utils::toml_reader::{ConfigError, load_config};
-use autocorrelation::{Autocorrelation, C3, TimeReversalAsymmetryStatistic};
+use autocorrelation::{
+    AggAutocorrelation, Autocorrelation, C3, PartialAutocorrelation, TimeReversalAsymmetryStatistic,
+};
 use change::{
     AbsoluteSumOfChanges, ChangeQuantiles, CidCe, MeanAbsoluteChange, MeanChange,
     MeanSecondDerivativeCentral,
@@ -38,6 +41,7 @@ use location::{
     FirstLocationOfMaximum, FirstLocationOfMinimum, IndexMassQuantile, LastLocationOfMaximum,
     LastLocationOfMinimum,
 };
+use regression::{ArCoefficient, AugmentedDickeyFuller};
 use reoccurrence::{HasDuplicateMax, HasDuplicateMin, ReoccurrenceFeatures};
 use similarity::{Query, QuerySimilarityCount};
 use spectral::{FftAggregated, FftCoefficient, FourierEntropy, SpktWelchDensity};
@@ -336,6 +340,30 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
             if let Some(feature) = &config.number_cwt_peaks {
                 let ns = feature.parameters.iter().map(|p| p.n).collect();
                 plan.push(NumberCwtPeaks { ns });
+            }
+            if let Some(feature) = &config.agg_autocorrelation {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.f_agg, p.maxlag))
+                    .collect();
+                plan.push(AggAutocorrelation { params });
+            }
+            if let Some(feature) = &config.partial_autocorrelation {
+                let lags = feature.parameters.iter().map(|p| p.lag).collect();
+                plan.push(PartialAutocorrelation { lags });
+            }
+            if let Some(feature) = &config.ar_coefficient {
+                let params = feature.parameters.iter().map(|p| (p.coeff, p.k)).collect();
+                plan.push(ArCoefficient { params });
+            }
+            if let Some(feature) = &config.augmented_dickey_fuller {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.attr, p.autolag))
+                    .collect();
+                plan.push(AugmentedDickeyFuller { params });
             }
         }
     }

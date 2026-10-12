@@ -71,6 +71,10 @@ pub struct Config {
     pub fourier_entropy: Option<FourierEntropy>,
     pub cwt_coefficients: Option<CwtCoefficients>,
     pub number_cwt_peaks: Option<NumberCwtPeaks>,
+    pub agg_autocorrelation: Option<AggAutocorrelation>,
+    pub partial_autocorrelation: Option<PartialAutocorrelation>,
+    pub ar_coefficient: Option<ArCoefficient>,
+    pub augmented_dickey_fuller: Option<AugmentedDickeyFuller>,
 }
 
 impl Default for Config {
@@ -148,6 +152,10 @@ impl Default for Config {
             fourier_entropy: Some(FourierEntropy::default()),
             cwt_coefficients: Some(CwtCoefficients::default()),
             number_cwt_peaks: Some(NumberCwtPeaks::default()),
+            agg_autocorrelation: Some(AggAutocorrelation::default()),
+            partial_autocorrelation: Some(PartialAutocorrelation::default()),
+            ar_coefficient: Some(ArCoefficient::default()),
+            augmented_dickey_fuller: Some(AugmentedDickeyFuller::default()),
         }
     }
 }
@@ -1126,6 +1134,170 @@ impl TryFrom<RawNumberCwtPeaksParams> for NumberCwtPeaksParams {
     }
 }
 
+#[derive(Deserialize, Clone, Debug)]
+pub struct AggAutocorrelation {
+    pub parameters: Vec<AggAutocorrelationParams>,
+}
+
+impl Default for AggAutocorrelation {
+    fn default() -> Self {
+        AggAutocorrelation {
+            parameters: [
+                AutocorrelationAggregator::Mean,
+                AutocorrelationAggregator::Median,
+                AutocorrelationAggregator::Var,
+            ]
+            .into_iter()
+            .map(|f_agg| AggAutocorrelationParams { f_agg, maxlag: 40 })
+            .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct AggAutocorrelationParams {
+    pub f_agg: AutocorrelationAggregator,
+    pub maxlag: usize,
+}
+
+/// How `agg_autocorrelation` aggregates the autocorrelations (the numpy
+/// function of that name). Unknown names are rejected when the config is
+/// loaded.
+#[derive(Deserialize, Debug, PartialEq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum AutocorrelationAggregator {
+    Mean,
+    Median,
+    Var,
+    Std,
+}
+
+impl Display for AutocorrelationAggregator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            AutocorrelationAggregator::Mean => write!(f, "mean"),
+            AutocorrelationAggregator::Median => write!(f, "median"),
+            AutocorrelationAggregator::Var => write!(f, "var"),
+            AutocorrelationAggregator::Std => write!(f, "std"),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct PartialAutocorrelation {
+    pub parameters: Vec<PartialAutocorrelationParams>,
+}
+
+impl Default for PartialAutocorrelation {
+    fn default() -> Self {
+        PartialAutocorrelation {
+            parameters: (0..10)
+                .map(|lag| PartialAutocorrelationParams { lag })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct PartialAutocorrelationParams {
+    pub lag: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ArCoefficient {
+    pub parameters: Vec<ArCoefficientParams>,
+}
+
+impl Default for ArCoefficient {
+    fn default() -> Self {
+        ArCoefficient {
+            parameters: (0..=10)
+                .map(|coeff| ArCoefficientParams { coeff, k: 10 })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct ArCoefficientParams {
+    pub coeff: usize,
+    pub k: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct AugmentedDickeyFuller {
+    pub parameters: Vec<AugmentedDickeyFullerParams>,
+}
+
+impl Default for AugmentedDickeyFuller {
+    fn default() -> Self {
+        AugmentedDickeyFuller {
+            parameters: [AdfAttr::Teststat, AdfAttr::Pvalue, AdfAttr::Usedlag]
+                .into_iter()
+                .map(|attr| AugmentedDickeyFullerParams {
+                    attr,
+                    autolag: AdfAutolag::default(),
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct AugmentedDickeyFullerParams {
+    pub attr: AdfAttr,
+    /// Optional in the config; `"AIC"` when left out, as in tsfresh.
+    #[serde(default)]
+    pub autolag: AdfAutolag,
+}
+
+/// Which result of the augmented Dickey-Fuller test to return. Unknown names
+/// are rejected when the config is loaded.
+#[derive(Deserialize, Debug, PartialEq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum AdfAttr {
+    Teststat,
+    Pvalue,
+    Usedlag,
+}
+
+impl Display for AdfAttr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            AdfAttr::Teststat => write!(f, "teststat"),
+            AdfAttr::Pvalue => write!(f, "pvalue"),
+            AdfAttr::Usedlag => write!(f, "usedlag"),
+        }
+    }
+}
+
+/// How the augmented Dickey-Fuller test chooses its number of lags
+/// (statsmodels' `autolag`): `"AIC"`, `"BIC"`, `"t-stat"` or `"None"` (always
+/// the maximum lag). Unknown names are rejected when the config is loaded.
+#[derive(Deserialize, Debug, PartialEq, Eq, Clone, Copy, Default)]
+pub enum AdfAutolag {
+    #[default]
+    #[serde(rename = "AIC")]
+    Aic,
+    #[serde(rename = "BIC")]
+    Bic,
+    #[serde(rename = "t-stat")]
+    TStat,
+    #[serde(rename = "None")]
+    None,
+}
+
+impl Display for AdfAutolag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            AdfAutolag::Aic => write!(f, "AIC"),
+            AdfAutolag::Bic => write!(f, "BIC"),
+            AdfAutolag::TStat => write!(f, "t-stat"),
+            AdfAutolag::None => write!(f, "None"),
+        }
+    }
+}
+
 /// A config file that could not be read or parsed.
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -1644,6 +1816,48 @@ mod tests {
             config.clone().number_cwt_peaks.unwrap().parameters[..],
             [NumberCwtPeaksParams { n: 1 }, NumberCwtPeaksParams { n: 5 }]
         );
+        assert!(config.agg_autocorrelation.is_some());
+        assert_eq!(
+            config.clone().agg_autocorrelation.unwrap().parameters[..],
+            [
+                AggAutocorrelationParams {
+                    f_agg: AutocorrelationAggregator::Mean,
+                    maxlag: 40
+                },
+                AggAutocorrelationParams {
+                    f_agg: AutocorrelationAggregator::Median,
+                    maxlag: 40
+                },
+                AggAutocorrelationParams {
+                    f_agg: AutocorrelationAggregator::Var,
+                    maxlag: 40
+                },
+            ]
+        );
+        assert!(config.partial_autocorrelation.is_some());
+        assert_eq!(
+            config.clone().partial_autocorrelation.unwrap().parameters[..],
+            (0..10)
+                .map(|lag| PartialAutocorrelationParams { lag })
+                .collect::<Vec<_>>()[..]
+        );
+        assert!(config.ar_coefficient.is_some());
+        assert_eq!(
+            config.clone().ar_coefficient.unwrap().parameters[..],
+            (0..=10)
+                .map(|coeff| ArCoefficientParams { coeff, k: 10 })
+                .collect::<Vec<_>>()[..]
+        );
+        assert!(config.augmented_dickey_fuller.is_some());
+        assert_eq!(
+            config.clone().augmented_dickey_fuller.unwrap().parameters[..],
+            [AdfAttr::Teststat, AdfAttr::Pvalue, AdfAttr::Usedlag].map(|attr| {
+                AugmentedDickeyFullerParams {
+                    attr,
+                    autolag: AdfAutolag::Aic,
+                }
+            })
+        );
     }
 
     #[test]
@@ -1675,5 +1889,41 @@ mod tests {
             "[change_quantiles]\nparameters = [{ ql = 0.0, qh = 1.0, isabs = false, f_agg = \"sum\" }]",
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_adf_autolag_optional_and_validated() {
+        let config: Config = toml::from_str(
+            r#"
+            [augmented_dickey_fuller]
+            parameters = [{ attr = "pvalue" }, { attr = "usedlag", autolag = "t-stat" }]
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.augmented_dickey_fuller.unwrap().parameters[..],
+            [
+                AugmentedDickeyFullerParams {
+                    attr: AdfAttr::Pvalue,
+                    autolag: AdfAutolag::Aic
+                },
+                AugmentedDickeyFullerParams {
+                    attr: AdfAttr::Usedlag,
+                    autolag: AdfAutolag::TStat
+                },
+            ]
+        );
+        assert!(
+            toml::from_str::<Config>(
+                "[augmented_dickey_fuller]\nparameters = [{ attr = \"pvalue\", autolag = \"aic\" }]"
+            )
+            .is_err()
+        );
+        assert!(
+            toml::from_str::<Config>(
+                "[agg_autocorrelation]\nparameters = [{ f_agg = \"max\", maxlag = 4 }]"
+            )
+            .is_err()
+        );
     }
 }

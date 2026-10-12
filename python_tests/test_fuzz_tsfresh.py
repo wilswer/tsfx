@@ -57,6 +57,11 @@ TOLERANT = {
     "fft_aggregated",
     "fourier_entropy",
     "cwt_coefficients",
+    # statsmodels (np.correlate / BLAS dot, LAPACK SVD least squares)
+    "agg_autocorrelation",
+    "partial_autocorrelation",
+    "ar_coefficient",
+    "augmented_dickey_fuller",
 }
 
 # FFT-based features, compared with tolerances that scale with the series
@@ -76,6 +81,9 @@ TSFRESH_NAMES = {
         "percentage_of_reoccurring_datapoints_to_all_datapoints"
     ),
 }
+
+# The largest partial_autocorrelation lag in the parity config
+PACF_MAX_LAG = 9
 
 SPECIAL = [0.0, -0.0, 1.0, -1.0, math.nan, math.inf, -math.inf]
 
@@ -198,7 +206,22 @@ def _tsfresh(x: object, column: str) -> float:
     name, _, rest = column.partition("__")
     if name in GROUP_A:
         return GROUP_A[name](x, rest)
+    if name == "agg_autocorrelation":
+        f_agg, maxlag = re.fullmatch(r"f_agg_(\w+)__maxlag_(\d+)", rest).groups()
+        param = {"f_agg": f_agg, "maxlag": int(maxlag)}
+        return _combiner(fc.agg_autocorrelation, x, param)
     params = dict(p.split("_", 1) for p in rest.split("__")) if rest else {}
+    if name == "partial_autocorrelation":
+        # tsfresh's lag 0 depends on the largest lag requested alongside it
+        lags = [{"lag": int(params["lag"])}, {"lag": PACF_MAX_LAG}]
+        return list(fc.partial_autocorrelation(x, lags))[0][1]
+    if name == "ar_coefficient":
+        param = {"coeff": int(params["coeff"]), "k": int(params["k"])}
+        return _combiner(fc.ar_coefficient, x, param)
+    if name == "augmented_dickey_fuller":
+        autolag = None if params["autolag"] == "None" else params["autolag"]
+        param = {"attr": params["attr"], "autolag": autolag}
+        return _combiner(fc.augmented_dickey_fuller, x, param)
     if name == "symmetry_looking":
         return _combiner(fc.symmetry_looking, x, {"r": float(params["r"])})
     if name == "index_mass_quantile":
@@ -289,7 +312,77 @@ def _deviation(feature: str, x: list[float]) -> bool:
             sum(1 for w in odd if (math.isnan(v) and math.isnan(w)) or v == w) == 1
             for v in odd
         )
+    if feature == "ar_coefficient":
+        # tsfresh raises on NaN / ±inf (MissingDataError); tsfx gives NaN
+        if not all(math.isfinite(v) for v in x):
+            return True
+        return not _well_posed(x, _ar_designs(x))
+    if feature == "augmented_dickey_fuller":
+        return not _well_posed(x, _adf_design(x)) or _adf_exact_fit(x)
     return False
+
+
+# Least squares designs conditioned worse than this are not fuzzed: their
+# statsmodels results depend on rounding (LAPACK's as much as tsfx's)
+MAX_CONDITION = 1e6
+
+
+def _well_posed(values: list[float], designs: list) -> bool:
+    """Whether the regression features are well-posed on this series: no
+    nonzero value so small its square underflows (|v| < 1e-150), and every
+    design condition number at most MAX_CONDITION. This excludes
+    rank-deficient and near-collinear designs, so also the AIC / BIC ties of
+    collinear extra lags (tsfx takes the smaller lag, statsmodels decides by
+    rounding)."""
+    if any(0 < abs(v) < 1e-150 for v in values):
+        return False
+    return all(np.linalg.cond(d) <= MAX_CONDITION for d in designs)
+
+
+def _ar_designs(values: list[float]) -> list:
+    """AutoReg's designs [1, x_{t-1}, ..., x_{t-k}] for the parity config's
+    k that can be fitted (n >= 2k + 2)."""
+    x = np.array(values, dtype=float)
+    n = len(x)
+    return [
+        np.column_stack([np.ones(n - k)] + [x[k - c : n - c] for c in range(1, k + 1)])
+        for k in (1, 2, 4)
+        if n >= 2 * k + 2
+    ]
+
+
+def _adf_design(values: list[float]) -> list:
+    """The largest ADF regression design (constant, level, all lags), or none
+    if statsmodels raises before fitting."""
+    x = np.array(values, dtype=float)
+    n = len(x)
+    if n < 4 or not np.isfinite(x).all() or x.max() == x.min():
+        return []
+    maxlag = min(math.ceil(12 * (n / 100) ** 0.25), n // 2 - 2)
+    xd = np.diff(x)
+    nobs = n - 1 - maxlag
+    cols = [np.ones(nobs), x[maxlag : maxlag + nobs]]
+    cols += [xd[maxlag - lag : maxlag - lag + nobs] for lag in range(1, maxlag + 1)]
+    return [np.column_stack(cols)]
+
+
+def _adf_exact_fit(values: list[float]) -> bool:
+    """Whether the largest ADF regression fits (nearly) exactly: tsfx takes
+    the residual variance as 0 below a relative residual of 1e-10, where
+    statsmodels divides by rounding noise; up to 1e-5 the residual's noise
+    can still exceed the comparison tolerance."""
+    designs = _adf_design(values)
+    if not designs:
+        return False
+    (design,) = designs
+    x = np.array(values, dtype=float)
+    maxlag = design.shape[1] - 2
+    xd = np.diff(x)
+    y = xd[maxlag:]
+    beta = np.linalg.lstsq(design, y, rcond=None)[0]
+    terms = np.abs(y) + np.abs(design * beta).sum(axis=1)
+    rms = np.sqrt(np.mean((y - design @ beta) ** 2))
+    return bool(rms <= 1e-5 * terms.max())
 
 
 def _same(a: float, b: float, tolerant: bool) -> bool:
@@ -342,6 +435,18 @@ def _on_bin_edge(x: object, bins: int) -> bool:
     return bool(np.any(np.abs(scaled[:, None] - edges[None, :]) <= 1e-9))
 
 
+def _same_ar(x: object, column: str, a: float, b: float) -> bool:
+    """ar_coefficient compared with an absolute tolerance relative to the
+    largest coefficient of the same fit: least squares rounding errors scale
+    with the size of the whole solution, not of each coefficient."""
+    if a is None or b is None or math.isnan(float(a)) or math.isnan(float(b)):
+        return _same(a, b, tolerant=True)
+    k = int(column.rsplit("__k_", 1)[1])
+    fit = fc.ar_coefficient(x, [{"coeff": c, "k": k} for c in range(k + 1)])
+    scale = max([1.0] + [abs(v) for _, v in fit if math.isfinite(v)])
+    return math.isclose(float(a), float(b), rel_tol=1e-9, abs_tol=1e-9 * scale)
+
+
 def _feature(column: str) -> str:
     """The feature a column belongs to, without parameters or attribute."""
     return re.sub(r"_(intercept|slope)$", "", re.sub(r"__.*$", "", column))
@@ -368,6 +473,8 @@ def test_matches_tsfresh(feature: str) -> None:
                 expected = _tsfresh(x, column)
             if feature in SPECTRAL:
                 same = _same_spectral(column, value, expected, x)
+            elif feature == "ar_coefficient":
+                same = _same_ar(x, column, value, expected)
             else:
                 same = _same(value, expected, tolerant)
             if not same:

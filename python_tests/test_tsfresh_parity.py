@@ -31,6 +31,10 @@ Current deviations:
 - ``number_cwt_peaks`` where neighbouring wavelet coefficients are tied in
   real arithmetic (rounding decides; tsfx's arithmetic is portable, numpy's
   depends on its BLAS and CPU)
+- ``ar_coefficient`` with NaN or +-inf in the series (tsfresh raises)
+- ``augmented_dickey_fuller`` when its regression fits exactly, or when an
+  extra lag is collinear with the others (rounding noise decides
+  statsmodels' result)
 
 Cases that still fail are marked with ``_bug`` (strict xfail), so the marker
 must be removed once the fix lands.
@@ -1518,3 +1522,190 @@ _SINE_20 = [math.sin(i / 3) for i in range(20)]
 )
 def test_cwt_coefficients_generated(values, column, expected):
     _assert_feature(values, f"val__cwt_coefficients__{column}", expected)
+
+
+# Deterministic series for the statsmodels-based features below.
+_SINE = [round(math.sin(i / 3) * 10 + i / 5, 3) for i in range(40)]
+_WALK = [0, 1, 3, 2, 4, 5, 4, 6, 8, 7, 9, 11, 10, 12, 13, 12, 14, 16, 15, 17]
+_AR = [1, 3, 2.5, 4, 3, 1, 0.5, 2, 3.5, 3, 1.5, 0, 1, 2.5, 4, 3, 2, 0.5, 1, 2]
+
+
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        ([1, 1, 1, 1, 1, 1, 1], "mean__maxlag_10", 0),
+        ([1, 1, 1, 1, 1, 1, 1], "median__maxlag_10", 0),
+        ([1, 2, -3], "mean__maxlag_10", -0.5357142857142857),
+        ([1, 2, -3], "median__maxlag_10", -0.5357142857142857),
+        (list(range(10)), "mean__maxlag_1", 0.77777777),
+        (list(range(10)), "mean__maxlag_10", -0.64983164983165),
+        # generated: tsfresh 0.21.2, numpy 2.4.4, statsmodels 0.14.6
+        (_SINE, "mean__maxlag_3", 0.738541496148163),
+        (_SINE, "mean__maxlag_10", -0.15892555920550513),
+        (_SINE, "median__maxlag_10", -0.2723866971108017),
+        (_SINE, "var__maxlag_10", 0.476937955203257),
+        (_SINE, "std__maxlag_3", 0.17215878690468114),
+        (_AR, "median__maxlag_3", -0.4090265128516494),
+        (_AR, "var__maxlag_3", 0.29416450975000813),
+        (_AR, "std__maxlag_10", 0.5456897497263847),
+        ([1, 2], "mean__maxlag_10", -1.0),
+        ([1, 2], "var__maxlag_10", 0.0),
+        ([5], "mean__maxlag_10", 0.0),
+        ([1, 2, 3], "mean__maxlag_0", math.nan),
+        ([1, 2, math.nan, 4], "mean__maxlag_3", math.nan),
+    ],
+)
+def test_agg_autocorrelation(values, column, expected):
+    _assert_feature(values, f"val__agg_autocorrelation__f_agg_{column}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "lag", "expected"),
+    [
+        ([1, 2, 1, 2, 1, 2], 0, 1.0),
+        ([1, 2, 1, 2, 1, 2], 1, -1.0),
+        ([1, 2, 1, 2, 1, 2], 2, math.nan),
+        ([1], 0, math.nan),
+        ([1], 1, math.nan),
+        ([0] * 100, 0, 1.0),
+        ([0] * 100, 1, math.nan),
+        ([0] * 100, 9, math.nan),
+        # tsfresh: np.linspace(0, 1, 3000), places=2
+        ([i / 2999 for i in range(3000)], 1, 0.9993331110370126),
+        ([i / 2999 for i in range(3000)], 2, -0.000666889111696615),
+        # generated: tsfresh 0.21.2, numpy 2.4.4, statsmodels 0.14.6
+        (_SINE, 1, 0.9341946474270637),
+        (_SINE, 2, -0.836847568111394),
+        (_SINE, 9, -0.22745057412608966),
+        (_WALK, 4, -0.3649421993861743),
+        (_AR, 3, -0.748260563703996),
+        (_AR, 9, -2.707268799269087),
+        ([1, 2, 3], 0, math.nan),
+        ([1, 2, 3, 7], 0, 1.0),
+        ([1, 2, 3, 7], 1, 0.14056224899598393),
+        ([1, 2, 3, 7], 2, math.nan),
+        ([1, 2, math.nan, 4, 5, 6], 0, 1.0),
+        ([1, 2, math.nan, 4, 5, 6], 1, math.nan),
+    ],
+)
+def test_partial_autocorrelation(values, lag, expected):
+    _assert_feature(values, f"val__partial_autocorrelation__lag_{lag}", expected)
+
+
+def _ar_25() -> list[float]:
+    x = [1.0] + 9 * [0.0]
+    for i in range(1, len(x)):
+        x[i] = 2.5 * x[i - 1] + 1
+    return x
+
+
+def _ar_2() -> list[float]:
+    x = [1.0, 1.0] + 5 * [0.0]
+    for i in range(2, len(x)):
+        x[i] = (-2) * x[i - 2] + 3.5 * x[i - 1] + 1
+    return x
+
+
+@pytest.mark.parametrize(
+    ("values", "coeff", "k", "expected"),
+    [
+        (_ar_25(), 0, 1, 1),
+        (_ar_25(), 1, 1, 2.5),
+        (_ar_2(), 0, 2, 1),
+        (_ar_2(), 1, 2, 3.5),
+        (_ar_2(), 2, 2, -2),
+        # generated: tsfresh 0.21.2, numpy 2.4.4, statsmodels 0.14.6
+        (_ar_2(), 0, 1, 0.07970498175061014),
+        (_ar_2(), 1, 1, 2.824952929252266),
+        (_SINE, 1, 2, 1.8905186798035594),
+        (_SINE, 4, 4, 0.8482338799237823),
+        (_WALK, 0, 4, 1.682887458365075),
+        (_WALK, 3, 4, 0.9423311452558134),
+        (_AR, 2, 2, -0.6856894133578375),
+        (_AR, 2, 1, math.nan),
+        (_AR, 0, 0, 2.05),
+        # a constant series: statsmodels' minimum-norm least squares solution
+        ([1.0] * 10, 0, 2, 1 / 3),
+        ([1.0] * 10, 2, 2, 1 / 3),
+        ([-0.75] * 5 + [0.75], 0, 1, -0.288),
+        ([-0.75] * 5 + [0.75], 1, 1, 0.216),
+        # too short to fit: tsfresh's fallback [nan] * k
+        ([1, 2, 3, 7], 0, 2, math.nan),
+        ([1, 2, 3, 7], 2, 2, 0),
+        ([1, 2, 3, 4, 5], 2, 2, 0),
+        ([1], 0, 0, 0),
+    ],
+)
+def test_ar_coefficient(values, coeff, k, expected):
+    _assert_feature(values, f"val__ar_coefficient__coeff_{coeff}__k_{k}", expected)
+
+
+def test_ar_coefficient_nan_deviation():
+    # tsfresh raises (statsmodels' MissingDataError is not caught)
+    features = _features([1, 2, math.nan, 4, 5, 6, 7, 8, 9, 1])
+    assert math.isnan(features["val__ar_coefficient__coeff_0__k_1"])
+    assert math.isnan(features["val__ar_coefficient__coeff_1__k_1"])
+
+
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        # generated: tsfresh 0.21.2, numpy 2.4.4, scipy 1.17.1,
+        # statsmodels 0.14.6
+        (_SINE, "teststat__autolag_AIC", -0.018605197348433463),
+        (_SINE, "pvalue__autolag_AIC", 0.9569661363051692),
+        (_SINE, "usedlag__autolag_AIC", 10),
+        (_WALK, "teststat__autolag_AIC", 0.6369798833294181),
+        (_WALK, "pvalue__autolag_AIC", 0.9884925247863758),
+        (_WALK, "usedlag__autolag_AIC", 8),
+        (_WALK, "teststat__autolag_t-stat", 0.906092248496127),
+        (_WALK, "usedlag__autolag_t-stat", 2),
+        (_AR, "teststat__autolag_AIC", -1.4040700065549143),
+        (_AR, "usedlag__autolag_AIC", 8),
+        (_AR, "teststat__autolag_BIC", -3.719178652724949),
+        (_AR, "usedlag__autolag_BIC", 7),
+        (_AR, "teststat__autolag_t-stat", -1.084113825385017),
+        (_AR, "usedlag__autolag_t-stat", 5),
+        (_AR, "teststat__autolag_None", -1.4040700065549143),
+        (_AR, "pvalue__autolag_None", 0.5803233582846191),
+        (list(range(1, 10)) + [10.5], "teststat__autolag_AIC", 1.7320508075688792),
+        (list(range(1, 10)) + [10.5], "pvalue__autolag_AIC", 0.9982042849867909),
+        ([1, 2, 3, 4, 5, 6, 7, 3], "teststat__autolag_AIC", -1.732050807568878),
+        ([1, 2, 3, 4, 5, 6, 7, 3], "pvalue__autolag_AIC", 0.4146791580296235),
+        # tsfresh: LinAlgError / ValueError give NaN
+        ([math.nan] * 100, "teststat__autolag_AIC", math.nan),
+        ([math.nan] * 100, "usedlag__autolag_AIC", math.nan),
+        ([1.0] * 10, "teststat__autolag_AIC", math.nan),
+        ([1, 2, 3], "pvalue__autolag_AIC", math.nan),
+        ([1, 2, math.inf, 4, 5, 6, 7, 8, 9, 1], "usedlag__autolag_AIC", math.nan),
+        # only the last value is NaN: statsmodels still chooses a lag
+        ([1, 3, 2, 5, 4, math.nan], "teststat__autolag_AIC", math.nan),
+        ([1, 3, 2, 5, 4, math.nan], "usedlag__autolag_AIC", 0),
+        ([1, 3, 2, 5, 4, math.nan], "usedlag__autolag_None", 1),
+    ],
+)
+def test_augmented_dickey_fuller(values, column, expected):
+    _assert_feature(
+        values, f"val__augmented_dickey_fuller__attr_{column}", expected, abs_tol=1e-9
+    )
+
+
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        # An exact fit (x alternates): statsmodels divides by rounding noise
+        # and returns about -4.8e15; tsfx takes the residual variance as 0
+        ([0.0, 0.1, 0.0, 0.1], "teststat__autolag_AIC", -math.inf),
+        ([0.0, 0.1, 0.0, 0.1], "pvalue__autolag_AIC", 0.0),
+        # The lag-1 difference equals the level (a constant stretch), so lags
+        # 0 and 1 fit equally well: statsmodels picks 1 by rounding noise
+        ([0.0, 0.0, 0.0, 0.0, 1.0, 328.0], "usedlag__autolag_AIC", 0),
+        ([0.0, 0.0, 0.0, 0.0, 1.0, 328.0], "usedlag__autolag_BIC", 0),
+        # Constant differences make the lagged differences collinear with the
+        # constant: statsmodels picks lag 1 (same test statistic, 1.732...)
+        (list(range(1, 10)) + [10.5], "usedlag__autolag_AIC", 0),
+    ],
+)
+def test_augmented_dickey_fuller_rounding_deviation(values, column, expected):
+    result = _features(values)[f"val__augmented_dickey_fuller__attr_{column}"]
+    assert result == expected
