@@ -163,6 +163,13 @@ def _tsfresh(x: object, column: str) -> float:
         return fc.cid_ce(x, params["normalize"] == "t")
     if name == "range_count":
         return fc.range_count(x, float(params["min"]), float(params["max"]))
+    if name == "cwt_coefficients":
+        param = {
+            "widths": tuple(int(w) for w in params["widths"].split("_")),
+            "coeff": int(params["coeff"]),
+            "w": int(params["w"]),
+        }
+        return _combiner(fc.cwt_coefficients, x, param)
     if name == "mean_n_absolute_max":
         return fc.mean_n_absolute_max(x, int(params["n"]))
     if name == "fft_coefficient":

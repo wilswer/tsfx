@@ -1450,3 +1450,59 @@ def test_spkt_welch_density(values, coeff, expected):
 )
 def test_fourier_entropy(values, bins, expected):
     _assert_feature(values, f"val__fourier_entropy__bins_{bins}", expected)
+
+
+# --- Wavelet features --------------------------------------------------------
+
+
+def test_number_cwt_peaks():
+    x = [1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 1]
+    _assert_feature(x, "val__number_cwt_peaks__n_2", 2)
+
+
+_CWT_PEAKS_X = [1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 1]
+_SINE_60 = [math.sin(i / 2) for i in range(60)]
+
+
+# number_cwt_peaks(np.array(x, dtype=float), n) with tsfresh 0.21.2 /
+# numpy 2.4.4 / scipy 1.17.1 (generated)
+@pytest.mark.parametrize(
+    ("values", "n", "expected"),
+    [
+        (_CWT_PEAKS_X, 1, 1),
+        (_CWT_PEAKS_X, 5, 2),
+        (_CWT_PEAKS_X, 10, 3),
+        (_SINE_60, 1, 5),
+        (_SINE_60, 10, 6),
+        ([1], 5, 0),
+        ([1, 2], 5, 0),
+        ([0, 1, 0], 1, 1),
+        ([1, math.nan, 1, 5, 1, 1], 1, 0),
+    ],
+)
+def test_number_cwt_peaks_generated(values, n, expected):
+    _assert_feature(values, f"val__number_cwt_peaks__n_{n}", expected)
+
+
+def test_cwt_coefficients():
+    features = _features([0.1, 0.2, 0.3])
+    assert math.isnan(features["val__cwt_coefficients__coeff_5__w_3__widths_1_3"])
+
+
+_SINE_20 = [math.sin(i / 3) for i in range(20)]
+
+
+# cwt_coefficients(np.array(x), [{"widths": widths, "coeff": c, "w": w}]) with
+# tsfresh 0.21.2 / numpy 2.4.4 / pywt 1.8.0 (generated)
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        ([0.1, 0.2, 0.3], "coeff_2__w_1__widths_1_2_3", 0.23388268016307973),
+        ([0.1, 0.2, 0.3], "coeff_2__w_3__widths_1_3", 0.2691505609034601),
+        (_SINE_20, "coeff_0__w_2__widths_2_5_10_20", -0.5676352954169104),
+        (_SINE_20, "coeff_7__w_5__widths_2_5_10_20", 2.193199392781614),
+        (_SINE_20, "coeff_14__w_20__widths_2_5_10_20", -0.29292254022704706),
+    ],
+)
+def test_cwt_coefficients_generated(values, column, expected):
+    _assert_feature(values, f"val__cwt_coefficients__{column}", expected)
