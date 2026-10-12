@@ -8,7 +8,9 @@ use ordered_float::OrderedFloat;
 use polars::lazy::dsl::*;
 
 use super::kernel::{GroupContext, Kernel, scalar_kernel};
-use crate::utils::stats::{linear_quantile, median_mut, sample_excess_kurtosis, sample_skewness};
+use crate::utils::stats::{
+    linear_quantile, linear_quantile_select, median_mut, sample_excess_kurtosis, sample_skewness,
+};
 /// Length feature.
 ///
 /// The number of non-null values in the time series. Only the first value
@@ -307,7 +309,8 @@ scalar_kernel! {
         if ctx.x().iter().any(|x| x.is_nan()) {
             f64::NAN
         } else {
-            linear_quantile(ctx.sorted(), 0.5)
+            // A selection is O(n); only the quantiles need the full sort
+            linear_quantile_select(&mut ctx.values().to_vec(), 0.5)
         }
     }
 }

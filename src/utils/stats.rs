@@ -197,6 +197,29 @@ pub fn linear_quantile(sorted: &[f64], q: f64) -> f64 {
     }
 }
 
+/// [`linear_quantile`] of unsorted `values` (not empty, reordered in
+/// place), found with a selection instead of a full sort: $O(n)$, like
+/// Polars' `quantile_slice`. Same neighbours, so the same result bit for bit.
+pub fn linear_quantile_select(values: &mut [f64], q: f64) -> f64 {
+    let n = values.len();
+    if n == 1 {
+        return values[0];
+    }
+    let float_idx = (n as f64 - 1.0) * q;
+    let idx = (float_idx as usize).min(n - 1);
+    let top = (float_idx.ceil() as usize).min(n - 1);
+    let (_, &mut lower, rest) = values.select_nth_unstable_by(idx, f64::total_cmp);
+    if idx == top {
+        return lower;
+    }
+    let upper = rest.iter().copied().min_by(f64::total_cmp).unwrap_or(lower);
+    if lower == upper {
+        lower
+    } else {
+        (float_idx - idx as f64) * (upper - lower) + lower
+    }
+}
+
 /// Mean of the non-NaN values, like pandas' `mean` (skipna). NaN if every
 /// value is NaN.
 pub(crate) fn skip_nan_mean(x: &ArrayView1<f64>) -> f64 {

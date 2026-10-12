@@ -1,7 +1,8 @@
 //! Feature extractors, grouped by what they compute.
 //!
 //! [`aggregators`] is the single place that decides which features run for a
-//! given [`FeatureSetting`] tier and config.
+//! given [`FeatureSetting`] tier and config. Every feature except `length`
+//! is a [`kernel::Kernel`]; see [`kernel`] for how they run.
 
 pub mod autocorrelation;
 pub mod change;
@@ -42,8 +43,9 @@ use trend::{AggLinearTrend, LinearTrend};
 
 /// Feature expressions for the configured features of the selected tier.
 ///
-/// Columns come out tier by tier (Minimal, then Efficient, then
-/// Comprehensive), each tier looping over all value columns.
+/// Columns come out as `length` first, then, for each value column in turn,
+/// all of its features in tier order (Minimal, then Efficient, then
+/// Comprehensive).
 pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigError> {
     let config = load_config(opts.config_path.as_deref())?;
     let tier = &opts.feature_setting;
