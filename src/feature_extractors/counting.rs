@@ -1,10 +1,11 @@
 //! Counts of values or runs relative to a threshold.
 
 use anyhow::Result;
-use ndarray::{Axis, Ix1};
+use ndarray::ArrayView1;
 use polars::lazy::dsl::*;
 use polars::prelude::*;
 
+use super::f64_values;
 use crate::utils::stats::get_length_sequences_where;
 
 fn _count_above_mean(s: Column) -> Result<Column, PolarsError> {
@@ -12,7 +13,8 @@ fn _count_above_mean(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
@@ -52,7 +54,8 @@ fn _count_below_mean(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
@@ -92,7 +95,8 @@ fn _count_above(s: Column, t: f64) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     // fraction of values >= t, as in tsfresh
     let out = arr.mapv(|x| if x >= t { 1.0 } else { 0.0 }).sum() / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
@@ -135,7 +139,8 @@ fn _count_below(s: Column, t: f64) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     // fraction of values <= t, as in tsfresh
     let out = arr.mapv(|x| if x <= t { 1.0 } else { 0.0 }).sum() / arr.len() as f64;
     let s = Column::new("".into(), &[out]);
@@ -178,11 +183,8 @@ fn _longest_strike_below_mean(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
@@ -226,11 +228,8 @@ fn _longest_strike_above_mean(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .map_err(|e| PolarsError::ComputeError(e.to_string().into()))?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let mean_opt = arr.mean();
     let mean = match mean_opt {
         Some(m) => m,
@@ -274,7 +273,8 @@ fn _number_crossing_m(s: Column, m: f64) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     // tsfresh: binarise as x > m (NaN and x == m are "not above") and count
     // every change between neighbours
     let above = arr.iter().map(|x| *x > m).collect::<Vec<_>>();
@@ -318,11 +318,12 @@ fn _range_count(s: Column, lower: f64, upper: f64) -> Result<Column, PolarsError
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s.into_frame().to_ndarray::<Float64Type>(IndexOrder::C)?;
+    let ca = f64_values(&s)?;
+    let arr = ArrayView1::from(ca.cont_slice()?);
     // Half-open interval [lower, upper), as tsfresh; empty if upper <= lower
     let count = arr
         .into_iter()
-        .filter(|x| x >= &lower && x < &upper)
+        .filter(|&&x| x >= lower && x < upper)
         .count();
     let s = Column::new("".into(), &[count as f64]);
     Ok(s)
