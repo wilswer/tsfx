@@ -22,8 +22,8 @@ use crate::utils::toml_reader::{ConfigError, load_config};
 use autocorrelation::{autocorrelation, c3, time_reversal_asymmetry_statistic};
 use change::{absolute_sum_of_changes, cid_ce, mean_absolute_change, mean_change};
 use counting::{
-    count_above, count_above_mean, count_below, count_below_mean, longest_strike_above_mean,
-    longest_strike_below_mean, number_crossing_m, number_peaks_multi, range_count,
+    CountAbove, CountAboveMean, CountBelow, CountBelowMean, LongestStrikeAboveMean,
+    LongestStrikeBelowMean, NumberCrossingM, NumberPeaks, RangeCount,
 };
 use entropy::sample_entropy;
 use kernel::KernelPlan;
@@ -151,20 +151,18 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 aggregators.push(absolute_sum_of_changes(col));
             }
             if config.count_above_mean.is_some() {
-                aggregators.push(count_above_mean(col));
+                plan.push(CountAboveMean);
             }
             if config.count_below_mean.is_some() {
-                aggregators.push(count_below_mean(col));
+                plan.push(CountBelowMean);
             }
             if let Some(feature) = &config.count_above {
-                for p in &feature.parameters {
-                    aggregators.push(count_above(col, p.t));
-                }
+                let ts = feature.parameters.iter().map(|p| p.t).collect();
+                plan.push(CountAbove { ts });
             }
             if let Some(feature) = &config.count_below {
-                for p in &feature.parameters {
-                    aggregators.push(count_below(col, p.t));
-                }
+                let ts = feature.parameters.iter().map(|p| p.t).collect();
+                plan.push(CountBelow { ts });
             }
             if config.first_location_of_maximum.is_some() {
                 aggregators.push(first_location_of_maximum(col));
@@ -179,10 +177,10 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 aggregators.push(last_location_of_minimum(col));
             }
             if config.longest_strike_above_mean.is_some() {
-                aggregators.push(longest_strike_above_mean(col));
+                plan.push(LongestStrikeAboveMean);
             }
             if config.longest_strike_below_mean.is_some() {
-                aggregators.push(longest_strike_below_mean(col));
+                plan.push(LongestStrikeBelowMean);
             }
             // The counting-based reoccurrence features share one sort per group
             let reoccurring = ReoccurrenceFeatures {
@@ -237,16 +235,12 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 }
             }
             if let Some(feature) = &config.number_crossing_m {
-                let params = &feature.parameters;
-                for p in params {
-                    aggregators.push(number_crossing_m(col, p.m));
-                }
+                let ms = feature.parameters.iter().map(|p| p.m).collect();
+                plan.push(NumberCrossingM { ms });
             }
             if let Some(feature) = &config.range_count {
-                let params = &feature.parameters;
-                for p in params {
-                    aggregators.push(range_count(col, p.min, p.max));
-                }
+                let ranges = feature.parameters.iter().map(|p| (p.min, p.max)).collect();
+                plan.push(RangeCount { ranges });
             }
             if let Some(feature) = &config.index_mass_quantile {
                 let params = &feature.parameters;
@@ -269,8 +263,8 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 }
             }
             if let Some(feature) = &config.number_peaks {
-                let ns = feature.parameters.iter().map(|p| p.n).collect::<Vec<_>>();
-                aggregators.push(number_peaks_multi(col, ns));
+                let ns = feature.parameters.iter().map(|p| p.n).collect();
+                plan.push(NumberPeaks { ns });
             }
         }
     }

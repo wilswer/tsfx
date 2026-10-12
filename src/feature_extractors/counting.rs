@@ -1,30 +1,11 @@
 //! Counts of values or runs relative to a threshold.
 
-use anyhow::Result;
-use ndarray::ArrayView1;
-use polars::lazy::dsl::*;
-use polars::prelude::*;
+use ndarray::Array1;
 
-use super::f64_values;
+use super::kernel::{GroupContext, Kernel, scalar_kernel};
 use crate::utils::stats::get_length_sequences_where;
 
-fn _count_above_mean(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let ca = f64_values(&s)?;
-    let arr = ArrayView1::from(ca.cont_slice()?);
-    let mean_opt = arr.mean();
-    let mean = match mean_opt {
-        Some(m) => m,
-        None => return Ok(Column::new("".into(), &[f64::NAN])),
-    };
-    let out = arr.mapv(|x| if x > mean { 1.0 } else { 0.0 }).sum();
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
-}
-
+scalar_kernel! {
 /// Count above mean feature.
 ///
 /// The number of values strictly greater than the mean of the series:
@@ -40,32 +21,13 @@ fn _count_above_mean(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.count_above_mean` (v0.21.2).
-pub fn count_above_mean(name: &str) -> Expr {
-    col(name)
-        .apply(_count_above_mean, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__count_above_mean", name))
-}
-
-fn _count_below_mean(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+    CountAboveMean, "count_above_mean", |ctx| {
+        let mean = ctx.mean();
+        ctx.x().mapv(|x| if x > mean { 1.0 } else { 0.0 }).sum()
     }
-    let ca = f64_values(&s)?;
-    let arr = ArrayView1::from(ca.cont_slice()?);
-    let mean_opt = arr.mean();
-    let mean = match mean_opt {
-        Some(m) => m,
-        None => return Ok(Column::new("".into(), &[f64::NAN])),
-    };
-    let out = arr.mapv(|x| if x < mean { 1.0 } else { 0.0 }).sum();
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
 }
 
+scalar_kernel! {
 /// Count below mean feature.
 ///
 /// The number of values strictly less than the mean of the series:
@@ -81,26 +43,56 @@ fn _count_below_mean(s: Column) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.count_below_mean` (v0.21.2).
-pub fn count_below_mean(name: &str) -> Expr {
-    col(name)
-        .apply(_count_below_mean, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__count_below_mean", name))
+    CountBelowMean, "count_below_mean", |ctx| {
+        let mean = ctx.mean();
+        ctx.x().mapv(|x| if x < mean { 1.0 } else { 0.0 }).sum()
+    }
 }
 
-fn _count_above(s: Column, t: f64) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+scalar_kernel! {
+/// Longest strike below mean feature.
+///
+/// The length of the longest run of consecutive values strictly less than
+/// the mean of the series.
+///
+/// # Output column
+/// `{name}__longest_strike_below_mean`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - A series containing NaN has a NaN mean and gives 0.
+/// - A constant series gives 0.
+///
+/// # tsfresh
+/// `feature_calculators.longest_strike_below_mean` (v0.21.2).
+    LongestStrikeBelowMean, "longest_strike_below_mean", |ctx| {
+        let mean = ctx.mean();
+        let flags: Array1<bool> = ctx.x().mapv(|x| x < mean);
+        get_length_sequences_where(&flags).into_iter().max().unwrap_or(0) as f64
     }
-    let ca = f64_values(&s)?;
-    let arr = ArrayView1::from(ca.cont_slice()?);
-    // fraction of values >= t, as in tsfresh
-    let out = arr.mapv(|x| if x >= t { 1.0 } else { 0.0 }).sum() / arr.len() as f64;
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
+}
+
+scalar_kernel! {
+/// Longest strike above mean feature.
+///
+/// The length of the longest run of consecutive values strictly greater than
+/// the mean of the series.
+///
+/// # Output column
+/// `{name}__longest_strike_above_mean`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - A series containing NaN has a NaN mean and gives 0.
+/// - A constant series gives 0.
+///
+/// # tsfresh
+/// `feature_calculators.longest_strike_above_mean` (v0.21.2).
+    LongestStrikeAboveMean, "longest_strike_above_mean", |ctx| {
+        let mean = ctx.mean();
+        let flags: Array1<bool> = ctx.x().mapv(|x| x > mean);
+        get_length_sequences_where(&flags).into_iter().max().unwrap_or(0) as f64
+    }
 }
 
 /// Count above feature.
@@ -124,27 +116,25 @@ fn _count_above(s: Column, t: f64) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.count_above` (v0.21.2).
-pub fn count_above(name: &str, t: f64) -> Expr {
-    col(name)
-        .apply(
-            move |s| _count_above(s, t),
-            |_, _| Ok(Field::new("".into(), DataType::Float64)),
-        )
-        .get(0, true)
-        .alias(format!("{}__count_above__t_{:.1}", name, t))
+pub struct CountAbove {
+    pub ts: Vec<f64>,
 }
 
-fn _count_below(s: Column, t: f64) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+impl Kernel for CountAbove {
+    fn names(&self) -> Vec<String> {
+        self.ts
+            .iter()
+            .map(|t| format!("count_above__t_{t:.1}"))
+            .collect()
     }
-    let ca = f64_values(&s)?;
-    let arr = ArrayView1::from(ca.cont_slice()?);
-    // fraction of values <= t, as in tsfresh
-    let out = arr.mapv(|x| if x <= t { 1.0 } else { 0.0 }).sum() / arr.len() as f64;
-    let s = Column::new("".into(), &[out]);
-    Ok(s)
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        // fraction of values >= t, as in tsfresh
+        for &t in &self.ts {
+            let count = ctx.x().mapv(|x| if x >= t { 1.0 } else { 0.0 }).sum();
+            out.push(count / ctx.len() as f64);
+        }
+    }
 }
 
 /// Count below feature.
@@ -168,119 +158,25 @@ fn _count_below(s: Column, t: f64) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.count_below` (v0.21.2).
-pub fn count_below(name: &str, t: f64) -> Expr {
-    col(name)
-        .apply(
-            move |s| _count_below(s, t),
-            |_, _| Ok(Field::new("".into(), DataType::Float64)),
-        )
-        .get(0, true)
-        .alias(format!("{}__count_below__t_{:.1}", name, t))
+pub struct CountBelow {
+    pub ts: Vec<f64>,
 }
 
-fn _longest_strike_below_mean(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+impl Kernel for CountBelow {
+    fn names(&self) -> Vec<String> {
+        self.ts
+            .iter()
+            .map(|t| format!("count_below__t_{t:.1}"))
+            .collect()
     }
-    let ca = f64_values(&s)?;
-    let arr = ArrayView1::from(ca.cont_slice()?);
-    let mean_opt = arr.mean();
-    let mean = match mean_opt {
-        Some(m) => m,
-        None => return Ok(Column::new("".into(), &[f64::NAN])),
-    };
-    let bool_arr = arr.mapv(|x| x < mean);
-    let out = get_length_sequences_where(&bool_arr)
-        .into_iter()
-        .max()
-        .unwrap_or(0);
-    let s = Column::new("".into(), &[out as f64]);
-    Ok(s)
-}
 
-/// Longest strike below mean feature.
-///
-/// The length of the longest run of consecutive values strictly less than
-/// the mean of the series.
-///
-/// # Output column
-/// `{name}__longest_strike_below_mean`
-///
-/// # Edge cases
-/// - Nulls are dropped first; a group with no non-null values gives NaN.
-/// - A series containing NaN has a NaN mean and gives 0.
-/// - A constant series gives 0.
-///
-/// # tsfresh
-/// `feature_calculators.longest_strike_below_mean` (v0.21.2).
-pub fn longest_strike_below_mean(name: &str) -> Expr {
-    col(name)
-        .apply(_longest_strike_below_mean, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__longest_strike_below_mean", name))
-}
-
-fn _longest_strike_above_mean(s: Column) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        // fraction of values <= t, as in tsfresh
+        for &t in &self.ts {
+            let count = ctx.x().mapv(|x| if x <= t { 1.0 } else { 0.0 }).sum();
+            out.push(count / ctx.len() as f64);
+        }
     }
-    let ca = f64_values(&s)?;
-    let arr = ArrayView1::from(ca.cont_slice()?);
-    let mean_opt = arr.mean();
-    let mean = match mean_opt {
-        Some(m) => m,
-        None => return Ok(Column::new("".into(), &[f64::NAN])),
-    };
-    let bool_arr = arr.mapv(|x| x > mean);
-    let out = get_length_sequences_where(&bool_arr)
-        .into_iter()
-        .max()
-        .unwrap_or(0);
-    let s = Column::new("".into(), &[out as f64]);
-    Ok(s)
-}
-
-/// Longest strike above mean feature.
-///
-/// The length of the longest run of consecutive values strictly greater than
-/// the mean of the series.
-///
-/// # Output column
-/// `{name}__longest_strike_above_mean`
-///
-/// # Edge cases
-/// - Nulls are dropped first; a group with no non-null values gives NaN.
-/// - A series containing NaN has a NaN mean and gives 0.
-/// - A constant series gives 0.
-///
-/// # tsfresh
-/// `feature_calculators.longest_strike_above_mean` (v0.21.2).
-pub fn longest_strike_above_mean(name: &str) -> Expr {
-    col(name)
-        .apply(_longest_strike_above_mean, |_, _| {
-            Ok(Field::new("".into(), DataType::Float64))
-        })
-        .get(0, true)
-        .alias(format!("{}__longest_strike_above_mean", name))
-}
-
-fn _number_crossing_m(s: Column, m: f64) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
-    }
-    let ca = f64_values(&s)?;
-    let arr = ArrayView1::from(ca.cont_slice()?);
-    // tsfresh: binarise as x > m (NaN and x == m are "not above") and count
-    // every change between neighbours
-    let above = arr.iter().map(|x| *x > m).collect::<Vec<_>>();
-    let count = above.windows(2).filter(|w| w[0] != w[1]).count();
-    let s = Column::new("".into(), &[count as f64]);
-    Ok(s)
 }
 
 /// Number of crossings of m feature.
@@ -303,30 +199,30 @@ fn _number_crossing_m(s: Column, m: f64) -> Result<Column, PolarsError> {
 ///
 /// # tsfresh
 /// `feature_calculators.number_crossing_m` (v0.21.2).
-pub fn number_crossing_m(name: &str, m: f64) -> Expr {
-    col(name)
-        .apply(
-            move |s| _number_crossing_m(s, m),
-            |_, _| Ok(Field::new("".into(), DataType::Float64)),
-        )
-        .get(0, true)
-        .alias(format!("{}__number_crossing_m__m_{:.1}", name, m))
+pub struct NumberCrossingM {
+    pub ms: Vec<f64>,
 }
 
-fn _range_count(s: Column, lower: f64, upper: f64) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls();
-    if s.is_empty() {
-        return Ok(Column::new("".into(), &[f64::NAN]));
+impl Kernel for NumberCrossingM {
+    fn names(&self) -> Vec<String> {
+        self.ms
+            .iter()
+            .map(|m| format!("number_crossing_m__m_{m:.1}"))
+            .collect()
     }
-    let ca = f64_values(&s)?;
-    let arr = ArrayView1::from(ca.cont_slice()?);
-    // Half-open interval [lower, upper), as tsfresh; empty if upper <= lower
-    let count = arr
-        .into_iter()
-        .filter(|&&x| x >= lower && x < upper)
-        .count();
-    let s = Column::new("".into(), &[count as f64]);
-    Ok(s)
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        // tsfresh: binarise as x > m (NaN and x == m are "not above") and
+        // count every change between neighbours
+        for &m in &self.ms {
+            let changes = ctx
+                .values()
+                .windows(2)
+                .filter(|w| (w[0] > m) != (w[1] > m))
+                .count();
+            out.push(changes as f64);
+        }
+    }
 }
 
 /// Range count feature.
@@ -349,17 +245,29 @@ fn _range_count(s: Column, lower: f64, upper: f64) -> Result<Column, PolarsError
 ///
 /// # tsfresh
 /// `feature_calculators.range_count` (v0.21.2).
-pub fn range_count(name: &str, lower: f64, upper: f64) -> Expr {
-    col(name)
-        .apply(
-            move |s| _range_count(s, lower, upper),
-            |_, _| Ok(Field::new("".into(), DataType::Float64)),
-        )
-        .get(0, true)
-        .alias(format!(
-            "{}__range_count__min_{:.1}__max_{:.1}",
-            name, lower, upper,
-        ))
+pub struct RangeCount {
+    pub ranges: Vec<(f64, f64)>,
+}
+
+impl Kernel for RangeCount {
+    fn names(&self) -> Vec<String> {
+        self.ranges
+            .iter()
+            .map(|(lower, upper)| format!("range_count__min_{lower:.1}__max_{upper:.1}"))
+            .collect()
+    }
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        // Half-open interval [lower, upper), as tsfresh; empty if upper <= lower
+        for &(lower, upper) in &self.ranges {
+            let count = ctx
+                .values()
+                .iter()
+                .filter(|&&x| x >= lower && x < upper)
+                .count();
+            out.push(count as f64);
+        }
+    }
 }
 
 /// Number of peaks feature.
@@ -383,8 +291,25 @@ pub fn range_count(name: &str, lower: f64, upper: f64) -> Expr {
 ///
 /// # tsfresh
 /// `feature_calculators.number_peaks` (v0.21.2).
-pub fn number_peaks(name: &str, n: usize) -> Expr {
-    number_peaks_multi(name, vec![n])
+pub struct NumberPeaks {
+    pub ns: Vec<usize>,
+}
+
+impl Kernel for NumberPeaks {
+    fn names(&self) -> Vec<String> {
+        self.ns
+            .iter()
+            .map(|n| format!("number_peaks__n_{n}"))
+            .collect()
+    }
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        out.extend(
+            peak_counts(ctx.values(), &self.ns)
+                .into_iter()
+                .map(|c| c as f64),
+        );
+    }
 }
 
 /// For each `n` in `ns`, the number of positions `j` with `n <= j < len - n`
@@ -418,48 +343,4 @@ fn peak_counts(x: &[f64], ns: &[usize]) -> Vec<usize> {
         }
     }
     counts
-}
-
-fn _number_peaks_all(s: Column, ns: &[usize]) -> Result<Column, PolarsError> {
-    let s = s.drop_nulls().cast(&DataType::Float64)?;
-    let x: Vec<f64> = s
-        .as_materialized_series()
-        .f64()?
-        .into_no_null_iter()
-        .collect();
-    let counts: Vec<f64> = if x.is_empty() {
-        vec![f64::NAN; ns.len()]
-    } else {
-        peak_counts(&x, ns).into_iter().map(|c| c as f64).collect()
-    };
-    let columns = ns
-        .iter()
-        .zip(counts)
-        .map(|(n, c)| Column::new(format!("number_peaks__n_{n}").into(), &[c]))
-        .collect::<Vec<_>>();
-    Ok(DataFrame::new(1, columns)?
-        .into_struct("number_peaks".into())
-        .into_column())
-}
-
-/// Number of peaks for several supports `ns` at once, sharing one pass over
-/// each group. See [`number_peaks`].
-pub fn number_peaks_multi(name: &str, ns: Vec<usize>) -> Expr {
-    let fields = ns
-        .iter()
-        .map(|n| Field::new(format!("number_peaks__n_{n}").into(), DataType::Float64))
-        .collect::<Vec<_>>();
-    let new_names = ns
-        .iter()
-        .map(|n| format!("{name}__number_peaks__n_{n}"))
-        .collect::<Vec<_>>();
-    col(name)
-        .apply(
-            move |s| _number_peaks_all(s, &ns),
-            move |_, _| Ok(Field::new("".into(), DataType::Struct(fields.clone()))),
-        )
-        .struct_()
-        .rename_fields(new_names)
-        .get(0, true)
-        .alias(format!("{name}__number_peaks"))
 }
