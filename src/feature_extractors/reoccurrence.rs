@@ -1,6 +1,7 @@
 //! Features about repeated values.
 
 use super::kernel::{GroupContext, Kernel, scalar_kernel};
+use crate::utils::stats::numpy_sum;
 
 scalar_kernel! {
 /// Has duplicate max feature.
@@ -223,22 +224,38 @@ impl ValueCounts {
         self.runs.len() + (self.nan_count > 0) as usize
     }
 
+    /// `np.sum(w * unique)` with `w = weight(count)` for values occurring
+    /// more than once and 0 otherwise, in `np.unique`'s order (sorted, NaN
+    /// last) and summed as numpy does.
+    fn weighted_unique_sum(&self, weight: impl Fn(usize) -> f64) -> f64 {
+        let mut terms = self
+            .runs
+            .iter()
+            .map(|&(v, c)| match (c > 1, v.is_finite()) {
+                (true, _) => weight(c) * v,
+                (false, true) => 0.0 * v,
+                (false, false) => 0.0,
+            })
+            .collect::<Vec<f64>>();
+        if self.nan_count > 0 {
+            terms.push(if self.nan_count > 1 { f64::NAN } else { 0.0 });
+        }
+        numpy_sum(terms.len(), |i| terms[i])
+    }
+
     fn feature(&self, name: &str) -> f64 {
         let n = self.n as f64;
         let recurring = || self.runs.iter().filter(|(_, c)| *c > 1);
         match name {
             "has_duplicate" => ((self.distinct() < self.n) as u8).into(),
             "ratio_value_number_to_time_series_length" => self.distinct() as f64 / n,
-            // A NaN that occurs more than once makes the sums NaN; a single NaN
-            // or ±inf is left out (deliberate deviation from tsfresh).
-            "sum_of_reoccurring_values" => {
-                let nan = if self.nan_count > 1 { f64::NAN } else { 0.0 };
-                recurring().map(|(v, _)| *v).sum::<f64>() + nan
-            }
-            "sum_of_reoccurring_data_points" => {
-                let nan = if self.nan_count > 1 { f64::NAN } else { 0.0 };
-                recurring().map(|(v, c)| *v * *c as f64).sum::<f64>() + nan
-            }
+            // np.sum(weight * unique) over every distinct value, as tsfresh
+            // (weight 1 for values, the count for data points, 0 for values
+            // that occur once). A NaN that occurs more than once makes the sums
+            // NaN; a single NaN or ±inf is left out instead of tsfresh's
+            // 0 * inf = NaN (deliberate deviation).
+            "sum_of_reoccurring_values" => self.weighted_unique_sum(|_| 1.0),
+            "sum_of_reoccurring_data_points" => self.weighted_unique_sum(|c| c as f64),
             // NaN is one distinct value here (np.unique) and may itself recur.
             "percentage_of_reoccurring_values_to_all_values" => {
                 let recurring_values = recurring().count() + (self.nan_count > 1) as usize;

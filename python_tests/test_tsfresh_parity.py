@@ -1117,3 +1117,19 @@ def test_agg_linear_trend_fit_is_centred():
         "val__agg_linear_trend_slope__chunk_size_3__agg_var"
     ]
     assert math.isclose(result, -0.1111111119389534, rel_tol=1e-9)
+
+
+# Found by the tsfresh fuzzer: sum_of_reoccurring_values(np.array(x)) and
+# sum_of_reoccurring_data_points(np.array(x)) with tsfresh 0.21.2 / numpy 2.4.4
+# take np.sum(counts * unique) over every distinct value (sorted, with 0 for
+# values that occur once), so the sum order matters bit for bit.
+_REOCCURRING_X = [0, 1, 2, 3, 131072, 131072, 393216, 393216, 1.5]
+_REOCCURRING_X += [3.01266764466243e-06, 3.01266764466243e-06]
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected"),
+    [("values", 524288.0000030127), ("data_points", 1048576.0000060254)],
+)
+def test_sum_of_reoccurring_exact(kind, expected):
+    assert _features(_REOCCURRING_X)[f"val__sum_of_reoccurring_{kind}"] == expected
