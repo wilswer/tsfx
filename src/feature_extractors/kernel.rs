@@ -11,7 +11,7 @@
 use std::cell::OnceCell;
 use std::sync::Arc;
 
-use ndarray::ArrayView1;
+use ndarray::{Array1, ArrayView1, s};
 use ndarray_stats::QuantileExt;
 use polars::prelude::*;
 
@@ -29,6 +29,7 @@ pub struct GroupContext<'a> {
     var: OnceCell<f64>,
     min: OnceCell<f64>,
     max: OnceCell<f64>,
+    diffs: OnceCell<Array1<f64>>,
 }
 
 impl<'a> GroupContext<'a> {
@@ -40,6 +41,7 @@ impl<'a> GroupContext<'a> {
             var: OnceCell::new(),
             min: OnceCell::new(),
             max: OnceCell::new(),
+            diffs: OnceCell::new(),
         }
     }
 
@@ -85,6 +87,12 @@ impl<'a> GroupContext<'a> {
     /// Largest value; NaN if any value is NaN (like `np.max`).
     pub fn max(&self) -> f64 {
         *self.max.get_or_init(|| *self.x.max().unwrap_or(&f64::NAN))
+    }
+
+    /// Consecutive differences $x_{i+1} - x_i$ (empty for a single value).
+    pub fn diffs(&self) -> &Array1<f64> {
+        self.diffs
+            .get_or_init(|| &self.x.slice(s![1..]) - &self.x.slice(s![..-1]))
     }
 }
 

@@ -20,7 +20,7 @@ use polars::prelude::*;
 use crate::extract::{ExtractionSettings, FeatureSetting};
 use crate::utils::toml_reader::{ConfigError, load_config};
 use autocorrelation::{autocorrelation, c3, time_reversal_asymmetry_statistic};
-use change::{absolute_sum_of_changes, cid_ce, mean_absolute_change, mean_change};
+use change::{AbsoluteSumOfChanges, CidCe, MeanAbsoluteChange, MeanChange};
 use counting::{
     CountAbove, CountAboveMean, CountBelow, CountBelowMean, LongestStrikeAboveMean,
     LongestStrikeBelowMean, NumberCrossingM, NumberPeaks, RangeCount,
@@ -99,7 +99,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 plan.push(AbsoluteEnergy);
             }
             if config.mean_absolute_change.is_some() {
-                aggregators.push(mean_absolute_change(col));
+                plan.push(MeanAbsoluteChange);
             }
             if config.linear_trend.is_some() {
                 aggregators.push(linear_trend(col));
@@ -139,16 +139,14 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 aggregators.push(has_duplicate_min(col));
             }
             if let Some(feature) = &config.cid_ce {
-                let params = &feature.parameters;
-                for p in params {
-                    aggregators.push(cid_ce(col, p.normalize));
-                }
+                let normalize = feature.parameters.iter().map(|p| p.normalize).collect();
+                plan.push(CidCe { normalize });
             }
             if config.absolute_maximum.is_some() {
                 plan.push(AbsoluteMaximum);
             }
             if config.absolute_sum_of_changes.is_some() {
-                aggregators.push(absolute_sum_of_changes(col));
+                plan.push(AbsoluteSumOfChanges);
             }
             if config.count_above_mean.is_some() {
                 plan.push(CountAboveMean);
@@ -204,7 +202,7 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 plan.push(VariationCoefficient);
             }
             if config.mean_change.is_some() {
-                aggregators.push(mean_change(col));
+                plan.push(MeanChange);
             }
             if let Some(feature) = &config.agg_linear_trend {
                 let params = &feature.parameters;
