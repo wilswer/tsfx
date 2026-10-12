@@ -2,14 +2,15 @@
 
 use anyhow::Result;
 use itertools::Itertools;
-use ndarray::{Array1, Axis, Ix1};
+use ndarray::{Array1, ArrayView1, Axis};
 use polars::lazy::dsl::*;
 use polars::prelude::*;
 
+use super::f64_values;
 use crate::utils::stats::population_std;
 
 /// All length-`chunk_size` sliding windows of `x`, one step apart.
-fn _into_subchunks(x: &Array1<f64>, chunk_size: usize) -> Vec<Array1<f64>> {
+fn _into_subchunks(x: &ArrayView1<f64>, chunk_size: usize) -> Vec<Array1<f64>> {
     let mut subchunks = Vec::with_capacity(x.len());
     for chunk in x.axis_windows(Axis(0), chunk_size) {
         subchunks.push(chunk.to_owned());
@@ -37,16 +38,16 @@ fn _sample_entropy(s: Column) -> Result<Column, PolarsError> {
     if s.is_empty() {
         return Ok(Column::new("".into(), &[f64::NAN]));
     }
-    let arr = s
-        .into_frame()
-        .to_ndarray::<Float64Type>(IndexOrder::C)
-        .unwrap();
-    let arr = arr
-        .remove_axis(Axis(1))
-        .into_dimensionality::<Ix1>()
-        .unwrap();
+    let ca = f64_values(&s)?;
+    // Nulls count as NaN (and so give NaN), as before
+    let ca = if ca.null_count() > 0 {
+        ca.fill_null_with_values(f64::NAN)?
+    } else {
+        ca
+    };
+    let arr = ArrayView1::from(ca.cont_slice()?);
     let m = 2;
-    let r = 0.2 * population_std(&arr.view());
+    let r = 0.2 * population_std(&arr);
     let templates_m = _into_subchunks(&arr, m);
     let matches_m = _get_matches(templates_m, r);
     let templates_m_plus_1 = _into_subchunks(&arr, m + 1);
