@@ -17,12 +17,12 @@ python python_benchmarks/tsfresh_compare.py --dataset 1brc --rows 10_000_000
 
 `--rows` limits how many measurements are read (default 10 million, `0` for
 all). For scale, on an 80-core machine with the `efficient` tier (8,859
-stations, one timed run each):
+stations, best of two timed runs):
 
 | rows | TSFX   | TSFresh |
 | ---- | ------ | ------- |
-| 10M  | 2.9 s  | 51.5 s  |
-| 50M  | 21.9 s | 194.4 s |
+| 10M  | 2.3 s  | 52.8 s  |
+| 50M  | 13.0 s | 203.6 s |
 
 The full billion rows has not been measured. See
 the docstring of `tsfresh_compare.py` for how the comparison is kept fair.

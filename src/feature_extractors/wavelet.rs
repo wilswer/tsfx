@@ -196,22 +196,27 @@ fn ricker(points: usize, a: usize) -> Vec<f64> {
 }
 
 /// `scipy.stats.scoreatpercentile(values, per)` (`interpolation_method =
-/// "fraction"`); NaN sorts last, as in `np.sort`.
-fn score_at_percentile(values: &[f64], per: f64) -> f64 {
-    let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| match (a.is_nan(), b.is_nan()) {
+/// "fraction"`); NaN sorts last, as in `np.sort`. Selects the two order
+/// statistics it needs instead of sorting; `buf` is scratch space.
+fn score_at_percentile(values: &[f64], per: f64, buf: &mut Vec<f64>) -> f64 {
+    let cmp = |a: &f64, b: &f64| match (a.is_nan(), b.is_nan()) {
         (true, true) => std::cmp::Ordering::Equal,
         (true, false) => std::cmp::Ordering::Greater,
         (false, true) => std::cmp::Ordering::Less,
         _ => a.partial_cmp(b).unwrap(),
-    });
-    let idx = per / 100.0 * (sorted.len() - 1) as f64;
+    };
+    buf.clear();
+    buf.extend_from_slice(values);
+    let idx = per / 100.0 * (buf.len() - 1) as f64;
     let i = idx as usize;
+    let (_, &mut lo, above) = buf.select_nth_unstable_by(i, cmp);
     if i as f64 == idx {
-        sorted[i] * 1.0 / 1.0
+        lo * 1.0 / 1.0
     } else {
+        // The next order statistic is the smallest value above position i
+        let hi = *above.iter().min_by(|a, b| cmp(a, b)).unwrap();
         let (w0, w1) = ((i + 1) as f64 - idx, idx - i as f64);
-        (sorted[i] * w0 + sorted[i + 1] * w1) / (w0 + w1)
+        (lo * w0 + hi * w1) / (w0 + w1)
     }
 }
 
@@ -268,18 +273,27 @@ fn count_cwt_peaks(x: &[f64], n: usize) -> usize {
         for line in ridge_lines.iter_mut() {
             line.gap += 1;
         }
-        let prev_cols: Vec<usize> = ridge_lines
+        // The lines' last columns at the start of the row, sorted, keeping
+        // the first line at each column (np.argmin picks the first closest)
+        let mut ends: Vec<(usize, usize)> = ridge_lines
             .iter()
-            .map(|l| *l.cols.last().unwrap())
+            .enumerate()
+            .map(|(i, l)| (*l.cols.last().unwrap(), i))
             .collect();
+        ends.sort_unstable();
+        ends.dedup_by_key(|e| e.0);
         for &col in &max_cols[row] {
-            // np.argmin: the first closest line
-            let closest = prev_cols
-                .iter()
-                .enumerate()
-                .min_by_key(|&(i, &c)| (c.abs_diff(col), i))
-                .filter(|&(_, &c)| c.abs_diff(col) as f64 <= max_distance)
-                .map(|(i, _)| i);
+            // The closest line is at the nearest end column on either side;
+            // on a tie in distance, the first line wins
+            let p = ends.partition_point(|&(c, _)| c < col);
+            let left = p.checked_sub(1).map(|j| ends[j]);
+            let right = ends.get(p).copied();
+            let closest = [left, right]
+                .into_iter()
+                .flatten()
+                .min_by_key(|&(c, i)| (c.abs_diff(col), i))
+                .filter(|&(c, _)| c.abs_diff(col) as f64 <= max_distance)
+                .map(|(_, i)| i);
             match closest {
                 Some(i) => {
                     let line = &mut ridge_lines[i];
@@ -294,11 +308,12 @@ fn count_cwt_peaks(x: &[f64], n: usize) -> usize {
                 }),
             }
         }
-        for i in (0..ridge_lines.len()).rev() {
-            if ridge_lines[i].gap > gap_thresh {
-                final_lines.push(ridge_lines.remove(i));
-            }
-        }
+        // End lines that skipped too many rows, keeping the others in order
+        let (ended, alive): (Vec<_>, Vec<_>) = std::mem::take(&mut ridge_lines)
+            .into_iter()
+            .partition(|line| line.gap > gap_thresh);
+        final_lines.extend(ended);
+        ridge_lines = alive;
     }
 
     // _filter_ridge_lines(cwt, lines, min_length = ceil(n / 4),
@@ -307,10 +322,11 @@ fn count_cwt_peaks(x: &[f64], n: usize) -> usize {
     let window_size = (len as f64 / 20.0).ceil() as usize;
     let (hf_window, odd) = (window_size / 2, window_size % 2);
     let row_one = &cwt[0];
-    let noise = |ind: usize| {
+    let mut buf = Vec::new();
+    let mut noise = |ind: usize| {
         let start = ind.saturating_sub(hf_window);
         let end = (ind + hf_window + odd).min(len);
-        score_at_percentile(&row_one[start..end], 10.0)
+        score_at_percentile(&row_one[start..end], 10.0, &mut buf)
     };
     final_lines
         .iter()
@@ -371,7 +387,10 @@ fn count_cwt_peaks(x: &[f64], n: usize) -> usize {
 ///   Irregular series are not affected.
 ///
 /// # Cost
-/// $O(\text{len} \cdot n^2)$.
+/// $O(\text{len} \cdot n^2)$ for the transform and $O(n \cdot \text{len}
+/// \log \text{len})$ to join ridge lines, plus a selection over a window of
+/// $\lceil \text{len} / 20 \rceil$ for each ridge line's noise: up to
+/// $O(\text{len}^2)$ in all, which dominates on long series.
 ///
 /// # tsfresh
 /// `feature_calculators.number_cwt_peaks` (v0.21.2).

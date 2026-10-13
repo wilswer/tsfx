@@ -72,6 +72,16 @@ All notable changes to TSFX are documented here.
   scaled to the series or fit) rather than bit for bit, since tsfx does not
   reproduce numpy's FFT, LAPACK and SIMD `log` arithmetic.
 
+### Performance
+
+- **`number_cwt_peaks` is much faster on long series,** with the same
+  results bit for bit: on 50M rows of 1BRC data (series of about 5,600
+  values) it takes 2.6 s instead of 10.9 s. Its noise estimate
+  now selects the 10th percentile of each window instead of sorting it, and
+  ridge lines are matched by binary search instead of comparing every pair.
+  The `Efficient` tier on 50M rows of 1BRC data takes 13.0 s instead of
+  21.9 s.
+
 ## 0.5.0 (2026-10-12)
 
 ### Changed
