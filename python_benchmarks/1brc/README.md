@@ -21,8 +21,8 @@ stations, best of two timed runs):
 
 | rows | TSFX   | TSFresh |
 | ---- | ------ | ------- |
-| 10M  | 2.3 s  | 52.8 s  |
-| 50M  | 13.0 s | 203.6 s |
+| 10M  | 1.3 s  | 52.3 s  |
+| 50M  | 7.1 s  | 192.7 s |
 
 The full billion rows has not been measured. See
 the docstring of `tsfresh_compare.py` for how the comparison is kept fair.

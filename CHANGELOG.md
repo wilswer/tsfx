@@ -105,6 +105,18 @@ All notable changes to TSFX are documented here.
     one integer instead of an allocated list.
   - `change_quantiles` 3.0 → 2.5 s: each corridor's changes are computed
     once and shared by its aggregations.
+- **`augmented_dickey_fuller` and `ar_coefficient` solve well-conditioned
+  regressions from the Gram matrix.** A Householder QR sweeps the whole
+  design once per regressor and was limited by memory bandwidth on long
+  series; the Gram matrix needs one pass. On 100M rows of 1BRC data,
+  `augmented_dickey_fuller` alone takes 4.4 s instead of 12.6 s. **Not bit
+  for bit:** results agree with the previous ones to within about
+  1e-10 (ADF test statistics and p-values within 1e-12 relative on
+  1BRC and edge-case series, the same chosen lags, AR coefficients within
+  2e-11 of the fit's largest coefficient). Ill-conditioned,
+  near-exact and exactly fitting regressions still use the QR decomposition,
+  so their results, including the deviations from tsfresh documented for
+  exact fits, are unchanged.
 
 ## 0.5.0 (2026-10-12)
 
