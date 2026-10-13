@@ -53,7 +53,7 @@ impl PyExtractionSettings {
     ///     grouping_cols (list[str]): The columns used to group the data (e.g., IDs).
     ///     value_cols (list[str]): The columns containing the numerical values to extract features from.
     ///     feature_setting (FeatureSetting): The complexity/depth of features to calculate.
-    ///     config_path (str | None, optional): Path to a custom configuration JSON/YAML file. Defaults to None.
+    ///     config_path (str | None, optional): Path to a TOML feature config file, which must exist. Defaults to None: `.tsfx-config.toml` in the working directory if present, else the default config.
     ///     dynamic_settings (DynamicGroupBySettings | None, optional): Settings for rolling/dynamic time windows. Defaults to None.
     #[new]
     #[pyo3(signature = (grouping_cols, value_cols, feature_setting, config_path=None, dynamic_settings=None))]

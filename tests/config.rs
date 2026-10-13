@@ -1,4 +1,4 @@
-use tsfx::utils::toml_reader::load_config;
+use tsfx::utils::toml_reader::{ConfigError, load_config};
 
 #[test]
 fn test_read_config_from_empty_file() {
@@ -62,4 +62,11 @@ fn test_read_config_from_empty_file() {
     assert!(config.c3.is_none());
     assert!(config.time_reversal_asymmetry_statistic.is_none());
     assert!(config.number_peaks.is_none());
+}
+
+#[test]
+fn test_missing_explicit_config_file_is_an_error() {
+    let err = load_config(Some("./tests/data/no-such-config.toml")).unwrap_err();
+    assert!(matches!(err, ConfigError::Read { .. }), "{err}");
+    assert!(err.to_string().contains("no-such-config.toml"), "{err}");
 }

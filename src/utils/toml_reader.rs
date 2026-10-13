@@ -1446,14 +1446,21 @@ pub enum ConfigError {
     },
 }
 
-/// Load the feature config from `file_path` (default `.tsfx-config.toml`).
-/// A missing file falls back to the default config.
+/// The config file looked for in the working directory when no path is
+/// given.
+pub const DEFAULT_CONFIG_FILE: &str = ".tsfx-config.toml";
+
+/// Load the feature config from `file_path`, or without one from
+/// [`DEFAULT_CONFIG_FILE`] in the working directory. Without a `file_path`, a
+/// missing [`DEFAULT_CONFIG_FILE`] gives the default config; a given
+/// `file_path` must exist ([`ConfigError::Read`] otherwise), so a mistyped
+/// path is not silently replaced by the defaults.
 pub fn load_config(file_path: Option<&str>) -> Result<Config, ConfigError> {
-    let file_path = file_path.unwrap_or(".tsfx-config.toml");
-    if !std::path::Path::new(file_path).exists() {
-        println!("tsfx: No config file detected. Using default config.");
-        return Ok(Config::default());
-    }
+    let file_path = match file_path {
+        Some(path) => path,
+        None if std::path::Path::new(DEFAULT_CONFIG_FILE).exists() => DEFAULT_CONFIG_FILE,
+        None => return Ok(Config::default()),
+    };
     let config_str = std::fs::read_to_string(file_path).map_err(|source| ConfigError::Read {
         path: file_path.to_string(),
         source,

@@ -64,7 +64,10 @@ class ExtractionSettings:
     feature_setting:
         One of the `FeatureSetting` presets controlling which feature calculators run.
     config_path:
-        Optional path to `.tsfx-config.toml` config file.
+        Optional path to a TOML feature config file; a path that does not
+        exist raises `ValueError` on extraction. Without one,
+        `.tsfx-config.toml` in the working directory is used if present, else
+        the default config.
     dynamic_settings:
         Optional `DynamicGroupBySettings` for time-windowed extraction.
 
