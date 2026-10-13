@@ -74,6 +74,9 @@ All notable changes to TSFX are documented here.
 
 ### Fixed
 
+- **Linux wheels for free-threaded CPython 3.14 and PyPy 3.11 again.** 0.5.0
+  shipped only the abi3 wheels, which those interpreters cannot use, so
+  installing there built tsfx from source (with a Rust toolchain).
 - **`ar_coefficient` matches statsmodels 0.15.** A series of exactly
   2k + 1 values (as many observations as AR(k) parameters) now gives the
   exact fit, as tsfresh does with statsmodels 0.15, instead of NaN (or 0 for
