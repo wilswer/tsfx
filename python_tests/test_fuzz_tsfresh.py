@@ -369,6 +369,12 @@ def _deviation(feature: str, x: list[float]) -> bool:
             return True
         return not _well_posed(x, _ar_designs(x))
     if feature == "augmented_dickey_fuller":
+        # NaN or ±inf inside a regression design can make LAPACK's SVD loop
+        # forever in statsmodels (autolag=None); tsfx gives NaN, which the
+        # parity tests check. A non-finite last value enters no design and is
+        # compared
+        if not all(math.isfinite(v) for v in x[:-1]):
+            return True
         return not _well_posed(x, _adf_design(x)) or _adf_exact_fit(x)
     return False
 
@@ -392,13 +398,14 @@ def _well_posed(values: list[float], designs: list) -> bool:
 
 def _ar_designs(values: list[float]) -> list:
     """AutoReg's designs [1, x_{t-1}, ..., x_{t-k}] for the parity config's
-    k that can be fitted (n >= 2k + 2)."""
+    k that can be fitted (n >= 2k + 1: statsmodels 0.15 also fits the
+    exactly determined case)."""
     x = np.array(values, dtype=float)
     n = len(x)
     return [
         np.column_stack([np.ones(n - k)] + [x[k - c : n - c] for c in range(1, k + 1)])
         for k in (1, 2, 4)
-        if n >= 2 * k + 2
+        if n >= 2 * k + 1
     ]
 
 
