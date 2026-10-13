@@ -63,6 +63,10 @@ impl Ols {
         for p in (0..k).rev() {
             tails[p] = tails[p + 1] + if p < nobs { c[p] * c[p] } else { 0.0 };
         }
+        // For a cheap upper bound of each fit's scale (see below)
+        let abs_max = |v: &[f64]| v.iter().fold(0.0, |m: f64, e| m.max(e.abs()));
+        let y_max = abs_max(y);
+        let col_max: Vec<f64> = x.iter().map(|col| abs_max(col)).collect();
         let fits = (min_cols..=k)
             .map(|p| {
                 // The p x p triangular factor of the first p columns
@@ -96,18 +100,30 @@ impl Ols {
                     let fitted: f64 = (i..p).map(|j| r_p[j][i] * params[j]).sum();
                     ssr += (c[i] - fitted) * (c[i] - fitted);
                 }
-                let scale = (0..nobs)
-                    .map(|row| {
-                        y[row].abs()
-                            + x[..p]
-                                .iter()
-                                .zip(&params)
-                                .map(|(col, b)| (col[row] * b).abs())
-                                .sum::<f64>()
-                    })
-                    .fold(0.0, f64::max);
-                if (ssr / nobs as f64).sqrt() <= PERFECT_FIT_TOL * scale {
-                    ssr = 0.0;
+                let rms = (ssr / nobs as f64).sqrt();
+                // The scale is at most max |y| + sum_j |b_j| max |X_j| (twice
+                // that covers rounding), so the O(nobs p) scale is only
+                // needed when the residual is below the tolerance of that
+                let bound = y_max
+                    + params
+                        .iter()
+                        .zip(&col_max)
+                        .map(|(b, m)| b.abs() * m)
+                        .sum::<f64>();
+                if !bound.is_finite() || rms <= 2.0 * PERFECT_FIT_TOL * bound {
+                    let scale = (0..nobs)
+                        .map(|row| {
+                            y[row].abs()
+                                + x[..p]
+                                    .iter()
+                                    .zip(&params)
+                                    .map(|(col, b)| (col[row] * b).abs())
+                                    .sum::<f64>()
+                        })
+                        .fold(0.0, f64::max);
+                    if rms <= PERFECT_FIT_TOL * scale {
+                        ssr = 0.0;
+                    }
                 }
                 let tol = s_max * p as f64 * f64::EPSILON;
                 Self {
@@ -209,9 +225,14 @@ fn jacobi_svd(mut a: Vec<Vec<f64>>) -> (Vec<Vec<f64>>, Vec<f64>, Vec<Vec<f64>>) 
         let mut rotated = false;
         for p in 0..k {
             for q in p + 1..k {
-                let alpha = dot(&a[p], &a[p]);
-                let beta = dot(&a[q], &a[q]);
-                let gamma = dot(&a[p], &a[q]);
+                // The three dot products in one pass, each summed in the
+                // same order as `dot`
+                let (mut alpha, mut beta, mut gamma) = (-0.0f64, -0.0f64, -0.0f64);
+                for (x, y) in a[p].iter().zip(&a[q]) {
+                    alpha += x * x;
+                    beta += y * y;
+                    gamma += x * y;
+                }
                 if gamma == 0.0 || gamma.abs() <= f64::EPSILON * (alpha * beta).sqrt() {
                     continue;
                 }

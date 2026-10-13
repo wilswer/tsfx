@@ -90,6 +90,18 @@ All notable changes to TSFX are documented here.
   ridge lines are matched by binary search instead of comparing every pair.
   The `Efficient` tier on 50M rows of 1BRC data takes 13.0 s instead of
   21.9 s.
+- **`augmented_dickey_fuller`, `permutation_entropy` and
+  `change_quantiles` are faster,** with the same results bit for bit.
+  Together they make the `Efficient` tier on 100M rows of 1BRC data take
+  25.5 s instead of 35.3 s (−28%), the features alone measured as follows:
+  - `augmented_dickey_fuller` 16.6 → about 10 s: the check for an exact fit
+    first compares against a cheap upper bound of the fit's scale, and only
+    computes the exact scale (a pass over every row and regressor) when the
+    residual is small enough to matter.
+  - `permutation_entropy` 3.7 → 2.1 s: each window's pattern is counted as
+    one integer instead of an allocated list.
+  - `change_quantiles` 3.0 → 2.5 s: each corridor's changes are computed
+    once and shared by its aggregations.
 
 ## 0.5.0 (2026-10-12)
 
