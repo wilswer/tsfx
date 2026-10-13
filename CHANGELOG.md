@@ -2,6 +2,67 @@
 
 All notable changes to TSFX are documented here.
 
+## Unreleased
+
+### Added
+
+- **30 more tsfresh feature calculators**, each with tsfresh's default
+  parameters, its own config section and parity tests against tsfresh
+  0.21.2 (its own test cases plus differential fuzzing):
+  - Changes and counts: `mean_second_derivative_central`, `value_count`,
+    `energy_ratio_by_chunks`, `change_quantiles`, `benford_correlation`,
+    `query_similarity_count`.
+  - Entropy and complexity: `binned_entropy`, `lempel_ziv_complexity`,
+    `permutation_entropy`, `approximate_entropy`.
+  - Langevin model: `friedrich_coefficients`, `max_langevin_fixed_point`.
+  - Spectral: `fft_coefficient`, `fft_aggregated`, `spkt_welch_density`,
+    `fourier_entropy`.
+  - Wavelets: `cwt_coefficients`, `number_cwt_peaks`.
+  - Autoregression: `agg_autocorrelation`, `partial_autocorrelation`,
+    `ar_coefficient`, `augmented_dickey_fuller` (`autolag` AIC, BIC,
+    t-stat or None).
+
+  All are in the `Efficient` tier, except `approximate_entropy`
+  (`Comprehensive`, as tsfresh marks it expensive).
+  `query_similarity_count` is off unless configured, since it needs a query
+  (tsfresh's default, no query, only gives NaN). Unknown string parameters
+  (for example an `f_agg` or `attr`) are rejected when the config is loaded.
+  Not implemented: `linear_trend_timewise` (needs the time index) and
+  `matrix_profile` (its `matrixprofile` dependency is unmaintained; tsfresh
+  disables it too).
+
+### Changed
+
+- **Many more output columns by default.** The `Efficient` tier now gives
+  about 750 columns per value column (was about 155), 400 of them from
+  `fft_coefficient`. Existing columns keep their names, but the new ones
+  come after them for each value column, so **positions of existing columns
+  change**: select feature columns by name. To keep the old set, list the
+  features you want in `.tsfx-config.toml`. `Efficient` extraction takes
+  longer accordingly (about 6× on the 505-series stocks benchmark).
+- Deliberate deviations from tsfresh, each documented in the feature's docs
+  and tested:
+  - Where tsfresh raises (and so fails the whole extraction), tsfx gives NaN:
+    `binned_entropy` with ±inf, `ar_coefficient` with NaN or ±inf,
+    `query_similarity_count` of a series shorter than the query, and the
+    entropy and Langevin features on inputs numpy cannot handle.
+  - `fft_coefficient` of a series with NaN or ±inf is NaN for every column
+    (numpy keeps some parts finite, depending on its internal order).
+  - `permutation_entropy` ranks ties within a window by position; numpy's
+    sort is not stable on some CPUs, so tsfresh's result depends on the CPU.
+  - `number_cwt_peaks`: where neighbouring wavelet coefficients are tied in
+    real arithmetic (for example a smooth bump centred on a sample),
+    rounding decides the maximum. tsfx's arithmetic is portable, so counts
+    are the same on every platform but can differ from tsfresh's (whose
+    rounding depends on numpy's BLAS and CPU).
+  - `augmented_dickey_fuller`: an exact fit gives a test statistic of ±inf
+    (statsmodels divides by rounding noise), and collinear extra lags whose
+    information criteria tie resolve to the smaller lag.
+- Spectral, wavelet, regression, entropy and Langevin features equal
+  tsfresh's to within rounding (relative and absolute 1e-9, or a tolerance
+  scaled to the series or fit) rather than bit for bit, since tsfx does not
+  reproduce numpy's FFT, LAPACK and SIMD `log` arithmetic.
+
 ## 0.5.0 (2026-10-12)
 
 ### Changed

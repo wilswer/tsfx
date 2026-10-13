@@ -25,6 +25,19 @@ Current deviations:
 - ``sample_entropy`` with +-inf in the series
 - ``sum_of_reoccurring_values`` / ``sum_of_reoccurring_data_points`` with a
   NaN or +-inf that occurs only once
+- ``query_similarity_count`` of a series shorter than the query (tsfresh
+  raises; TSFX gives NaN)
+- ``fft_coefficient`` with a NaN or +-inf in the series
+- ``number_cwt_peaks`` where neighbouring wavelet coefficients are tied in
+  real arithmetic (rounding decides; tsfx's arithmetic is portable, numpy's
+  depends on its BLAS and CPU)
+- ``ar_coefficient`` with NaN or +-inf in the series (tsfresh raises)
+- ``augmented_dickey_fuller`` when its regression fits exactly, or when an
+  extra lag is collinear with the others (rounding noise decides
+  statsmodels' result)
+- ``binned_entropy`` with +-inf in the series (tsfresh raises)
+- ``permutation_entropy`` with ties within a window (tsfresh's result depends
+  on the CPU)
 
 Cases that still fail are marked with ``_bug`` (strict xfail), so the marker
 must be removed once the fix lands.
@@ -1158,3 +1171,717 @@ def test_sum_of_reoccurring_exact(kind, expected):
 )
 def test_threshold_exactly_hit(values, column, expected):
     assert _features(values)[f"val__{column}"] == expected
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        (list(range(10)), 0),
+        ([1, 3, 5], 0),
+        ([1, 3, 7, -3], -3),
+        # generated (tsfresh 0.21.2 / numpy 2.4.4): only the ends are used
+        ([1, 3], math.nan),
+        ([1, math.nan, 5, math.nan, 2, 7], math.nan),
+        ([1, 2, math.nan, 2, 7], 2 / 3),
+    ],
+)
+def test_mean_second_derivative_central(values, expected):
+    _assert_feature(values, "val__mean_second_derivative_central", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "value", "expected"),
+    [
+        ([1] * 10, "1.0", 10),
+        (list(range(10)), "0.0", 1),
+        ([1] * 10, "0.0", 0),
+        ([math.nan, 0, 1] * 3, "0.0", 3),
+        ([-math.inf, 0, 1] * 3, "0.0", 3),
+        ([math.inf, 0, 1] * 3, "0.0", 3),
+        ([0.1, 0.2, 0.3] * 3, "0.2", 3),
+        ([math.nan, 0, 1] * 3, "NaN", 3),
+        ([-math.inf, 0, 1] * 3, "-inf", 3),
+        ([math.inf, 0, 1] * 3, "inf", 3),
+    ],
+)
+def test_value_count(values, value, expected):
+    _assert_feature(values, f"val__value_count__value_{value}", expected)
+
+
+@pytest.mark.parametrize(
+    ("focus", "expected"),
+    [(0, 0.0043), (1, 0.0316), (2, 0.0871), (3, 0.1709), (4, 0.2829), (5, 0.4232)],
+)
+def test_energy_ratio_by_chunks(focus, expected):
+    column = f"val__energy_ratio_by_chunks__num_segments_6__segment_focus_{focus}"
+    _assert_feature(list(range(90)), column, expected, abs_tol=5e-4)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [([1] * 10, [0.4, 0.3, 0.3]), ([0] * 10, [math.nan] * 3)],
+)
+def test_energy_ratio_by_chunks_three_segments(values, expected):
+    for focus, value in enumerate(expected):
+        column = f"val__energy_ratio_by_chunks__num_segments_3__segment_focus_{focus}"
+        _assert_feature(values, column, value, abs_tol=5e-4)
+
+
+# generated (tsfresh 0.21.2 / numpy 2.4.4): fewer values than segments
+def test_energy_ratio_by_chunks_empty_segments_generated():
+    features = _features([1, 2, 3, 4])
+    expected = [1 / 30, 4 / 30, 9 / 30, 16 / 30, 0, 0]
+    for focus, value in enumerate(expected):
+        column = f"val__energy_ratio_by_chunks__num_segments_6__segment_focus_{focus}"
+        assert features[column] == pytest.approx(value, abs=1e-15)
+
+
+# generated (tsfresh 0.21.2 / numpy 2.4.4 / pandas 3.0.2). tsfresh's own test
+# uses 10000 random values (np.random.seed(0)), which are not reproduced here.
+_CHANGE_QUANTILES = [
+    ("ql_0.1__qh_0.2__isabs_false__f_agg_mean", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("ql_0.0__qh_0.2__isabs_true__f_agg_var", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+    ("ql_0.2__qh_0.8__isabs_false__f_agg_mean", [1.0, -1 / 3, 0.2, 0.0, -1.0, 0.0]),
+    ("ql_0.2__qh_0.8__isabs_true__f_agg_mean", [1.0, 5 / 3, 0.2, 0.0, 1.0, 0.0]),
+    ("ql_0.4__qh_1.0__isabs_false__f_agg_var", [0.0, 5.2, 0.16, 0.0, 2.25, 0.25]),
+    (
+        "ql_0.0__qh_1.0__isabs_false__f_agg_std",
+        [0.0, 3.2906537901857598, 0.4] + [0.0, 1.5, 0.0],
+    ),
+    ("ql_0.0__qh_1.0__isabs_true__f_agg_median", [1.0, 3.0, 0.0, 0.0, 1.5, 0.0]),
+    ("ql_0.4__qh_0.4__isabs_false__f_agg_mean", [0.0] * 6),
+    ("ql_0.8__qh_0.2__isabs_false__f_agg_mean", [0.0] * 6),
+]
+_CHANGE_QUANTILES_X = [
+    list(range(10)),
+    [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7],
+    [1, 1, 1, 2, 2, 2],
+    [1, 1, 1, 1],
+    [math.nan, 2, 1, 3, 2, 4, math.nan, 3],
+    # the lower edge is NaN (-inf - -inf), so numpy's searchsorted sees an
+    # unsorted pair of edges
+    [-math.inf, -math.inf, 5, 1, 2, 2, 3],
+]
+
+
+@pytest.mark.parametrize(("params", "expected"), _CHANGE_QUANTILES)
+@pytest.mark.parametrize("case", range(len(_CHANGE_QUANTILES_X)))
+def test_change_quantiles_generated(params, expected, case):
+    column = f"val__change_quantiles__{params}"
+    _assert_feature(_CHANGE_QUANTILES_X[case], column, expected[case])
+
+
+_FIBONACCI = [0, 1]
+for _ in range(198):
+    _FIBONACCI.append(_FIBONACCI[-1] + _FIBONACCI[-2])
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        (_FIBONACCI, 0.998003988),
+        (
+            [1.354, 0.058, 0.055, 0.99, 3.15, math.nan, 0.3, 2.3, 0, 0.59, 0.74],
+            0.10357511,
+        ),
+        ([1, 2, 3, 4, 5, 6, 7, 8, 9], math.nan),
+        # generated (tsfresh 0.21.2 / numpy 2.4.4): +-inf has leading digit 1
+        ([math.inf, -math.inf, 2, 30, 0.4, 5e-300], 0.8847905644846786),
+        ([0, 0, 0], math.nan),
+    ],
+)
+def test_benford_correlation(values, expected):
+    _assert_feature(values, "val__benford_correlation", expected)
+
+
+# generated (tsfresh 0.21.2 / stumpy 1.14.1) with the queries of the parity
+# config: [1, 3, 2] (threshold 1), [0, 1, 0, -1] (threshold 2.5, not
+# normalised), [1, 1, 1] (threshold 0.5) and [1, 2] (too short: NaN).
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([0, 1, 3, 2, 5, 2, 6, 4, 1, 3, 2, 2, 2, 2], [4, 0, 2, math.nan]),
+        ([0, 1, 0, -1, 0, 1, 0, -1, 0, 2, 0, -2], [3, 6, 0, math.nan]),
+        ([1, 3, 2, math.nan, 1, 3, 2, math.inf, 2, 2, 2], [2, 0, 1, math.nan]),
+    ],
+)
+def test_query_similarity_count_generated(values, expected):
+    for i, value in enumerate(expected):
+        _assert_feature(values, f"val__query_similarity_count__query_{i}", value)
+
+
+# tsfresh (stumpy) raises a ValueError for a series shorter than the query;
+# TSFX gives NaN for that query.
+def test_query_similarity_count_short_series_deviation():
+    features = _features([1, 2, 3])
+    assert features["val__query_similarity_count__query_0"] == 0
+    assert math.isnan(features["val__query_similarity_count__query_1"])
+
+
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        (list(range(10)), "attr_imag__coeff_0", 0),
+        (list(range(10)), "attr_real__coeff_0", 45),
+        (list(range(10)), "attr_angle__coeff_0", 0),
+        (list(range(10)), "attr_abs__coeff_0", 45),
+        # np.fft.rfft([0, 1, 0, 0]) == [1, -1j, -1]
+        ([0, 1, 0, 0], "attr_imag__coeff_0", 0),
+        ([0, 1, 0, 0], "attr_real__coeff_0", 1),
+        ([0, 1, 0, 0], "attr_imag__coeff_1", -1),
+        ([0, 1, 0, 0], "attr_angle__coeff_1", -90),
+        ([0, 1, 0, 0], "attr_real__coeff_1", 0),
+        ([0, 1, 0, 0], "attr_imag__coeff_2", 0),
+        ([0, 1, 0, 0], "attr_real__coeff_2", -1),
+        # coefficient beyond the spectrum
+        (list(range(5)), "attr_real__coeff_10", math.nan),
+    ],
+)
+def test_fft_coefficient(values, column, expected):
+    _assert_feature(values, f"val__fft_coefficient__{column}", expected, abs_tol=1e-6)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [[math.nan, 1, 2, 3], [1, 2, math.inf, 3], [-math.inf, 0, 1]],
+)
+def test_fft_coefficient_non_finite_deviation(values):
+    # tsfresh / numpy keep some parts finite (np.fft.rfft([nan, 1, 2, 3])[1]
+    # is nan+2j); tsfx gives NaN for every attribute
+    features = _features(values)
+    for column, value in features.items():
+        if column.startswith("val__fft_coefficient__"):
+            assert math.isnan(value), column
+
+
+_FFT_AGG_X = list(range(10))
+# a sine wave: its spectrum is a dirac delta, too narrow for skew / kurtosis
+_FFT_AGG_SINE = [math.sin(2 * math.pi / 10 * i) for i in range(30)]
+_FFT_AGG_GENERATED = [1, 2, -3, 4, 0.5, -1, 2, 7, -2, 3, 1, 0]
+
+
+@pytest.mark.parametrize(
+    ("values", "aggtype", "expected", "abs_tol"),
+    [
+        (_FFT_AGG_X, "centroid", 1.135, 5e-4),
+        (_FFT_AGG_X, "variance", 2.368, 5e-4),
+        (_FFT_AGG_X, "skew", 1.249, 5e-4),
+        (_FFT_AGG_X, "kurtosis", 3.643, 5e-4),
+        # scaling the series does not change the results
+        ([10 * v for v in _FFT_AGG_X], "centroid", 1.135, 5e-4),
+        ([10 * v for v in _FFT_AGG_X], "variance", 2.368, 5e-4),
+        ([10 * v for v in _FFT_AGG_X], "skew", 1.249, 5e-4),
+        ([10 * v for v in _FFT_AGG_X], "kurtosis", 3.643, 5e-4),
+        (_FFT_AGG_SINE, "centroid", 3.0, 5e-6),
+        (_FFT_AGG_SINE, "variance", 0.0, 5e-6),
+        (_FFT_AGG_SINE, "skew", math.nan, 0),
+        (_FFT_AGG_SINE, "kurtosis", math.nan, 0),
+        # generated: tsfresh 0.21.2 / numpy 2.4.4
+        (_FFT_AGG_GENERATED, "centroid", 3.137131540145538, 1e-9),
+        (_FFT_AGG_GENERATED, "variance", 4.947448163480152, 1e-9),
+        (_FFT_AGG_GENERATED, "skew", -0.16794828919527058, 1e-9),
+        (_FFT_AGG_GENERATED, "kurtosis", 13.129875965022391, 1e-9),
+        # a series of zeros has an empty spectrum
+        ([0, 0, 0], "centroid", math.nan, 0),
+    ],
+)
+def test_fft_aggregated(values, aggtype, expected, abs_tol):
+    _assert_feature(
+        values, f"val__fft_aggregated__aggtype_{aggtype}", expected, abs_tol=abs_tol
+    )
+
+
+def test_fft_aggregated_gaussian():
+    # The spectrum of a normal density is a half-normal; tsfresh compares with
+    # its hand-calculated centroid and variance, allowing 2%
+    mean, sigma, length = 500.0, 1.0, 1000
+    x = [
+        1 / (2 * math.pi * sigma**2) * math.exp(-((y - mean) ** 2) / (2 * sigma**2))
+        for y in range(length)
+    ]
+    centroid = (length / (2 * math.pi * sigma)) * math.sqrt(2 / math.pi)
+    variance = (length / (2 * math.pi * sigma)) ** 2 * (1 - 2 / math.pi)
+    features = _features(x)
+    assert features["val__fft_aggregated__aggtype_centroid"] == pytest.approx(
+        centroid, rel=0.02
+    )
+    assert features["val__fft_aggregated__aggtype_variance"] == pytest.approx(
+        variance, rel=0.02
+    )
+
+
+# generated: tsfresh 0.21.2 / numpy 2.4.4 / scipy 1.17.1; the 600-value
+# series is averaged over several Welch segments
+_WELCH_SHORT = [1, 2, -3, 4, 0.5, -1, 2, 7, -2, 3, 1, 0]
+_WELCH_LONG = [math.sin(i / 7.0) + i / 100 for i in range(600)]
+
+
+@pytest.mark.parametrize(
+    ("values", "coeff", "expected"),
+    [
+        (list(range(10)), 10, math.nan),
+        (_WELCH_SHORT, 1, 6.0464735681703505),
+        (_WELCH_SHORT, 2, 9.54513760383238),
+        (_WELCH_SHORT, 5, 10.959079931294792),
+        (_WELCH_SHORT, 8, math.nan),
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 1, 25.04970175673019),
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 2, 82.80704332963252),
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 5, 10.298967046456776),
+        (_WELCH_LONG, 1, 31.859839769019818),
+        (_WELCH_LONG, 2, 1.6009400295989102),
+        (_WELCH_LONG, 5, 34.072975417825454),
+        (_WELCH_LONG, 8, 0.03488547535923996),
+        (_WELCH_LONG, 10, 0.00043631285325968676),
+        ([1, math.nan, 3], 1, math.nan),
+    ],
+)
+def test_spkt_welch_density(values, coeff, expected):
+    _assert_feature(values, f"val__spkt_welch_density__coeff_{coeff}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "bins", "expected"),
+    [
+        ([1, 2, 1], 2, 0.693147180),
+        ([1, 2, 1], 5, 0.693147180),
+        ([1, 1, 2, 1, 1, 1, 1], 5, 0.5623351446188083),
+        ([1, 1, 1, 1, 2, 1, 1], 5, 1.0397207708399179),
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 10, 1.5607104090414063),
+        ([-1, math.nan, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 10, math.nan),
+        # generated: tsfresh 0.21.2 / numpy 2.4.4 / scipy 1.17.1
+        (_WELCH_LONG, 2, 0.04539477814685819),
+        (_WELCH_LONG, 3, 0.12525570174922163),
+        (_WELCH_LONG, 5, 0.13600216966487969),
+        (_WELCH_LONG, 10, 0.18121382170440362),
+        (_WELCH_LONG, 100, 0.22636345757853585),
+        # a constant series has no power to scale
+        ([3, 3, 3], 2, math.nan),
+    ],
+)
+def test_fourier_entropy(values, bins, expected):
+    _assert_feature(values, f"val__fourier_entropy__bins_{bins}", expected)
+
+
+# --- Wavelet features --------------------------------------------------------
+
+
+def test_number_cwt_peaks():
+    x = [1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 1]
+    _assert_feature(x, "val__number_cwt_peaks__n_2", 2)
+
+
+_CWT_PEAKS_X = [1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 1]
+_SINE_60 = [math.sin(i / 2) for i in range(60)]
+
+
+# number_cwt_peaks(np.array(x, dtype=float), n) with tsfresh 0.21.2 /
+# numpy 2.4.4 / scipy 1.17.1 (generated)
+@pytest.mark.parametrize(
+    ("values", "n", "expected"),
+    [
+        (_CWT_PEAKS_X, 1, 1),
+        (_CWT_PEAKS_X, 5, 2),
+        (_CWT_PEAKS_X, 10, 3),
+        (_SINE_60, 1, 5),
+        (_SINE_60, 10, 6),
+        ([1], 5, 0),
+        ([1, 2], 5, 0),
+        ([0, 1, 0], 1, 1),
+        ([1, math.nan, 1, 5, 1, 1], 1, 0),
+    ],
+)
+def test_number_cwt_peaks_generated(values, n, expected):
+    _assert_feature(values, f"val__number_cwt_peaks__n_{n}", expected)
+
+
+def test_number_cwt_peaks_tied_bump_deviation():
+    # A Gaussian bump centred on a sample: with even-length wavelets two
+    # neighbouring coefficients are tied, and rounding picks the maximum.
+    # tsfresh (numpy 2.4.4 / OpenBLAS on AVX-512) counts 1 peak at n = 5.
+    x = [math.exp(-((i - 25) ** 2) / 20) for i in range(50)]
+    _assert_feature(x, "val__number_cwt_peaks__n_1", 1)
+    _assert_feature(x, "val__number_cwt_peaks__n_5", 2)
+
+
+def test_cwt_coefficients():
+    features = _features([0.1, 0.2, 0.3])
+    assert math.isnan(features["val__cwt_coefficients__coeff_5__w_3__widths_1_3"])
+
+
+_SINE_20 = [math.sin(i / 3) for i in range(20)]
+
+
+# cwt_coefficients(np.array(x), [{"widths": widths, "coeff": c, "w": w}]) with
+# tsfresh 0.21.2 / numpy 2.4.4 / pywt 1.8.0 (generated)
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        ([0.1, 0.2, 0.3], "coeff_2__w_1__widths_1_2_3", 0.23388268016307973),
+        ([0.1, 0.2, 0.3], "coeff_2__w_3__widths_1_3", 0.2691505609034601),
+        (_SINE_20, "coeff_0__w_2__widths_2_5_10_20", -0.5676352954169104),
+        (_SINE_20, "coeff_7__w_5__widths_2_5_10_20", 2.193199392781614),
+        (_SINE_20, "coeff_14__w_20__widths_2_5_10_20", -0.29292254022704706),
+    ],
+)
+def test_cwt_coefficients_generated(values, column, expected):
+    _assert_feature(values, f"val__cwt_coefficients__{column}", expected)
+
+
+# Deterministic series for the statsmodels-based features below.
+_SINE = [round(math.sin(i / 3) * 10 + i / 5, 3) for i in range(40)]
+_WALK = [0, 1, 3, 2, 4, 5, 4, 6, 8, 7, 9, 11, 10, 12, 13, 12, 14, 16, 15, 17]
+_AR = [1, 3, 2.5, 4, 3, 1, 0.5, 2, 3.5, 3, 1.5, 0, 1, 2.5, 4, 3, 2, 0.5, 1, 2]
+
+
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        ([1, 1, 1, 1, 1, 1, 1], "mean__maxlag_10", 0),
+        ([1, 1, 1, 1, 1, 1, 1], "median__maxlag_10", 0),
+        ([1, 2, -3], "mean__maxlag_10", -0.5357142857142857),
+        ([1, 2, -3], "median__maxlag_10", -0.5357142857142857),
+        (list(range(10)), "mean__maxlag_1", 0.77777777),
+        (list(range(10)), "mean__maxlag_10", -0.64983164983165),
+        # generated: tsfresh 0.21.2, numpy 2.4.4, statsmodels 0.14.6
+        (_SINE, "mean__maxlag_3", 0.738541496148163),
+        (_SINE, "mean__maxlag_10", -0.15892555920550513),
+        (_SINE, "median__maxlag_10", -0.2723866971108017),
+        (_SINE, "var__maxlag_10", 0.476937955203257),
+        (_SINE, "std__maxlag_3", 0.17215878690468114),
+        (_AR, "median__maxlag_3", -0.4090265128516494),
+        (_AR, "var__maxlag_3", 0.29416450975000813),
+        (_AR, "std__maxlag_10", 0.5456897497263847),
+        ([1, 2], "mean__maxlag_10", -1.0),
+        ([1, 2], "var__maxlag_10", 0.0),
+        ([5], "mean__maxlag_10", 0.0),
+        ([1, 2, 3], "mean__maxlag_0", math.nan),
+        ([1, 2, math.nan, 4], "mean__maxlag_3", math.nan),
+    ],
+)
+def test_agg_autocorrelation(values, column, expected):
+    _assert_feature(values, f"val__agg_autocorrelation__f_agg_{column}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "lag", "expected"),
+    [
+        ([1, 2, 1, 2, 1, 2], 0, 1.0),
+        ([1, 2, 1, 2, 1, 2], 1, -1.0),
+        ([1, 2, 1, 2, 1, 2], 2, math.nan),
+        ([1], 0, math.nan),
+        ([1], 1, math.nan),
+        ([0] * 100, 0, 1.0),
+        ([0] * 100, 1, math.nan),
+        ([0] * 100, 9, math.nan),
+        # tsfresh: np.linspace(0, 1, 3000), places=2
+        ([i / 2999 for i in range(3000)], 1, 0.9993331110370126),
+        ([i / 2999 for i in range(3000)], 2, -0.000666889111696615),
+        # generated: tsfresh 0.21.2, numpy 2.4.4, statsmodels 0.14.6
+        (_SINE, 1, 0.9341946474270637),
+        (_SINE, 2, -0.836847568111394),
+        (_SINE, 9, -0.22745057412608966),
+        (_WALK, 4, -0.3649421993861743),
+        (_AR, 3, -0.748260563703996),
+        (_AR, 9, -2.707268799269087),
+        ([1, 2, 3], 0, math.nan),
+        ([1, 2, 3, 7], 0, 1.0),
+        ([1, 2, 3, 7], 1, 0.14056224899598393),
+        ([1, 2, 3, 7], 2, math.nan),
+        ([1, 2, math.nan, 4, 5, 6], 0, 1.0),
+        ([1, 2, math.nan, 4, 5, 6], 1, math.nan),
+    ],
+)
+def test_partial_autocorrelation(values, lag, expected):
+    _assert_feature(values, f"val__partial_autocorrelation__lag_{lag}", expected)
+
+
+def _ar_25() -> list[float]:
+    x = [1.0] + 9 * [0.0]
+    for i in range(1, len(x)):
+        x[i] = 2.5 * x[i - 1] + 1
+    return x
+
+
+def _ar_2() -> list[float]:
+    x = [1.0, 1.0] + 5 * [0.0]
+    for i in range(2, len(x)):
+        x[i] = (-2) * x[i - 2] + 3.5 * x[i - 1] + 1
+    return x
+
+
+@pytest.mark.parametrize(
+    ("values", "coeff", "k", "expected"),
+    [
+        (_ar_25(), 0, 1, 1),
+        (_ar_25(), 1, 1, 2.5),
+        (_ar_2(), 0, 2, 1),
+        (_ar_2(), 1, 2, 3.5),
+        (_ar_2(), 2, 2, -2),
+        # generated: tsfresh 0.21.2, numpy 2.4.4, statsmodels 0.14.6
+        (_ar_2(), 0, 1, 0.07970498175061014),
+        (_ar_2(), 1, 1, 2.824952929252266),
+        (_SINE, 1, 2, 1.8905186798035594),
+        (_SINE, 4, 4, 0.8482338799237823),
+        (_WALK, 0, 4, 1.682887458365075),
+        (_WALK, 3, 4, 0.9423311452558134),
+        (_AR, 2, 2, -0.6856894133578375),
+        (_AR, 2, 1, math.nan),
+        (_AR, 0, 0, 2.05),
+        # a constant series: statsmodels' minimum-norm least squares solution
+        ([1.0] * 10, 0, 2, 1 / 3),
+        ([1.0] * 10, 2, 2, 1 / 3),
+        ([-0.75] * 5 + [0.75], 0, 1, -0.288),
+        ([-0.75] * 5 + [0.75], 1, 1, 0.216),
+        # too short to fit: tsfresh's fallback [nan] * k
+        ([1, 2, 3, 7], 0, 2, math.nan),
+        ([1, 2, 3, 7], 2, 2, 0),
+        ([1, 2, 3, 4, 5], 2, 2, 0),
+        ([1], 0, 0, 0),
+    ],
+)
+def test_ar_coefficient(values, coeff, k, expected):
+    _assert_feature(values, f"val__ar_coefficient__coeff_{coeff}__k_{k}", expected)
+
+
+def test_ar_coefficient_nan_deviation():
+    # tsfresh raises (statsmodels' MissingDataError is not caught)
+    features = _features([1, 2, math.nan, 4, 5, 6, 7, 8, 9, 1])
+    assert math.isnan(features["val__ar_coefficient__coeff_0__k_1"])
+    assert math.isnan(features["val__ar_coefficient__coeff_1__k_1"])
+
+
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        # generated: tsfresh 0.21.2, numpy 2.4.4, scipy 1.17.1,
+        # statsmodels 0.14.6
+        (_SINE, "teststat__autolag_AIC", -0.018605197348433463),
+        (_SINE, "pvalue__autolag_AIC", 0.9569661363051692),
+        (_SINE, "usedlag__autolag_AIC", 10),
+        (_WALK, "teststat__autolag_AIC", 0.6369798833294181),
+        (_WALK, "pvalue__autolag_AIC", 0.9884925247863758),
+        (_WALK, "usedlag__autolag_AIC", 8),
+        (_WALK, "teststat__autolag_t-stat", 0.906092248496127),
+        (_WALK, "usedlag__autolag_t-stat", 2),
+        (_AR, "teststat__autolag_AIC", -1.4040700065549143),
+        (_AR, "usedlag__autolag_AIC", 8),
+        (_AR, "teststat__autolag_BIC", -3.719178652724949),
+        (_AR, "usedlag__autolag_BIC", 7),
+        (_AR, "teststat__autolag_t-stat", -1.084113825385017),
+        (_AR, "usedlag__autolag_t-stat", 5),
+        (_AR, "teststat__autolag_None", -1.4040700065549143),
+        (_AR, "pvalue__autolag_None", 0.5803233582846191),
+        (list(range(1, 10)) + [10.5], "teststat__autolag_AIC", 1.7320508075688792),
+        (list(range(1, 10)) + [10.5], "pvalue__autolag_AIC", 0.9982042849867909),
+        ([1, 2, 3, 4, 5, 6, 7, 3], "teststat__autolag_AIC", -1.732050807568878),
+        ([1, 2, 3, 4, 5, 6, 7, 3], "pvalue__autolag_AIC", 0.4146791580296235),
+        # tsfresh: LinAlgError / ValueError give NaN
+        ([math.nan] * 100, "teststat__autolag_AIC", math.nan),
+        ([math.nan] * 100, "usedlag__autolag_AIC", math.nan),
+        ([1.0] * 10, "teststat__autolag_AIC", math.nan),
+        ([1, 2, 3], "pvalue__autolag_AIC", math.nan),
+        ([1, 2, math.inf, 4, 5, 6, 7, 8, 9, 1], "usedlag__autolag_AIC", math.nan),
+        # only the last value is NaN: statsmodels still chooses a lag
+        ([1, 3, 2, 5, 4, math.nan], "teststat__autolag_AIC", math.nan),
+        ([1, 3, 2, 5, 4, math.nan], "usedlag__autolag_AIC", 0),
+        ([1, 3, 2, 5, 4, math.nan], "usedlag__autolag_None", 1),
+    ],
+)
+def test_augmented_dickey_fuller(values, column, expected):
+    _assert_feature(
+        values, f"val__augmented_dickey_fuller__attr_{column}", expected, abs_tol=1e-9
+    )
+
+
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        # An exact fit (x alternates): statsmodels divides by rounding noise
+        # and returns about -4.8e15; tsfx takes the residual variance as 0
+        ([0.0, 0.1, 0.0, 0.1], "teststat__autolag_AIC", -math.inf),
+        ([0.0, 0.1, 0.0, 0.1], "pvalue__autolag_AIC", 0.0),
+        # The lag-1 difference equals the level (a constant stretch), so lags
+        # 0 and 1 fit equally well: statsmodels picks 1 by rounding noise
+        ([0.0, 0.0, 0.0, 0.0, 1.0, 328.0], "usedlag__autolag_AIC", 0),
+        ([0.0, 0.0, 0.0, 0.0, 1.0, 328.0], "usedlag__autolag_BIC", 0),
+        # Constant differences make the lagged differences collinear with the
+        # constant: statsmodels picks lag 1 (same test statistic, 1.732...)
+        (list(range(1, 10)) + [10.5], "usedlag__autolag_AIC", 0),
+    ],
+)
+def test_augmented_dickey_fuller_rounding_deviation(values, column, expected):
+    result = _features(values)[f"val__augmented_dickey_fuller__attr_{column}"]
+    assert result == expected
+
+
+# --- Entropy and Langevin features (tsfresh v0.21.2 test cases) --------------
+
+
+@pytest.mark.parametrize(
+    ("values", "max_bins", "expected"),
+    [
+        ([10] * 100, 10, 0),
+        (
+            [10] * 10 + [1],
+            10,
+            -(10 / 11 * math.log(10 / 11) + 1 / 11 * math.log(1 / 11)),
+        ),
+        (
+            [10] * 10 + [1],
+            100,
+            -(10 / 11 * math.log(10 / 11) + 1 / 11 * math.log(1 / 11)),
+        ),
+        (list(range(10)), 100, -math.log(1 / 10)),
+    ],
+)
+def test_binned_entropy(values, max_bins, expected):
+    _assert_feature(values, f"val__binned_entropy__max_bins_{max_bins}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "bins", "expected"),
+    [
+        ([1, 1, 1], 2, 2.0 / 3),
+        ([1, 1, 1], 5, 2.0 / 3),
+        ([1, 1, 1, 1, 1, 1, 1], 2, 0.4285714285),
+        ([1, 1, 1, 2, 1, 1, 1], 2, 0.5714285714),
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 10, 0.8),
+        ([-1, math.nan, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 10, 0.4),
+        # np.linspace(0, 1, 10)
+        ([i * (1 / 9) for i in range(9)] + [1.0], 3, 0.6),
+        ([1, 1, 2, 3, 4, 5, 6, 0, 7, 8], 3, 0.6),
+    ],
+)
+def test_lempel_ziv_complexity(values, bins, expected):
+    _assert_feature(values, f"val__lempel_ziv_complexity__bins_{bins}", expected)
+
+
+@pytest.mark.parametrize(
+    ("values", "tau", "dimension", "expected"),
+    [
+        ([4, 7, 9, 10, 6, 11, 3], 1, 3, 1.054920167),
+        ([1, -1, 1, -1, 1, -1, 1, -1], 1, 3, 0.6931471805599453),
+        ([1, -1, 1, -1, 1, 1, 1, -1], 1, 3, 1.3296613488547582),
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, 7, -3.4, 6], 2, 3, 1.0397207708399179),
+        # nan is treated like any other number
+        ([-1, 4.3, 5, 1, -4.5, 1, 5, math.nan, -3.4, 6], 2, 3, 1.0397207708399179),
+        # too short
+        ([1, -1], 1, 3, math.nan),
+    ],
+)
+def test_permutation_entropy(values, tau, dimension, expected):
+    _assert_feature(
+        values, f"val__permutation_entropy__tau_{tau}__dimension_{dimension}", expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("values", "r", "expected"),
+    [
+        ([1], "0.5", 0),
+        ([1, 2], "0.5", 0),
+        ([1, 2, 3], "0.5", 0),
+        ([12, 13, 15, 16, 17] * 10, "0.9", 0.282456191),
+    ],
+)
+def test_approximate_entropy(values, r, expected):
+    _assert_feature(values, f"val__approximate_entropy__m_2__r_{r}", expected)
+
+
+_FRIEDRICH_X = [
+    -0.53, -0.61, -1.26, -0.88, -0.34, 0.58, 2.86, -0.47, 0.78, -0.45,
+    -0.27, 0.43, 1.72, 0.26, 1.02, -0.09, 0.65, 1.49, -0.95, -1.02,
+    -0.64, -1.63, -0.71, -0.43, -1.69, 0.05, 1.58, 1.1, 0.55, -1.02,
+]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("coeff", "expected"),
+    [
+        (0, -0.24536975738843042),
+        (1, -0.533309548662685),
+        (2, 0.2759399238199404),
+        (3, math.nan),
+    ],
+)
+def test_friedrich_coefficients(coeff, expected):
+    _assert_feature(
+        _FRIEDRICH_X, f"val__friedrich_coefficients__coeff_{coeff}__m_2__r_30", expected
+    )
+
+
+def test_friedrich_coefficients_binning_error():
+    # duplicate quantile bin edges: pd.qcut raises, tsfresh returns NaN
+    features = _features([0.0] * 100)
+    for column in [
+        "friedrich_coefficients__coeff_0__m_2__r_30",
+        "friedrich_coefficients__coeff_3__m_3__r_30",
+        "max_langevin_fixed_point__m_3__r_30",
+    ]:
+        assert math.isnan(features[f"val__{column}"])
+
+
+# friedrich_coefficients(np.array(x), [{"coeff": c, "m": m, "r": r}]) and
+# max_langevin_fixed_point(np.array(x), r, m), tsfresh 0.21.2 / numpy 2.4.4 /
+# pandas 3.0.2
+@pytest.mark.parametrize(
+    ("column", "expected"),
+    [
+        ("friedrich_coefficients__coeff_0__m_3__r_30", -0.08817903596441255),
+        ("friedrich_coefficients__coeff_3__m_3__r_30", 0.1927106415135666),
+        ("friedrich_coefficients__coeff_1__m_3__r_5", -0.15568913997546366),
+        ("max_langevin_fixed_point__m_3__r_30", 0.48057874107946674),
+        ("max_langevin_fixed_point__m_2__r_5", 0.5609283827089417),
+    ],
+)
+def test_friedrich_generated(column, expected):
+    _assert_feature(_FRIEDRICH_X, f"val__{column}", expected, abs_tol=1e-12)
+
+
+# binned_entropy, lempel_ziv_complexity, permutation_entropy and
+# approximate_entropy of np.array(_FRIEDRICH_X) (and the NaN / constant cases
+# shown), tsfresh 0.21.2 / numpy 2.4.4
+@pytest.mark.parametrize(
+    ("values", "column", "expected"),
+    [
+        (_FRIEDRICH_X, "binned_entropy__max_bins_10", 2.0549978302404694),
+        (_FRIEDRICH_X, "binned_entropy__max_bins_100", 3.2163581335128364),
+        ([3, 3], "binned_entropy__max_bins_10", 0),
+        (_FRIEDRICH_X, "lempel_ziv_complexity__bins_2", 0.36666666666666664),
+        (_FRIEDRICH_X, "lempel_ziv_complexity__bins_3", 0.43333333333333335),
+        (_FRIEDRICH_X, "lempel_ziv_complexity__bins_5", 0.5),
+        (_FRIEDRICH_X, "lempel_ziv_complexity__bins_10", 0.6),
+        ([1, math.nan, 2, 3, 1], "lempel_ziv_complexity__bins_2", 0.4),
+        (_FRIEDRICH_X, "permutation_entropy__tau_1__dimension_3", 1.6731183626432509),
+        (_FRIEDRICH_X, "permutation_entropy__tau_2__dimension_3", 1.4701319204088408),
+        (_FRIEDRICH_X, "permutation_entropy__tau_1__dimension_5", 3.151458510243029),
+        (_FRIEDRICH_X, "permutation_entropy__tau_1__dimension_7", 3.1780538303479453),
+        (_FRIEDRICH_X, "approximate_entropy__m_2__r_0.1", 0.03509131981127078),
+        (_FRIEDRICH_X, "approximate_entropy__m_2__r_0.5", 0.49836321975535425),
+        (_FRIEDRICH_X, "approximate_entropy__m_2__r_0.9", 0.6409051240650174),
+        (_FRIEDRICH_X, "approximate_entropy__m_1__r_0.3", 1.0477808169056246),
+        ([1, 2, math.nan, 4, 5, 6], "approximate_entropy__m_2__r_0.5", math.nan),
+    ],
+)
+def test_entropy_generated(values, column, expected):
+    _assert_feature(values, f"val__{column}", expected, abs_tol=1e-12)
+
+
+# Deliberate deviation from tsfresh v0.21.2: np.histogram raises ValueError
+# ("autodetected range ... is not finite") for ±inf; TSFX returns NaN.
+def test_binned_entropy_inf_deviation():
+    _assert_feature([1, math.inf, 2], "val__binned_entropy__max_bins_10", math.nan)
+
+
+# Deliberate deviation from tsfresh v0.21.2: tsfresh ranks a window's values
+# with np.argsort, whose order of ties depends on the sort numpy picks for the
+# CPU. With AVX-512 (numpy 2.4.4) both windows of [2, 2, 1, 0, 0] get the same
+# pattern and tsfresh returns 0; with a stable sort (numpy without AVX-512,
+# for short windows) they differ and the result is ln 2. TSFX always ranks
+# ties by position.
+def test_permutation_entropy_ties_deviation():
+    _assert_feature(
+        [2, 2, 1, 0, 0],
+        "val__permutation_entropy__tau_1__dimension_4",
+        math.log(2),
+    )

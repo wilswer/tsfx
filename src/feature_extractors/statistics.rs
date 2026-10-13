@@ -547,3 +547,154 @@ impl Kernel for Quantile {
         out.extend(self.qs.iter().map(|&q| numpy_quantile(sorted, q)));
     }
 }
+
+/// Energy ratio by chunks feature.
+///
+/// Split the series into `num_segments` consecutive segments and return the
+/// sum of squares of segment `segment_focus` (0-based) as a share of the
+/// sum of squares of the whole series:
+/// $$ \frac{\sum_{i \in S_k} x_i^2}{\sum_{i=1}^{n} x_i^2}. $$
+/// Segments are formed as `np.array_split` does: when $n$ is not a multiple
+/// of the number of segments, the first $n \bmod N$ segments get one extra
+/// value. The shares of all segments add up to 1.
+///
+/// # Parameters
+/// - `num_segments`: number of segments $N \geq 1$.
+/// - `segment_focus`: the segment $k < N$ to return.
+///
+/// Config:
+/// `[energy_ratio_by_chunks] parameters = [{ num_segments = 10, segment_focus = 0 }, ...]`;
+/// one column per entry. `num_segments = 0` or `segment_focus >= num_segments`
+/// is rejected when the config is loaded.
+///
+/// # Output column
+/// `{name}__energy_ratio_by_chunks__num_segments_{num_segments}__segment_focus_{segment_focus}`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - A series whose sum of squares is 0 gives NaN.
+/// - With fewer values than segments, the trailing segments are empty and
+///   give 0.
+/// - NaN values are kept and make the result NaN.
+///
+/// # tsfresh
+/// `feature_calculators.energy_ratio_by_chunks` (v0.21.2), summed as numpy
+/// does.
+pub struct EnergyRatioByChunks {
+    /// `(num_segments, segment_focus)` per config entry.
+    pub params: Vec<(usize, usize)>,
+}
+
+impl Kernel for EnergyRatioByChunks {
+    fn names(&self) -> Vec<String> {
+        self.params
+            .iter()
+            .map(|(num_segments, segment_focus)| {
+                format!(
+                    "energy_ratio_by_chunks__num_segments_{num_segments}__segment_focus_{segment_focus}"
+                )
+            })
+            .collect()
+    }
+
+    fn compute(&self, ctx: &GroupContext, out: &mut Vec<f64>) {
+        let x = ctx.values();
+        let n = x.len();
+        // np.sum(x**2)
+        let full = numpy_sum(n, |i| x[i] * x[i]);
+        for &(num_segments, segment_focus) in &self.params {
+            if full == 0.0 {
+                out.push(f64::NAN);
+                continue;
+            }
+            // np.array_split: the first n % N segments have one more value
+            let (size, extra) = (n / num_segments, n % num_segments);
+            let start = segment_focus * size + segment_focus.min(extra);
+            let len = size + usize::from(segment_focus < extra);
+            let segment = &x[start..start + len];
+            out.push(numpy_sum(len, |i| segment[i] * segment[i]) / full);
+        }
+    }
+}
+
+/// Newcomb-Benford's law: the share of numbers with leading digit $d$,
+/// $\log_{10}(1 + 1/d)$ for $d = 1, \dots, 9$, as numpy computes it.
+const BENFORD_DISTRIBUTION: [f64; 9] = [
+    std::f64::consts::LOG10_2,
+    0.17609125905568124,
+    0.12493873660829993,
+    0.09691001300805642,
+    0.07918124604762482,
+    0.06694678963061322,
+    0.05799194697768673,
+    0.05115252244738129,
+    0.04575749056067514,
+];
+
+/// The leading digit of `|x|` as `np.format_float_scientific` writes it
+/// (shortest round-trip digits), after `np.nan_to_num`: NaN counts as 0 and
+/// $\pm\infty$ as the largest finite float.
+fn leading_digit(x: f64) -> u8 {
+    let x = if x.is_nan() {
+        0.0
+    } else if x.is_infinite() {
+        f64::MAX
+    } else {
+        x.abs()
+    };
+    if x == 0.0 {
+        return 0;
+    }
+    format!("{x:e}").as_bytes()[0] - b'0'
+}
+
+scalar_kernel! {
+/// Benford correlation feature.
+///
+/// The Pearson correlation between the distribution of the leading digits
+/// of the values and Newcomb-Benford's law, $P(d) = \log_{10}(1 + 1/d)$ for
+/// $d = 1, \dots, 9$. Useful for anomaly detection: many natural data sets
+/// follow Benford's law closely (correlation near 1).
+///
+/// # Output column
+/// `{name}__benford_correlation`
+///
+/// # Edge cases
+/// - Nulls are dropped first; a group with no non-null values gives NaN.
+/// - NaN and 0 have leading digit 0 (they count towards no digit but still
+///   towards $n$); $\pm\infty$ has leading digit 1 (tsfresh's
+///   `np.nan_to_num`).
+/// - If all nine digit shares are equal (e.g. all values 0, or each digit
+///   equally often), the correlation is undefined and the result is NaN.
+///
+/// # tsfresh
+/// `feature_calculators.benford_correlation` (v0.21.2). tsfresh's
+/// `np.corrcoef` uses a BLAS dot product, so results agree to rounding.
+    BenfordCorrelation, "benford_correlation", |ctx| {
+        let x = ctx.values();
+        let mut counts = [0usize; 10];
+        for &v in x {
+            counts[leading_digit(v) as usize] += 1;
+        }
+        let data: [f64; 9] = std::array::from_fn(|d| counts[d + 1] as f64 / x.len() as f64);
+        pearson_correlation(&BENFORD_DISTRIBUTION, &data)
+    }
+}
+
+/// `np.corrcoef(a, b)[0, 1]`: covariance over the product of standard
+/// deviations (`ddof = 1`, which cancels), clipped to $[-1, 1]$. NaN if
+/// either series is constant.
+fn pearson_correlation(a: &[f64], b: &[f64]) -> f64 {
+    let n = a.len();
+    let (mean_a, mean_b) = (numpy_mean(a), numpy_mean(b));
+    let fact = 1.0 / (n - 1) as f64;
+    let (mut cab, mut caa, mut cbb) = (0.0, 0.0, 0.0);
+    for (&x, &y) in a.iter().zip(b) {
+        let (dx, dy) = (x - mean_a, y - mean_b);
+        cab += dx * dy;
+        caa += dx * dx;
+        cbb += dy * dy;
+    }
+    let r = cab * fact / (caa * fact).sqrt() / (cbb * fact).sqrt();
+    if r.is_nan() { r } else { r.clamp(-1.0, 1.0) }
+}

@@ -9,10 +9,15 @@ pub mod change;
 pub mod counting;
 pub mod entropy;
 pub mod kernel;
+pub mod langevin;
 pub mod location;
+pub mod regression;
 pub mod reoccurrence;
+pub mod similarity;
+pub mod spectral;
 pub mod statistics;
 pub mod trend;
+pub mod wavelet;
 
 use std::sync::Arc;
 
@@ -20,26 +25,38 @@ use polars::prelude::*;
 
 use crate::extract::{ExtractionSettings, FeatureSetting};
 use crate::utils::toml_reader::{ConfigError, load_config};
-use autocorrelation::{Autocorrelation, C3, TimeReversalAsymmetryStatistic};
-use change::{AbsoluteSumOfChanges, CidCe, MeanAbsoluteChange, MeanChange};
+use autocorrelation::{
+    AggAutocorrelation, Autocorrelation, C3, PartialAutocorrelation, TimeReversalAsymmetryStatistic,
+};
+use change::{
+    AbsoluteSumOfChanges, ChangeQuantiles, CidCe, MeanAbsoluteChange, MeanChange,
+    MeanSecondDerivativeCentral,
+};
 use counting::{
     CountAbove, CountAboveMean, CountBelow, CountBelowMean, LongestStrikeAboveMean,
-    LongestStrikeBelowMean, NumberCrossingM, NumberPeaks, RangeCount,
+    LongestStrikeBelowMean, NumberCrossingM, NumberPeaks, RangeCount, ValueCount,
 };
-use entropy::SampleEntropy;
+use entropy::{
+    ApproximateEntropy, BinnedEntropy, LempelZivComplexity, PermutationEntropy, SampleEntropy,
+};
 use kernel::KernelPlan;
+use langevin::{FriedrichCoefficients, MaxLangevinFixedPoint};
 use location::{
     FirstLocationOfMaximum, FirstLocationOfMinimum, IndexMassQuantile, LastLocationOfMaximum,
     LastLocationOfMinimum,
 };
+use regression::{ArCoefficient, AugmentedDickeyFuller};
 use reoccurrence::{HasDuplicateMax, HasDuplicateMin, ReoccurrenceFeatures};
+use similarity::{Query, QuerySimilarityCount};
+use spectral::{FftAggregated, FftCoefficient, FourierEntropy, SpktWelchDensity};
 use statistics::{
-    AbsoluteEnergy, AbsoluteMaximum, Kurtosis, LargeStandardDeviation, Maximum, Mean,
-    MeanNAbsoluteMax, Median, Minimum, Quantile, RatioBeyondRSigma, RootMeanSquare, Skewness,
-    StandardDeviation, SumValues, SymmetryLooking, Variance, VarianceLargerThanStandardDeviation,
-    VariationCoefficient, count,
+    AbsoluteEnergy, AbsoluteMaximum, BenfordCorrelation, EnergyRatioByChunks, Kurtosis,
+    LargeStandardDeviation, Maximum, Mean, MeanNAbsoluteMax, Median, Minimum, Quantile,
+    RatioBeyondRSigma, RootMeanSquare, Skewness, StandardDeviation, SumValues, SymmetryLooking,
+    Variance, VarianceLargerThanStandardDeviation, VariationCoefficient, count,
 };
 use trend::{AggLinearTrend, LinearTrend};
+use wavelet::{CwtCoefficients, NumberCwtPeaks};
 
 /// Feature expressions for the configured features of the selected tier.
 ///
@@ -254,13 +271,144 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
                 let ns = feature.parameters.iter().map(|p| p.n).collect();
                 plan.push(NumberPeaks { ns });
             }
+            if config.mean_second_derivative_central.is_some() {
+                plan.push(MeanSecondDerivativeCentral);
+            }
+            if let Some(feature) = &config.value_count {
+                let values = feature.parameters.iter().map(|p| p.value).collect();
+                plan.push(ValueCount { values });
+            }
+            if let Some(feature) = &config.energy_ratio_by_chunks {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.num_segments, p.segment_focus))
+                    .collect();
+                plan.push(EnergyRatioByChunks { params });
+            }
+            if let Some(feature) = &config.change_quantiles {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.ql, p.qh, p.isabs, p.f_agg))
+                    .collect();
+                plan.push(ChangeQuantiles { params });
+            }
+            if config.benford_correlation.is_some() {
+                plan.push(BenfordCorrelation);
+            }
+            if let Some(feature) = &config.query_similarity_count {
+                let queries = feature
+                    .parameters
+                    .iter()
+                    .map(|p| Query {
+                        query: p.query.clone(),
+                        threshold: p.threshold,
+                        normalize: p.normalize,
+                    })
+                    .collect();
+                plan.push(QuerySimilarityCount { queries });
+            }
+            if let Some(feature) = &config.fft_coefficient {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.attr.clone(), p.coeff))
+                    .collect();
+                plan.push(FftCoefficient { params });
+            }
+            if let Some(feature) = &config.fft_aggregated {
+                let aggtypes = feature
+                    .parameters
+                    .iter()
+                    .map(|p| p.aggtype.clone())
+                    .collect();
+                plan.push(FftAggregated { aggtypes });
+            }
+            if let Some(feature) = &config.spkt_welch_density {
+                let coeffs = feature.parameters.iter().map(|p| p.coeff).collect();
+                plan.push(SpktWelchDensity { coeffs });
+            }
+            if let Some(feature) = &config.fourier_entropy {
+                let bins = feature.parameters.iter().map(|p| p.bins).collect();
+                plan.push(FourierEntropy { bins });
+            }
+            if let Some(feature) = &config.cwt_coefficients {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.widths.clone(), p.coeff, p.w))
+                    .collect();
+                plan.push(CwtCoefficients { params });
+            }
+            if let Some(feature) = &config.number_cwt_peaks {
+                let ns = feature.parameters.iter().map(|p| p.n).collect();
+                plan.push(NumberCwtPeaks { ns });
+            }
+            if let Some(feature) = &config.agg_autocorrelation {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.f_agg, p.maxlag))
+                    .collect();
+                plan.push(AggAutocorrelation { params });
+            }
+            if let Some(feature) = &config.partial_autocorrelation {
+                let lags = feature.parameters.iter().map(|p| p.lag).collect();
+                plan.push(PartialAutocorrelation { lags });
+            }
+            if let Some(feature) = &config.ar_coefficient {
+                let params = feature.parameters.iter().map(|p| (p.coeff, p.k)).collect();
+                plan.push(ArCoefficient { params });
+            }
+            if let Some(feature) = &config.augmented_dickey_fuller {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.attr, p.autolag))
+                    .collect();
+                plan.push(AugmentedDickeyFuller { params });
+            }
+            if let Some(feature) = &config.binned_entropy {
+                let max_bins = feature.parameters.iter().map(|p| p.max_bins).collect();
+                plan.push(BinnedEntropy { max_bins });
+            }
+            if let Some(feature) = &config.lempel_ziv_complexity {
+                let bins = feature.parameters.iter().map(|p| p.bins).collect();
+                plan.push(LempelZivComplexity { bins });
+            }
+            if let Some(feature) = &config.permutation_entropy {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.tau, p.dimension))
+                    .collect();
+                plan.push(PermutationEntropy { params });
+            }
+            if let Some(feature) = &config.friedrich_coefficients {
+                let params = feature
+                    .parameters
+                    .iter()
+                    .map(|p| (p.coeff, p.m, p.r))
+                    .collect();
+                plan.push(FriedrichCoefficients { params });
+            }
+            if let Some(feature) = &config.max_langevin_fixed_point {
+                let params = feature.parameters.iter().map(|p| (p.m, p.r)).collect();
+                plan.push(MaxLangevinFixedPoint { params });
+            }
         }
     }
 
-    // Comprehensive tier: always on, independent of the config
+    // Comprehensive tier: sample_entropy is always on, independent of the
+    // config
     if *tier >= FeatureSetting::Comprehensive {
         for plan in plans.iter_mut() {
             plan.push(SampleEntropy);
+            if let Some(feature) = &config.approximate_entropy {
+                let params = feature.parameters.iter().map(|p| (p.m, p.r)).collect();
+                plan.push(ApproximateEntropy { params });
+            }
         }
     }
 

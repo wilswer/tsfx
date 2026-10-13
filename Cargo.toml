@@ -41,6 +41,9 @@ pyo3-polars = { git = "https://github.com/pola-rs/polars.git", rev = "1bd8ec12f4
 itertools = "0.14"
 thiserror = "2"
 anyhow = "1"
+rustfft = "6.4.1"
+nalgebra = "0.35.0"
+libm = "0.2"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }

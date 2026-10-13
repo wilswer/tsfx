@@ -136,3 +136,229 @@ parameters = [{ lag = 0 }, { lag = 1 }, { lag = 2 }, { lag = 3 }]
 
 [time_reversal_asymmetry_statistic]
 parameters = [{ lag = 0 }, { lag = 1 }, { lag = 2 }, { lag = 3 }]
+
+[mean_second_derivative_central]
+
+[value_count]
+parameters = [
+    { value = 0.0 },
+    { value = 1.0 },
+    { value = -1.0 },
+    { value = 0.2 },
+    { value = nan },
+    { value = inf },
+    { value = -inf },
+]
+
+[energy_ratio_by_chunks]
+parameters = [
+    { num_segments = 6, segment_focus = 0 },
+    { num_segments = 6, segment_focus = 1 },
+    { num_segments = 6, segment_focus = 2 },
+    { num_segments = 6, segment_focus = 3 },
+    { num_segments = 6, segment_focus = 4 },
+    { num_segments = 6, segment_focus = 5 },
+    { num_segments = 3, segment_focus = 0 },
+    { num_segments = 3, segment_focus = 1 },
+    { num_segments = 3, segment_focus = 2 },
+]
+
+[change_quantiles]
+parameters = [
+    { ql = 0.1, qh = 0.2, isabs = false, f_agg = "mean" },
+    { ql = 0.0, qh = 0.2, isabs = true, f_agg = "var" },
+    { ql = 0.2, qh = 0.8, isabs = false, f_agg = "mean" },
+    { ql = 0.2, qh = 0.8, isabs = true, f_agg = "mean" },
+    { ql = 0.4, qh = 1.0, isabs = false, f_agg = "var" },
+    { ql = 0.0, qh = 1.0, isabs = false, f_agg = "std" },
+    { ql = 0.0, qh = 1.0, isabs = true, f_agg = "median" },
+    { ql = 0.4, qh = 0.4, isabs = false, f_agg = "mean" },
+    { ql = 0.8, qh = 0.2, isabs = false, f_agg = "mean" },
+]
+
+[benford_correlation]
+
+[query_similarity_count]
+parameters = [
+    { query = [1.0, 3.0, 2.0], threshold = 1.0 },
+    { query = [0.0, 1.0, 0.0, -1.0], threshold = 2.5, normalize = false },
+    { query = [1.0, 1.0, 1.0], threshold = 0.5 },
+    { query = [1.0, 2.0], threshold = 1.0 },
+]
+[fft_coefficient]
+parameters = [
+    { attr = "real", coeff = 0 }, { attr = "real", coeff = 1 }, { attr = "real", coeff = 2 }, { attr = "real", coeff = 3 }, { attr = "real", coeff = 10 },
+    { attr = "imag", coeff = 0 }, { attr = "imag", coeff = 1 }, { attr = "imag", coeff = 2 }, { attr = "imag", coeff = 3 }, { attr = "imag", coeff = 10 },
+    { attr = "abs", coeff = 0 }, { attr = "abs", coeff = 1 }, { attr = "abs", coeff = 2 }, { attr = "abs", coeff = 3 }, { attr = "abs", coeff = 10 },
+    { attr = "angle", coeff = 0 }, { attr = "angle", coeff = 1 }, { attr = "angle", coeff = 2 }, { attr = "angle", coeff = 3 }, { attr = "angle", coeff = 10 },
+]
+
+[fft_aggregated]
+parameters = [
+    { aggtype = "centroid" },
+    { aggtype = "variance" },
+    { aggtype = "skew" },
+    { aggtype = "kurtosis" },
+]
+
+[spkt_welch_density]
+parameters = [{ coeff = 1 }, { coeff = 2 }, { coeff = 5 }, { coeff = 8 }, { coeff = 10 }]
+
+[fourier_entropy]
+parameters = [{ bins = 2 }, { bins = 3 }, { bins = 5 }, { bins = 10 }, { bins = 100 }]
+[cwt_coefficients]
+parameters = [
+    { widths = [2, 5, 10, 20], coeff = 0, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 0, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 0, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 0, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 1, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 1, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 1, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 1, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 2, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 2, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 2, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 2, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 3, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 3, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 3, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 3, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 4, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 4, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 4, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 4, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 5, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 5, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 5, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 5, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 6, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 6, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 6, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 6, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 7, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 7, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 7, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 7, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 8, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 8, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 8, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 8, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 9, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 9, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 9, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 9, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 10, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 10, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 10, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 10, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 11, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 11, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 11, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 11, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 12, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 12, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 12, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 12, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 13, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 13, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 13, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 13, w = 20 },
+    { widths = [2, 5, 10, 20], coeff = 14, w = 2 },
+    { widths = [2, 5, 10, 20], coeff = 14, w = 5 },
+    { widths = [2, 5, 10, 20], coeff = 14, w = 10 },
+    { widths = [2, 5, 10, 20], coeff = 14, w = 20 },
+    { widths = [1, 2, 3], coeff = 2, w = 1 },
+    { widths = [1, 3], coeff = 2, w = 3 },
+    { widths = [1, 3], coeff = 5, w = 3 },
+]
+
+[number_cwt_peaks]
+parameters = [{ n = 1 }, { n = 2 }, { n = 5 }, { n = 10 }]
+[agg_autocorrelation]
+parameters = [
+    { f_agg = "mean", maxlag = 0 },
+    { f_agg = "mean", maxlag = 1 },
+    { f_agg = "mean", maxlag = 3 },
+    { f_agg = "mean", maxlag = 10 },
+    { f_agg = "mean", maxlag = 40 },
+    { f_agg = "median", maxlag = 3 },
+    { f_agg = "median", maxlag = 10 },
+    { f_agg = "median", maxlag = 40 },
+    { f_agg = "var", maxlag = 3 },
+    { f_agg = "var", maxlag = 10 },
+    { f_agg = "var", maxlag = 40 },
+    { f_agg = "std", maxlag = 3 },
+    { f_agg = "std", maxlag = 10 },
+]
+
+[partial_autocorrelation]
+parameters = [
+    { lag = 0 },
+    { lag = 1 },
+    { lag = 2 },
+    { lag = 3 },
+    { lag = 4 },
+    { lag = 5 },
+    { lag = 6 },
+    { lag = 9 },
+]
+
+[ar_coefficient]
+parameters = [
+    { coeff = 0, k = 0 },
+    { coeff = 0, k = 1 },
+    { coeff = 1, k = 1 },
+    { coeff = 2, k = 1 },
+    { coeff = 0, k = 2 },
+    { coeff = 1, k = 2 },
+    { coeff = 2, k = 2 },
+    { coeff = 0, k = 4 },
+    { coeff = 3, k = 4 },
+    { coeff = 4, k = 4 },
+]
+
+[augmented_dickey_fuller]
+parameters = [
+    { attr = "teststat" },
+    { attr = "pvalue" },
+    { attr = "usedlag" },
+    { attr = "teststat", autolag = "BIC" },
+    { attr = "usedlag", autolag = "BIC" },
+    { attr = "teststat", autolag = "t-stat" },
+    { attr = "usedlag", autolag = "t-stat" },
+    { attr = "teststat", autolag = "None" },
+    { attr = "pvalue", autolag = "None" },
+    { attr = "usedlag", autolag = "None" },
+]
+[binned_entropy]
+parameters = [{ max_bins = 10 }, { max_bins = 100 }]
+
+[lempel_ziv_complexity]
+parameters = [{ bins = 2 }, { bins = 3 }, { bins = 5 }, { bins = 10 }]
+
+[permutation_entropy]
+parameters = [
+    { tau = 1, dimension = 3 },
+    { tau = 2, dimension = 3 },
+    { tau = 1, dimension = 4 },
+    { tau = 1, dimension = 5 },
+    { tau = 1, dimension = 7 },
+]
+
+[approximate_entropy]
+parameters = [{ m = 2, r = 0.1 }, { m = 2, r = 0.5 }, { m = 2, r = 0.9 }, { m = 1, r = 0.3 }]
+
+[friedrich_coefficients]
+parameters = [
+    { coeff = 0, m = 2, r = 30 },
+    { coeff = 1, m = 2, r = 30 },
+    { coeff = 2, m = 2, r = 30 },
+    { coeff = 3, m = 2, r = 30 },
+    { coeff = 0, m = 3, r = 30 },
+    { coeff = 3, m = 3, r = 30 },
+    { coeff = 1, m = 3, r = 5 },
+]
+
+[max_langevin_fixed_point]
+parameters = [{ m = 3, r = 30 }, { m = 2, r = 5 }]

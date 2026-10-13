@@ -59,6 +59,28 @@ pub struct Config {
     pub c3: Option<C3>,
     pub time_reversal_asymmetry_statistic: Option<TimeReversalAsymmetryStatistic>,
     pub number_peaks: Option<NumberPeaks>,
+    pub mean_second_derivative_central: Option<MeanSecondDerivativeCentral>,
+    pub value_count: Option<ValueCount>,
+    pub energy_ratio_by_chunks: Option<EnergyRatioByChunks>,
+    pub change_quantiles: Option<ChangeQuantiles>,
+    pub benford_correlation: Option<BenfordCorrelation>,
+    pub query_similarity_count: Option<QuerySimilarityCount>,
+    pub fft_coefficient: Option<FftCoefficient>,
+    pub fft_aggregated: Option<FftAggregated>,
+    pub spkt_welch_density: Option<SpktWelchDensity>,
+    pub fourier_entropy: Option<FourierEntropy>,
+    pub cwt_coefficients: Option<CwtCoefficients>,
+    pub number_cwt_peaks: Option<NumberCwtPeaks>,
+    pub agg_autocorrelation: Option<AggAutocorrelation>,
+    pub partial_autocorrelation: Option<PartialAutocorrelation>,
+    pub ar_coefficient: Option<ArCoefficient>,
+    pub augmented_dickey_fuller: Option<AugmentedDickeyFuller>,
+    pub binned_entropy: Option<BinnedEntropy>,
+    pub lempel_ziv_complexity: Option<LempelZivComplexity>,
+    pub permutation_entropy: Option<PermutationEntropy>,
+    pub approximate_entropy: Option<ApproximateEntropy>,
+    pub friedrich_coefficients: Option<FriedrichCoefficients>,
+    pub max_langevin_fixed_point: Option<MaxLangevinFixedPoint>,
 }
 
 impl Default for Config {
@@ -123,6 +145,29 @@ impl Default for Config {
             c3: Some(C3::default()),
             time_reversal_asymmetry_statistic: Some(TimeReversalAsymmetryStatistic::default()),
             number_peaks: Some(NumberPeaks::default()),
+            mean_second_derivative_central: Some(MeanSecondDerivativeCentral::default()),
+            value_count: Some(ValueCount::default()),
+            energy_ratio_by_chunks: Some(EnergyRatioByChunks::default()),
+            change_quantiles: Some(ChangeQuantiles::default()),
+            benford_correlation: Some(BenfordCorrelation::default()),
+            // Needs a query; tsfresh's default (no query) only gives NaN
+            query_similarity_count: None,
+            fft_coefficient: Some(FftCoefficient::default()),
+            fft_aggregated: Some(FftAggregated::default()),
+            spkt_welch_density: Some(SpktWelchDensity::default()),
+            fourier_entropy: Some(FourierEntropy::default()),
+            cwt_coefficients: Some(CwtCoefficients::default()),
+            number_cwt_peaks: Some(NumberCwtPeaks::default()),
+            agg_autocorrelation: Some(AggAutocorrelation::default()),
+            partial_autocorrelation: Some(PartialAutocorrelation::default()),
+            ar_coefficient: Some(ArCoefficient::default()),
+            augmented_dickey_fuller: Some(AugmentedDickeyFuller::default()),
+            binned_entropy: Some(BinnedEntropy::default()),
+            lempel_ziv_complexity: Some(LempelZivComplexity::default()),
+            permutation_entropy: Some(PermutationEntropy::default()),
+            approximate_entropy: Some(ApproximateEntropy::default()),
+            friedrich_coefficients: Some(FriedrichCoefficients::default()),
+            max_langevin_fixed_point: Some(MaxLangevinFixedPoint::default()),
         }
     }
 }
@@ -706,6 +751,686 @@ pub struct NumberPeaksParams {
     pub n: usize,
 }
 
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct MeanSecondDerivativeCentral {}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ValueCount {
+    pub parameters: Vec<ValueCountParams>,
+}
+impl Default for ValueCount {
+    fn default() -> Self {
+        ValueCount {
+            parameters: [0.0, 1.0, -1.0]
+                .map(|value| ValueCountParams { value })
+                .to_vec(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct ValueCountParams {
+    pub value: f64,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct EnergyRatioByChunks {
+    pub parameters: Vec<EnergyRatioByChunksParams>,
+}
+impl Default for EnergyRatioByChunks {
+    fn default() -> Self {
+        EnergyRatioByChunks {
+            parameters: (0..10)
+                .map(|segment_focus| EnergyRatioByChunksParams {
+                    num_segments: 10,
+                    segment_focus,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Rejected when loaded unless `segment_focus < num_segments`.
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[serde(try_from = "RawEnergyRatioByChunksParams")]
+pub struct EnergyRatioByChunksParams {
+    pub num_segments: usize,
+    pub segment_focus: usize,
+}
+
+#[derive(Deserialize)]
+struct RawEnergyRatioByChunksParams {
+    num_segments: usize,
+    segment_focus: usize,
+}
+
+impl TryFrom<RawEnergyRatioByChunksParams> for EnergyRatioByChunksParams {
+    type Error = String;
+
+    fn try_from(raw: RawEnergyRatioByChunksParams) -> Result<Self, Self::Error> {
+        if raw.segment_focus >= raw.num_segments {
+            return Err(format!(
+                "energy_ratio_by_chunks needs segment_focus < num_segments, \
+                 got segment_focus = {} and num_segments = {}",
+                raw.segment_focus, raw.num_segments
+            ));
+        }
+        Ok(EnergyRatioByChunksParams {
+            num_segments: raw.num_segments,
+            segment_focus: raw.segment_focus,
+        })
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ChangeQuantiles {
+    pub parameters: Vec<ChangeQuantilesParams>,
+}
+impl Default for ChangeQuantiles {
+    fn default() -> Self {
+        // tsfresh's grid: every ql < qh, both isabs, mean and var
+        let mut parameters = Vec::new();
+        for ql in [0.0, 0.2, 0.4, 0.6, 0.8] {
+            for qh in [0.2, 0.4, 0.6, 0.8, 1.0] {
+                for isabs in [false, true] {
+                    for f_agg in [ChangeAggregator::Mean, ChangeAggregator::Var] {
+                        if ql < qh {
+                            parameters.push(ChangeQuantilesParams {
+                                ql,
+                                qh,
+                                isabs,
+                                f_agg,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        ChangeQuantiles { parameters }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct ChangeQuantilesParams {
+    pub ql: f64,
+    pub qh: f64,
+    pub isabs: bool,
+    pub f_agg: ChangeAggregator,
+}
+
+/// How `change_quantiles` aggregates the changes inside the corridor.
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ChangeAggregator {
+    Mean,
+    Var,
+    Std,
+    Median,
+}
+
+impl Display for ChangeAggregator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ChangeAggregator::Mean => "mean",
+            ChangeAggregator::Var => "var",
+            ChangeAggregator::Std => "std",
+            ChangeAggregator::Median => "median",
+        };
+        write!(f, "{s}")
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct BenfordCorrelation {}
+
+/// Off by default: there is no sensible default query.
+#[derive(Deserialize, Clone, Debug)]
+pub struct QuerySimilarityCount {
+    pub parameters: Vec<QuerySimilarityCountParams>,
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct QuerySimilarityCountParams {
+    pub query: Vec<f64>,
+    #[serde(default)]
+    pub threshold: f64,
+    #[serde(default = "default_true")]
+    pub normalize: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct FftCoefficient {
+    pub parameters: Vec<FftCoefficientParams>,
+}
+impl Default for FftCoefficient {
+    fn default() -> Self {
+        let attrs = [FftAttr::Real, FftAttr::Imag, FftAttr::Abs, FftAttr::Angle];
+        FftCoefficient {
+            parameters: attrs
+                .into_iter()
+                .flat_map(|attr| {
+                    (0..100).map(move |coeff| FftCoefficientParams {
+                        attr: attr.clone(),
+                        coeff,
+                    })
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct FftCoefficientParams {
+    pub attr: FftAttr,
+    pub coeff: usize,
+}
+
+/// Which part of a Fourier coefficient `fft_coefficient` returns. Unknown
+/// names are rejected when the config is loaded.
+#[derive(Deserialize, Debug, PartialEq, Clone, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum FftAttr {
+    #[default]
+    Real,
+    Imag,
+    Abs,
+    Angle,
+}
+
+impl Display for FftAttr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            FftAttr::Real => write!(f, "real"),
+            FftAttr::Imag => write!(f, "imag"),
+            FftAttr::Abs => write!(f, "abs"),
+            FftAttr::Angle => write!(f, "angle"),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct FftAggregated {
+    pub parameters: Vec<FftAggregatedParams>,
+}
+impl Default for FftAggregated {
+    fn default() -> Self {
+        FftAggregated {
+            parameters: vec![
+                FftAggregatedParams {
+                    aggtype: FftAggType::Centroid,
+                },
+                FftAggregatedParams {
+                    aggtype: FftAggType::Variance,
+                },
+                FftAggregatedParams {
+                    aggtype: FftAggType::Skew,
+                },
+                FftAggregatedParams {
+                    aggtype: FftAggType::Kurtosis,
+                },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct FftAggregatedParams {
+    pub aggtype: FftAggType,
+}
+
+/// Which statistic of the Fourier spectrum `fft_aggregated` returns.
+/// Unknown names are rejected when the config is loaded.
+#[derive(Deserialize, Debug, PartialEq, Clone, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum FftAggType {
+    #[default]
+    Centroid,
+    Variance,
+    Skew,
+    Kurtosis,
+}
+
+impl Display for FftAggType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            FftAggType::Centroid => write!(f, "centroid"),
+            FftAggType::Variance => write!(f, "variance"),
+            FftAggType::Skew => write!(f, "skew"),
+            FftAggType::Kurtosis => write!(f, "kurtosis"),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct SpktWelchDensity {
+    pub parameters: Vec<SpktWelchDensityParams>,
+}
+impl Default for SpktWelchDensity {
+    fn default() -> Self {
+        SpktWelchDensity {
+            parameters: vec![
+                SpktWelchDensityParams { coeff: 2 },
+                SpktWelchDensityParams { coeff: 5 },
+                SpktWelchDensityParams { coeff: 8 },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct SpktWelchDensityParams {
+    pub coeff: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct FourierEntropy {
+    pub parameters: Vec<FourierEntropyParams>,
+}
+impl Default for FourierEntropy {
+    fn default() -> Self {
+        FourierEntropy {
+            parameters: vec![
+                FourierEntropyParams { bins: 2 },
+                FourierEntropyParams { bins: 3 },
+                FourierEntropyParams { bins: 5 },
+                FourierEntropyParams { bins: 10 },
+                FourierEntropyParams { bins: 100 },
+            ],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct FourierEntropyParams {
+    pub bins: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct CwtCoefficients {
+    pub parameters: Vec<CwtCoefficientsParams>,
+}
+impl Default for CwtCoefficients {
+    fn default() -> Self {
+        let widths = vec![2, 5, 10, 20];
+        let mut parameters = Vec::new();
+        for coeff in 0..15 {
+            for &w in &widths {
+                parameters.push(CwtCoefficientsParams {
+                    widths: widths.clone(),
+                    coeff,
+                    w,
+                });
+            }
+        }
+        CwtCoefficients { parameters }
+    }
+}
+
+/// One `cwt_coefficients` entry; `w` must be one of `widths`, which must be
+/// positive.
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[serde(try_from = "RawCwtCoefficientsParams")]
+pub struct CwtCoefficientsParams {
+    pub widths: Vec<usize>,
+    pub coeff: usize,
+    pub w: usize,
+}
+
+#[derive(Deserialize)]
+struct RawCwtCoefficientsParams {
+    widths: Vec<usize>,
+    coeff: usize,
+    w: usize,
+}
+
+impl TryFrom<RawCwtCoefficientsParams> for CwtCoefficientsParams {
+    type Error = String;
+
+    fn try_from(raw: RawCwtCoefficientsParams) -> Result<Self, Self::Error> {
+        if raw.widths.is_empty() || raw.widths.contains(&0) {
+            return Err(format!(
+                "cwt_coefficients widths must be positive, got {:?}",
+                raw.widths
+            ));
+        }
+        if !raw.widths.contains(&raw.w) {
+            return Err(format!(
+                "cwt_coefficients w = {} is not one of widths {:?}",
+                raw.w, raw.widths
+            ));
+        }
+        Ok(CwtCoefficientsParams {
+            widths: raw.widths,
+            coeff: raw.coeff,
+            w: raw.w,
+        })
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct NumberCwtPeaks {
+    pub parameters: Vec<NumberCwtPeaksParams>,
+}
+impl Default for NumberCwtPeaks {
+    fn default() -> Self {
+        NumberCwtPeaks {
+            parameters: vec![NumberCwtPeaksParams { n: 1 }, NumberCwtPeaksParams { n: 5 }],
+        }
+    }
+}
+
+/// One `number_cwt_peaks` entry; `n` must be positive.
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[serde(try_from = "RawNumberCwtPeaksParams")]
+pub struct NumberCwtPeaksParams {
+    pub n: usize,
+}
+
+#[derive(Deserialize)]
+struct RawNumberCwtPeaksParams {
+    n: usize,
+}
+
+impl TryFrom<RawNumberCwtPeaksParams> for NumberCwtPeaksParams {
+    type Error = String;
+
+    fn try_from(raw: RawNumberCwtPeaksParams) -> Result<Self, Self::Error> {
+        if raw.n == 0 {
+            return Err("number_cwt_peaks n must be positive".to_string());
+        }
+        Ok(NumberCwtPeaksParams { n: raw.n })
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct AggAutocorrelation {
+    pub parameters: Vec<AggAutocorrelationParams>,
+}
+
+impl Default for AggAutocorrelation {
+    fn default() -> Self {
+        AggAutocorrelation {
+            parameters: [
+                AutocorrelationAggregator::Mean,
+                AutocorrelationAggregator::Median,
+                AutocorrelationAggregator::Var,
+            ]
+            .into_iter()
+            .map(|f_agg| AggAutocorrelationParams { f_agg, maxlag: 40 })
+            .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct AggAutocorrelationParams {
+    pub f_agg: AutocorrelationAggregator,
+    pub maxlag: usize,
+}
+
+/// How `agg_autocorrelation` aggregates the autocorrelations (the numpy
+/// function of that name). Unknown names are rejected when the config is
+/// loaded.
+#[derive(Deserialize, Debug, PartialEq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum AutocorrelationAggregator {
+    Mean,
+    Median,
+    Var,
+    Std,
+}
+
+impl Display for AutocorrelationAggregator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            AutocorrelationAggregator::Mean => write!(f, "mean"),
+            AutocorrelationAggregator::Median => write!(f, "median"),
+            AutocorrelationAggregator::Var => write!(f, "var"),
+            AutocorrelationAggregator::Std => write!(f, "std"),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct PartialAutocorrelation {
+    pub parameters: Vec<PartialAutocorrelationParams>,
+}
+
+impl Default for PartialAutocorrelation {
+    fn default() -> Self {
+        PartialAutocorrelation {
+            parameters: (0..10)
+                .map(|lag| PartialAutocorrelationParams { lag })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct PartialAutocorrelationParams {
+    pub lag: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ArCoefficient {
+    pub parameters: Vec<ArCoefficientParams>,
+}
+
+impl Default for ArCoefficient {
+    fn default() -> Self {
+        ArCoefficient {
+            parameters: (0..=10)
+                .map(|coeff| ArCoefficientParams { coeff, k: 10 })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct ArCoefficientParams {
+    pub coeff: usize,
+    pub k: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct AugmentedDickeyFuller {
+    pub parameters: Vec<AugmentedDickeyFullerParams>,
+}
+
+impl Default for AugmentedDickeyFuller {
+    fn default() -> Self {
+        AugmentedDickeyFuller {
+            parameters: [AdfAttr::Teststat, AdfAttr::Pvalue, AdfAttr::Usedlag]
+                .into_iter()
+                .map(|attr| AugmentedDickeyFullerParams {
+                    attr,
+                    autolag: AdfAutolag::default(),
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct AugmentedDickeyFullerParams {
+    pub attr: AdfAttr,
+    /// Optional in the config; `"AIC"` when left out, as in tsfresh.
+    #[serde(default)]
+    pub autolag: AdfAutolag,
+}
+
+/// Which result of the augmented Dickey-Fuller test to return. Unknown names
+/// are rejected when the config is loaded.
+#[derive(Deserialize, Debug, PartialEq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum AdfAttr {
+    Teststat,
+    Pvalue,
+    Usedlag,
+}
+
+impl Display for AdfAttr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            AdfAttr::Teststat => write!(f, "teststat"),
+            AdfAttr::Pvalue => write!(f, "pvalue"),
+            AdfAttr::Usedlag => write!(f, "usedlag"),
+        }
+    }
+}
+
+/// How the augmented Dickey-Fuller test chooses its number of lags
+/// (statsmodels' `autolag`): `"AIC"`, `"BIC"`, `"t-stat"` or `"None"` (always
+/// the maximum lag). Unknown names are rejected when the config is loaded.
+#[derive(Deserialize, Debug, PartialEq, Eq, Clone, Copy, Default)]
+pub enum AdfAutolag {
+    #[default]
+    #[serde(rename = "AIC")]
+    Aic,
+    #[serde(rename = "BIC")]
+    Bic,
+    #[serde(rename = "t-stat")]
+    TStat,
+    #[serde(rename = "None")]
+    None,
+}
+
+impl Display for AdfAutolag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            AdfAutolag::Aic => write!(f, "AIC"),
+            AdfAutolag::Bic => write!(f, "BIC"),
+            AdfAutolag::TStat => write!(f, "t-stat"),
+            AdfAutolag::None => write!(f, "None"),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct BinnedEntropy {
+    pub parameters: Vec<BinnedEntropyParams>,
+}
+
+impl Default for BinnedEntropy {
+    fn default() -> Self {
+        BinnedEntropy {
+            parameters: vec![BinnedEntropyParams { max_bins: 10 }],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct BinnedEntropyParams {
+    pub max_bins: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct LempelZivComplexity {
+    pub parameters: Vec<LempelZivComplexityParams>,
+}
+
+impl Default for LempelZivComplexity {
+    fn default() -> Self {
+        LempelZivComplexity {
+            parameters: [2, 3, 5, 10, 100]
+                .map(|bins| LempelZivComplexityParams { bins })
+                .to_vec(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct LempelZivComplexityParams {
+    pub bins: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct PermutationEntropy {
+    pub parameters: Vec<PermutationEntropyParams>,
+}
+
+impl Default for PermutationEntropy {
+    fn default() -> Self {
+        PermutationEntropy {
+            parameters: (3..=7)
+                .map(|dimension| PermutationEntropyParams { tau: 1, dimension })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct PermutationEntropyParams {
+    pub tau: usize,
+    pub dimension: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct ApproximateEntropy {
+    pub parameters: Vec<ApproximateEntropyParams>,
+}
+
+impl Default for ApproximateEntropy {
+    fn default() -> Self {
+        ApproximateEntropy {
+            parameters: [0.1, 0.3, 0.5, 0.7, 0.9]
+                .map(|r| ApproximateEntropyParams { m: 2, r })
+                .to_vec(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct ApproximateEntropyParams {
+    pub m: usize,
+    pub r: f64,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct FriedrichCoefficients {
+    pub parameters: Vec<FriedrichCoefficientsParams>,
+}
+
+impl Default for FriedrichCoefficients {
+    fn default() -> Self {
+        FriedrichCoefficients {
+            parameters: (0..=3)
+                .map(|coeff| FriedrichCoefficientsParams { coeff, m: 3, r: 30 })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct FriedrichCoefficientsParams {
+    pub coeff: usize,
+    pub m: usize,
+    pub r: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct MaxLangevinFixedPoint {
+    pub parameters: Vec<MaxLangevinFixedPointParams>,
+}
+
+impl Default for MaxLangevinFixedPoint {
+    fn default() -> Self {
+        MaxLangevinFixedPoint {
+            parameters: vec![MaxLangevinFixedPointParams { m: 3, r: 30 }],
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct MaxLangevinFixedPointParams {
+    pub m: usize,
+    pub r: usize,
+}
+
 /// A config file that could not be read or parsed.
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -743,6 +1468,21 @@ pub fn load_config(file_path: Option<&str>) -> Result<Config, ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_invalid_wavelet_params_rejected() {
+        let ok: Result<Config, _> = toml::from_str(
+            "[cwt_coefficients]\nparameters = [{ widths = [1, 3], coeff = 0, w = 3 }]",
+        );
+        assert!(ok.is_ok());
+        for bad in [
+            "[cwt_coefficients]\nparameters = [{ widths = [1, 3], coeff = 0, w = 2 }]",
+            "[cwt_coefficients]\nparameters = [{ widths = [0, 3], coeff = 0, w = 3 }]",
+            "[number_cwt_peaks]\nparameters = [{ n = 0 }]",
+        ] {
+            assert!(toml::from_str::<Config>(bad).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn test_read_config_from_file() {
@@ -1091,6 +1831,256 @@ mod tests {
                 NumberPeaksParams { n: 10 },
                 NumberPeaksParams { n: 50 }
             ]
+        );
+        assert!(config.mean_second_derivative_central.is_some());
+        assert_eq!(
+            config.clone().value_count.unwrap().parameters[..],
+            [
+                ValueCountParams { value: 0.0 },
+                ValueCountParams { value: 1.0 },
+                ValueCountParams { value: -1.0 },
+            ]
+        );
+        let energy = config.clone().energy_ratio_by_chunks.unwrap().parameters;
+        assert_eq!(energy.len(), 10);
+        assert!(
+            energy
+                .iter()
+                .enumerate()
+                .all(|(i, p)| p.num_segments == 10 && p.segment_focus == i)
+        );
+        let change = config.clone().change_quantiles.unwrap().parameters;
+        assert_eq!(change.len(), 60);
+        assert_eq!(
+            change[0],
+            ChangeQuantilesParams {
+                ql: 0.0,
+                qh: 0.2,
+                isabs: false,
+                f_agg: ChangeAggregator::Mean,
+            }
+        );
+        assert!(change.iter().all(|p| p.ql < p.qh));
+        assert!(config.benford_correlation.is_some());
+        assert!(config.query_similarity_count.is_none());
+        assert!(config.fft_coefficient.is_some());
+        let fft_coefficient = config.clone().fft_coefficient.unwrap().parameters;
+        assert_eq!(fft_coefficient.len(), 400);
+        assert_eq!(
+            fft_coefficient[0],
+            FftCoefficientParams {
+                attr: FftAttr::Real,
+                coeff: 0
+            }
+        );
+        assert_eq!(
+            fft_coefficient[399],
+            FftCoefficientParams {
+                attr: FftAttr::Angle,
+                coeff: 99
+            }
+        );
+        assert!(config.fft_aggregated.is_some());
+        assert_eq!(
+            config.clone().fft_aggregated.unwrap().parameters[..],
+            [
+                FftAggregatedParams {
+                    aggtype: FftAggType::Centroid
+                },
+                FftAggregatedParams {
+                    aggtype: FftAggType::Variance
+                },
+                FftAggregatedParams {
+                    aggtype: FftAggType::Skew
+                },
+                FftAggregatedParams {
+                    aggtype: FftAggType::Kurtosis
+                },
+            ]
+        );
+        assert!(config.spkt_welch_density.is_some());
+        assert_eq!(
+            config.clone().spkt_welch_density.unwrap().parameters[..],
+            [
+                SpktWelchDensityParams { coeff: 2 },
+                SpktWelchDensityParams { coeff: 5 },
+                SpktWelchDensityParams { coeff: 8 },
+            ]
+        );
+        assert!(config.fourier_entropy.is_some());
+        assert_eq!(
+            config.clone().fourier_entropy.unwrap().parameters[..],
+            [
+                FourierEntropyParams { bins: 2 },
+                FourierEntropyParams { bins: 3 },
+                FourierEntropyParams { bins: 5 },
+                FourierEntropyParams { bins: 10 },
+                FourierEntropyParams { bins: 100 },
+            ]
+        );
+        assert!(config.cwt_coefficients.is_some());
+        let cwt = config.clone().cwt_coefficients.unwrap().parameters;
+        assert_eq!(cwt.len(), 60);
+        assert_eq!(
+            cwt[..2],
+            [
+                CwtCoefficientsParams {
+                    widths: vec![2, 5, 10, 20],
+                    coeff: 0,
+                    w: 2
+                },
+                CwtCoefficientsParams {
+                    widths: vec![2, 5, 10, 20],
+                    coeff: 0,
+                    w: 5
+                },
+            ]
+        );
+        assert_eq!(
+            cwt[59],
+            CwtCoefficientsParams {
+                widths: vec![2, 5, 10, 20],
+                coeff: 14,
+                w: 20
+            }
+        );
+        assert!(config.number_cwt_peaks.is_some());
+        assert_eq!(
+            config.clone().number_cwt_peaks.unwrap().parameters[..],
+            [NumberCwtPeaksParams { n: 1 }, NumberCwtPeaksParams { n: 5 }]
+        );
+        assert!(config.agg_autocorrelation.is_some());
+        assert_eq!(
+            config.clone().agg_autocorrelation.unwrap().parameters[..],
+            [
+                AggAutocorrelationParams {
+                    f_agg: AutocorrelationAggregator::Mean,
+                    maxlag: 40
+                },
+                AggAutocorrelationParams {
+                    f_agg: AutocorrelationAggregator::Median,
+                    maxlag: 40
+                },
+                AggAutocorrelationParams {
+                    f_agg: AutocorrelationAggregator::Var,
+                    maxlag: 40
+                },
+            ]
+        );
+        assert!(config.partial_autocorrelation.is_some());
+        assert_eq!(
+            config.clone().partial_autocorrelation.unwrap().parameters[..],
+            (0..10)
+                .map(|lag| PartialAutocorrelationParams { lag })
+                .collect::<Vec<_>>()[..]
+        );
+        assert!(config.ar_coefficient.is_some());
+        assert_eq!(
+            config.clone().ar_coefficient.unwrap().parameters[..],
+            (0..=10)
+                .map(|coeff| ArCoefficientParams { coeff, k: 10 })
+                .collect::<Vec<_>>()[..]
+        );
+        assert!(config.augmented_dickey_fuller.is_some());
+        assert_eq!(
+            config.clone().augmented_dickey_fuller.unwrap().parameters[..],
+            [AdfAttr::Teststat, AdfAttr::Pvalue, AdfAttr::Usedlag].map(|attr| {
+                AugmentedDickeyFullerParams {
+                    attr,
+                    autolag: AdfAutolag::Aic,
+                }
+            })
+        );
+        assert_eq!(
+            config.clone().binned_entropy.unwrap().parameters[..],
+            [BinnedEntropyParams { max_bins: 10 }]
+        );
+        assert_eq!(
+            config.clone().lempel_ziv_complexity.unwrap().parameters[..],
+            [2, 3, 5, 10, 100].map(|bins| LempelZivComplexityParams { bins })
+        );
+        assert_eq!(
+            config.clone().permutation_entropy.unwrap().parameters[..],
+            [3, 4, 5, 6, 7].map(|dimension| PermutationEntropyParams { tau: 1, dimension })
+        );
+        assert_eq!(
+            config.clone().approximate_entropy.unwrap().parameters[..],
+            [0.1, 0.3, 0.5, 0.7, 0.9].map(|r| ApproximateEntropyParams { m: 2, r })
+        );
+        assert_eq!(
+            config.clone().friedrich_coefficients.unwrap().parameters[..],
+            [0, 1, 2, 3].map(|coeff| FriedrichCoefficientsParams { coeff, m: 3, r: 30 })
+        );
+        assert_eq!(
+            config.clone().max_langevin_fixed_point.unwrap().parameters[..],
+            [MaxLangevinFixedPointParams { m: 3, r: 30 }]
+        );
+    }
+
+    #[test]
+    fn test_query_similarity_count_defaults() {
+        let config: Config =
+            toml::from_str("[query_similarity_count]\nparameters = [{ query = [1.0, 2.0, 3.0] }]")
+                .unwrap();
+        assert_eq!(
+            config.query_similarity_count.unwrap().parameters[..],
+            [QuerySimilarityCountParams {
+                query: vec![1.0, 2.0, 3.0],
+                threshold: 0.0,
+                normalize: true,
+            }]
+        );
+    }
+
+    #[test]
+    fn test_invalid_energy_ratio_segment_focus() {
+        let result = toml::from_str::<Config>(
+            "[energy_ratio_by_chunks]\nparameters = [{ num_segments = 3, segment_focus = 3 }]",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_change_quantiles_aggregator() {
+        let result = toml::from_str::<Config>(
+            "[change_quantiles]\nparameters = [{ ql = 0.0, qh = 1.0, isabs = false, f_agg = \"sum\" }]",
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_adf_autolag_optional_and_validated() {
+        let config: Config = toml::from_str(
+            r#"
+            [augmented_dickey_fuller]
+            parameters = [{ attr = "pvalue" }, { attr = "usedlag", autolag = "t-stat" }]
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.augmented_dickey_fuller.unwrap().parameters[..],
+            [
+                AugmentedDickeyFullerParams {
+                    attr: AdfAttr::Pvalue,
+                    autolag: AdfAutolag::Aic
+                },
+                AugmentedDickeyFullerParams {
+                    attr: AdfAttr::Usedlag,
+                    autolag: AdfAutolag::TStat
+                },
+            ]
+        );
+        assert!(
+            toml::from_str::<Config>(
+                "[augmented_dickey_fuller]\nparameters = [{ attr = \"pvalue\", autolag = \"aic\" }]"
+            )
+            .is_err()
+        );
+        assert!(
+            toml::from_str::<Config>(
+                "[agg_autocorrelation]\nparameters = [{ f_agg = \"max\", maxlag = 4 }]"
+            )
+            .is_err()
         );
     }
 }
