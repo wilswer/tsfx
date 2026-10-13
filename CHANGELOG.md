@@ -33,6 +33,15 @@ All notable changes to TSFX are documented here.
 
 ### Changed
 
+- **Fair TSFresh benchmark.** `python_benchmarks/tsfresh_compare.py`
+  replaces `minimal_bench.py`, `efficient_bench.py`, `1brc/benchmark.py` and
+  `efficient.json`. TSFresh now runs exactly the calculators and parameters
+  TSFX runs for the tier (derived from `.tsfx-config.toml` and checked by
+  feature count), both libraries get the same pre-sorted in-memory data with
+  CSV parsing outside the timer, TSFresh's `n_jobs` matches the Polars
+  thread pool, and both get a warm-up and repeated runs. Previously TSFX's
+  time included reading the CSV, the stocks series were not sorted by date
+  for TSFX, and the feature sets differed.
 - **Many more output columns by default.** The `Efficient` tier now gives
   about 750 columns per value column (was about 155), 400 of them from
   `fft_coefficient`. Existing columns keep their names, but the new ones
