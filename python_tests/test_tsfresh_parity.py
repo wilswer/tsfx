@@ -1635,8 +1635,12 @@ def _ar_2() -> list[float]:
         # too short to fit: tsfresh's fallback [nan] * k
         ([1, 2, 3, 7], 0, 2, math.nan),
         ([1, 2, 3, 7], 2, 2, 0),
+        # exactly 2k + 1 values: an exact fit (statsmodels 0.15; 0.14 raised
+        # where the design had full rank)
         ([1, 2, 3, 4, 5], 2, 2, 0),
-        ([1], 0, 0, 0),
+        ([1], 0, 0, 1),
+        ([1, 3, 2], 0, 1, 3.5),
+        ([1, 3, 2], 1, 1, -0.5),
     ],
 )
 def test_ar_coefficient(values, coeff, k, expected):

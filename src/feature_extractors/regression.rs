@@ -254,9 +254,13 @@ fn jacobi_svd(mut a: Vec<Vec<f64>>) -> (Vec<Vec<f64>>, Vec<f64>, Vec<Vec<f64>>) 
 /// # Edge cases
 /// - Nulls are dropped first; a group with no non-null values gives NaN.
 /// - `coeff` $> k$ gives NaN.
-/// - Fewer than $2k + 2$ values (statsmodels needs more observations than
-///   regressors and raises otherwise): NaN for `coeff` $< k$ and
-///   0 for `coeff` $= k$, as tsfresh (whose fallback has only $k$ entries).
+/// - Fewer than $2k + 1$ values (statsmodels needs at least as many
+///   observations as regressors and raises otherwise): NaN for `coeff`
+///   $< k$ and 0 for `coeff` $= k$, as tsfresh (whose fallback has only $k$
+///   entries).
+/// - Exactly $2k + 1$ values: the exact fit (no residual degrees of
+///   freedom), as statsmodels 0.15; for example the value itself for a
+///   single value and $k = 0$.
 /// - A constant or otherwise collinear series gives the minimum-norm least
 ///   squares solution, as statsmodels' pseudoinverse. For near-collinear
 ///   (ill-conditioned) lag matrices the result is rounding-dependent, in
@@ -277,10 +281,10 @@ pub struct ArCoefficient {
 /// model cannot be fitted.
 fn ar_fit(x: &[f64], k: usize) -> Option<Vec<f64>> {
     let n = x.len();
-    // statsmodels needs more observations (n - k) than regressors (k + 1):
-    // ValueError if fewer, ZeroDivisionError (a degree-of-freedom correction)
-    // if as many
-    if n < 2 * k + 2 {
+    // statsmodels needs at least as many observations (n - k) as regressors
+    // (k + 1) and raises ValueError otherwise; with exactly as many, 0.15
+    // returns the exact fit (0.14 raised ZeroDivisionError)
+    if n < 2 * k + 1 {
         return None;
     }
     let nobs = n - k;
@@ -582,5 +586,15 @@ mod tests {
             assert!((p - 0.25).abs() < 1e-12, "{p}");
         }
         assert!(ar_fit(&[1.0, 2.0, 3.0, 7.0], 3).is_none());
+    }
+
+    #[test]
+    fn test_ar_fit_exactly_determined() {
+        // statsmodels 0.15: AutoReg([2.5], lags=0).fit().params
+        assert_eq!(ar_fit(&[2.5], 0), Some(vec![2.5]));
+        // 2k + 1 values fit exactly; one fewer cannot be fitted
+        let params = ar_fit(&[1.0, 3.0, 2.0], 1).unwrap();
+        assert!((params[0] - 3.5).abs() < 1e-12 && (params[1] + 0.5).abs() < 1e-12);
+        assert!(ar_fit(&[1.0, 3.0], 1).is_none());
     }
 }

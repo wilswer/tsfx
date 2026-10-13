@@ -72,6 +72,15 @@ All notable changes to TSFX are documented here.
   scaled to the series or fit) rather than bit for bit, since tsfx does not
   reproduce numpy's FFT, LAPACK and SIMD `log` arithmetic.
 
+### Fixed
+
+- **`ar_coefficient` matches statsmodels 0.15.** A series of exactly
+  2k + 1 values (as many observations as AR(k) parameters) now gives the
+  exact fit, as tsfresh does with statsmodels 0.15, instead of NaN (or 0 for
+  `coeff = k`), which matched statsmodels 0.14. For example, a single value
+  with `k = 0` gives that value. The tsfresh fuzz tests in CI now pin
+  `statsmodels==0.15.0`.
+
 ### Performance
 
 - **`number_cwt_peaks` is much faster on long series,** with the same
