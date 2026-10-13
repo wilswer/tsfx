@@ -33,6 +33,15 @@ All notable changes to TSFX are documented here.
 
 ### Changed
 
+- **Fair TSFresh benchmark.** `python_benchmarks/tsfresh_compare.py`
+  replaces `minimal_bench.py`, `efficient_bench.py`, `1brc/benchmark.py` and
+  `efficient.json`. TSFresh now runs exactly the calculators and parameters
+  TSFX runs for the tier (derived from `.tsfx-config.toml` and checked by
+  feature count), both libraries get the same pre-sorted in-memory data with
+  CSV parsing outside the timer, TSFresh's `n_jobs` matches the Polars
+  thread pool, and both get a warm-up and repeated runs. Previously TSFX's
+  time included reading the CSV, the stocks series were not sorted by date
+  for TSFX, and the feature sets differed.
 - **Many more output columns by default.** The `Efficient` tier now gives
   about 750 columns per value column (was about 155), 400 of them from
   `fft_coefficient`. Existing columns keep their names, but the new ones
@@ -62,6 +71,52 @@ All notable changes to TSFX are documented here.
   tsfresh's to within rounding (relative and absolute 1e-9, or a tolerance
   scaled to the series or fit) rather than bit for bit, since tsfx does not
   reproduce numpy's FFT, LAPACK and SIMD `log` arithmetic.
+
+### Fixed
+
+- **Linux wheels for free-threaded CPython 3.14 and PyPy 3.11 again.** 0.5.0
+  shipped only the abi3 wheels, which those interpreters cannot use, so
+  installing there built tsfx from source (with a Rust toolchain).
+- **`ar_coefficient` matches statsmodels 0.15.** A series of exactly
+  2k + 1 values (as many observations as AR(k) parameters) now gives the
+  exact fit, as tsfresh does with statsmodels 0.15, instead of NaN (or 0 for
+  `coeff = k`), which matched statsmodels 0.14. For example, a single value
+  with `k = 0` gives that value. The tsfresh fuzz tests in CI now pin
+  `statsmodels==0.15.0`.
+
+### Performance
+
+- **`number_cwt_peaks` is much faster on long series,** with the same
+  results bit for bit: on 50M rows of 1BRC data (series of about 5,600
+  values) it takes 2.6 s instead of 10.9 s. Its noise estimate
+  now selects the 10th percentile of each window instead of sorting it, and
+  ridge lines are matched by binary search instead of comparing every pair.
+  The `Efficient` tier on 50M rows of 1BRC data takes 13.0 s instead of
+  21.9 s.
+- **`augmented_dickey_fuller`, `permutation_entropy` and
+  `change_quantiles` are faster,** with the same results bit for bit.
+  Together they make the `Efficient` tier on 100M rows of 1BRC data take
+  25.5 s instead of 35.3 s (−28%), the features alone measured as follows:
+  - `augmented_dickey_fuller` 16.6 → about 10 s: the check for an exact fit
+    first compares against a cheap upper bound of the fit's scale, and only
+    computes the exact scale (a pass over every row and regressor) when the
+    residual is small enough to matter.
+  - `permutation_entropy` 3.7 → 2.1 s: each window's pattern is counted as
+    one integer instead of an allocated list.
+  - `change_quantiles` 3.0 → 2.5 s: each corridor's changes are computed
+    once and shared by its aggregations.
+- **`augmented_dickey_fuller` and `ar_coefficient` solve well-conditioned
+  regressions from the Gram matrix.** A Householder QR sweeps the whole
+  design once per regressor and was limited by memory bandwidth on long
+  series; the Gram matrix needs one pass. On 100M rows of 1BRC data,
+  `augmented_dickey_fuller` alone takes 4.4 s instead of 12.6 s. **Not bit
+  for bit:** results agree with the previous ones to within about
+  1e-10 (ADF test statistics and p-values within 1e-12 relative on
+  1BRC and edge-case series, the same chosen lags, AR coefficients within
+  2e-11 of the fit's largest coefficient). Ill-conditioned,
+  near-exact and exactly fitting regressions still use the QR decomposition,
+  so their results, including the deviations from tsfresh documented for
+  exact fits, are unchanged.
 
 ## 0.5.0 (2026-10-12)
 

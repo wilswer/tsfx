@@ -312,31 +312,43 @@ fn permutation_entropy(x: &[f64], tau: usize, dimension: usize) -> f64 {
     let less = |a: f64, b: f64| a < b || (b.is_nan() && !a.is_nan());
     let equal = |a: f64, b: f64| a == b || (a.is_nan() && b.is_nan());
     let windows = (x.len() - dimension) / tau + 1;
-    // np.unique(axis=0) counts the patterns in lexicographic order
-    let mut counts: BTreeMap<Vec<usize>, usize> = BTreeMap::new();
-    for k in 0..windows {
+    // The rank of each value of window k
+    let ranks = |k: usize| {
         let window = &x[k * tau..k * tau + dimension];
-        let pattern = window
-            .iter()
-            .enumerate()
-            .map(|(i, &v)| {
-                window
-                    .iter()
-                    .enumerate()
-                    .filter(|&(j, &w)| less(w, v) || (j < i && equal(w, v)))
-                    .count()
-            })
-            .collect();
+        window.iter().enumerate().map(move |(i, &v)| {
+            window
+                .iter()
+                .enumerate()
+                .filter(|&(j, &w)| less(w, v) || (j < i && equal(w, v)))
+                .count()
+        })
+    };
+    let terms = match (dimension as u64).checked_pow(dimension as u32) {
+        // A pattern as one base-`dimension` number, which orders the
+        // patterns as their rank sequences: no allocation per window
+        Some(_) => pattern_terms(
+            windows,
+            (0..windows).map(|k| ranks(k).fold(0u64, |code, r| code * dimension as u64 + r as u64)),
+        ),
+        None => pattern_terms(windows, (0..windows).map(|k| ranks(k).collect::<Vec<_>>())),
+    };
+    -numpy_sum(terms.len(), |i| terms[i])
+}
+
+/// $p \ln p$ of each pattern's frequency, in increasing pattern order (as
+/// `np.unique(axis=0)` counts them, lexicographically).
+fn pattern_terms<K: Ord>(windows: usize, patterns: impl Iterator<Item = K>) -> Vec<f64> {
+    let mut counts: BTreeMap<K, usize> = BTreeMap::new();
+    for pattern in patterns {
         *counts.entry(pattern).or_insert(0) += 1;
     }
-    let terms: Vec<f64> = counts
+    counts
         .values()
         .map(|&count| {
             let p = count as f64 / windows as f64;
             p * p.ln()
         })
-        .collect();
-    -numpy_sum(terms.len(), |i| terms[i])
+        .collect()
 }
 
 /// Approximate entropy feature.

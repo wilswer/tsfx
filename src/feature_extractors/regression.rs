@@ -19,6 +19,22 @@ struct Ols {
 /// an exact fit (see [`Ols::fit`]).
 const PERFECT_FIT_TOL: f64 = 1e-10;
 
+/// Fits whose column-scaled design has a condition number bound below this
+/// are solved from the Gram matrix (see [`Ols::fit_prefixes_gram`]).
+const MAX_GRAM_CONDITION: f64 = 1e3;
+
+/// The largest estimated relative error of a residual sum of squares the
+/// Gram matrix path accepts. That residual is computed as a difference,
+/// $y^T y - \lVert c \rVert^2$, whose rounding error is about
+/// $\varepsilon\,\kappa^2\,y^T y$ for a (scaled) condition number
+/// $\kappa$; t-values and information criteria magnify it when few degrees
+/// of freedom remain.
+const MAX_GRAM_RESIDUAL_ERROR: f64 = 1e-12;
+
+/// Rows per block when accumulating the Gram matrix, so that a block of every
+/// column stays in cache.
+const GRAM_BLOCK_ROWS: usize = 512;
+
 /// Information criteria closer than this (relative to their magnitude, at
 /// least 1) count as equal when choosing the ADF lag.
 const IC_TIE_TOL: f64 = 1e-9;
@@ -48,11 +64,18 @@ impl Ols {
     /// residual sum of squares is set to 0: the rounding noise would
     /// otherwise decide t-values and information criteria.
     ///
+    /// Well-conditioned fits that are far from exact take a faster path, see
+    /// [`Ols::fit_prefixes_gram`]; its results agree with this one's to
+    /// within rounding, not bit for bit.
+    ///
     /// `None` if the design is not finite (numpy's SVD raises
     /// `LinAlgError`); a non-finite `y` propagates into the results.
     fn fit_prefixes(x: &[Vec<f64>], y: &[f64], min_cols: usize) -> Option<Vec<Self>> {
         if x.iter().flatten().any(|v| !v.is_finite()) {
             return None;
+        }
+        if let Some(fits) = Self::fit_prefixes_gram(x, y, min_cols) {
+            return Some(fits);
         }
         let (nobs, k) = (y.len(), x.len());
         let (r, c) = householder_qr(x, y);
@@ -63,6 +86,10 @@ impl Ols {
         for p in (0..k).rev() {
             tails[p] = tails[p + 1] + if p < nobs { c[p] * c[p] } else { 0.0 };
         }
+        // For a cheap upper bound of each fit's scale (see below)
+        let abs_max = |v: &[f64]| v.iter().fold(0.0, |m: f64, e| m.max(e.abs()));
+        let y_max = abs_max(y);
+        let col_max: Vec<f64> = x.iter().map(|col| abs_max(col)).collect();
         let fits = (min_cols..=k)
             .map(|p| {
                 // The p x p triangular factor of the first p columns
@@ -96,18 +123,30 @@ impl Ols {
                     let fitted: f64 = (i..p).map(|j| r_p[j][i] * params[j]).sum();
                     ssr += (c[i] - fitted) * (c[i] - fitted);
                 }
-                let scale = (0..nobs)
-                    .map(|row| {
-                        y[row].abs()
-                            + x[..p]
-                                .iter()
-                                .zip(&params)
-                                .map(|(col, b)| (col[row] * b).abs())
-                                .sum::<f64>()
-                    })
-                    .fold(0.0, f64::max);
-                if (ssr / nobs as f64).sqrt() <= PERFECT_FIT_TOL * scale {
-                    ssr = 0.0;
+                let rms = (ssr / nobs as f64).sqrt();
+                // The scale is at most max |y| + sum_j |b_j| max |X_j| (twice
+                // that covers rounding), so the O(nobs p) scale is only
+                // needed when the residual is below the tolerance of that
+                let bound = y_max
+                    + params
+                        .iter()
+                        .zip(&col_max)
+                        .map(|(b, m)| b.abs() * m)
+                        .sum::<f64>();
+                if !bound.is_finite() || rms <= 2.0 * PERFECT_FIT_TOL * bound {
+                    let scale = (0..nobs)
+                        .map(|row| {
+                            y[row].abs()
+                                + x[..p]
+                                    .iter()
+                                    .zip(&params)
+                                    .map(|(col, b)| (col[row] * b).abs())
+                                    .sum::<f64>()
+                        })
+                        .fold(0.0, f64::max);
+                    if rms <= PERFECT_FIT_TOL * scale {
+                        ssr = 0.0;
+                    }
                 }
                 let tol = s_max * p as f64 * f64::EPSILON;
                 Self {
@@ -119,6 +158,134 @@ impl Ols {
                 }
             })
             .collect();
+        Some(fits)
+    }
+
+    /// [`Ols::fit_prefixes`] from the Gram matrix $X^T X$ and $X^T y$, built
+    /// in one pass over the rows, and its Cholesky factor $R$ ($R^T R = X^T
+    /// X$, the same $R$ as a QR decomposition up to signs). A Householder QR
+    /// sweeps the whole design once per column, which on long series is
+    /// limited by memory bandwidth; this reads it once.
+    ///
+    /// The columns are scaled to unit norm first. Squaring the design squares
+    /// its condition number, so this path is only taken when every fit is
+    /// well conditioned (scaled condition number bound below
+    /// [`MAX_GRAM_CONDITION`]: results within about $10^{6}\,\varepsilon$
+    /// relative of the QR path's), leaves a residual large enough that its
+    /// estimated relative error stays below [`MAX_GRAM_RESIDUAL_ERROR`] and is
+    /// clearly not an exact fit. `None` otherwise, for the QR path.
+    fn fit_prefixes_gram(x: &[Vec<f64>], y: &[f64], min_cols: usize) -> Option<Vec<Self>> {
+        let (nobs, k) = (y.len(), x.len());
+        if k == 0 {
+            return None;
+        }
+        let mut gram = vec![vec![0.0; k]; k];
+        let mut xty = vec![0.0; k];
+        let mut yty = 0.0;
+        for start in (0..nobs).step_by(GRAM_BLOCK_ROWS) {
+            let rows = start..(start + GRAM_BLOCK_ROWS).min(nobs);
+            let y_block = &y[rows.clone()];
+            for a in 0..k {
+                let xa = &x[a][rows.clone()];
+                for b in a..k {
+                    gram[a][b] += dot(xa, &x[b][rows.clone()]);
+                }
+                xty[a] += dot(xa, y_block);
+            }
+            yty += dot(y_block, y_block);
+        }
+        if !yty.is_finite() || xty.iter().any(|v| !v.is_finite()) {
+            return None;
+        }
+        // Unit columns: gram[a][b] / (norm_a norm_b), so the diagonal is 1
+        let norms: Vec<f64> = (0..k).map(|a| gram[a][a].sqrt()).collect();
+        if norms.contains(&0.0) {
+            return None;
+        }
+        // Upper triangular Cholesky factor, by rows: r[i][j] for j >= i
+        let mut r = vec![vec![0.0; k]; k];
+        for j in 0..k {
+            for i in 0..=j {
+                let g = gram[i][j] / (norms[i] * norms[j]);
+                let s: f64 = (0..i).map(|l| r[l][i] * r[l][j]).sum();
+                if i == j {
+                    let pivot = g - s;
+                    if pivot.is_nan() || pivot <= 0.0 {
+                        return None;
+                    }
+                    r[j][j] = pivot.sqrt();
+                } else {
+                    r[i][j] = (g - s) / r[i][i];
+                }
+            }
+        }
+        // R^{-1} (upper triangular) by back substitution, column by column;
+        // |R|_F^2 = k for unit columns, so the condition bound is
+        // sqrt(k) |R^{-1}|_F
+        let mut inv = vec![vec![0.0; k]; k];
+        let mut inv_sq = 0.0;
+        for j in 0..k {
+            inv[j][j] = 1.0 / r[j][j];
+            for i in (0..j).rev() {
+                let s: f64 = (i + 1..=j).map(|l| r[i][l] * inv[l][j]).sum();
+                inv[i][j] = -s / r[i][i];
+            }
+            inv_sq += (0..=j).map(|i| inv[i][j] * inv[i][j]).sum::<f64>();
+        }
+        let bound_sq = k as f64 * inv_sq;
+        if bound_sq.is_nan() || bound_sq >= MAX_GRAM_CONDITION * MAX_GRAM_CONDITION {
+            return None;
+        }
+        // c = R^{-T} (scaled X^T y): the first p entries are Q^T y for the
+        // first p columns
+        let mut c = vec![0.0; k];
+        for j in 0..k {
+            let s: f64 = (0..j).map(|i| r[i][j] * c[i]).sum();
+            c[j] = (xty[j] / norms[j] - s) / r[j][j];
+        }
+        let y_max = y.iter().fold(0.0, |m: f64, e| m.max(e.abs()));
+        let col_max: Vec<f64> = x
+            .iter()
+            .map(|col| col.iter().fold(0.0, |m: f64, e| m.max(e.abs())))
+            .collect();
+        let mut reached = (0..min_cols).map(|i| c[i] * c[i]).sum::<f64>();
+        let mut fits = Vec::with_capacity(k + 1 - min_cols);
+        for p in min_cols..=k {
+            if p > min_cols {
+                reached += c[p - 1] * c[p - 1];
+            }
+            let ssr = yty - reached;
+            // bound_sq bounds the squared condition number
+            if ssr.is_nan() || ssr * MAX_GRAM_RESIDUAL_ERROR < f64::EPSILON * bound_sq * yty {
+                return None;
+            }
+            // beta = R_p^{-1} c, diag((X^T X)^{-1}) = squared rows of R_p^{-1},
+            // both scaled back by the column norms
+            let params: Vec<f64> = (0..p)
+                .map(|i| (i..p).map(|j| inv[i][j] * c[j]).sum::<f64>() / norms[i])
+                .collect();
+            let normalized_cov_diag = (0..p)
+                .map(|i| (i..p).map(|j| inv[i][j] * inv[i][j]).sum::<f64>() / (norms[i] * norms[i]))
+                .collect();
+            // Could this be an exact fit (see fit_prefixes)? Then the QR path
+            // decides
+            let bound = y_max
+                + params
+                    .iter()
+                    .zip(&col_max)
+                    .map(|(b, m)| b.abs() * m)
+                    .sum::<f64>();
+            if (ssr / nobs as f64).sqrt() <= 2.0 * PERFECT_FIT_TOL * bound || !bound.is_finite() {
+                return None;
+            }
+            fits.push(Self {
+                params,
+                ssr,
+                rank: p,
+                nobs,
+                normalized_cov_diag,
+            });
+        }
         Some(fits)
     }
 
@@ -146,6 +313,21 @@ impl Ols {
     fn bic(&self) -> f64 {
         -2.0 * self.llf() + (self.nobs as f64).ln() * self.rank as f64
     }
+}
+
+/// Dot product with eight independent accumulators, so it vectorises (the
+/// sum is rounded differently from a sequential one).
+fn dot(a: &[f64], b: &[f64]) -> f64 {
+    let (a_lanes, a_rest) = a.as_chunks::<8>();
+    let (b_lanes, b_rest) = b.as_chunks::<8>();
+    let mut acc = [0.0; 8];
+    for (u, v) in a_lanes.iter().zip(b_lanes) {
+        for l in 0..8 {
+            acc[l] += u[l] * v[l];
+        }
+    }
+    let rest: f64 = a_rest.iter().zip(b_rest).map(|(u, v)| u * v).sum();
+    acc.iter().sum::<f64>() + rest
 }
 
 /// Householder QR decomposition $X = QR$ of the matrix with columns `x`
@@ -209,9 +391,14 @@ fn jacobi_svd(mut a: Vec<Vec<f64>>) -> (Vec<Vec<f64>>, Vec<f64>, Vec<Vec<f64>>) 
         let mut rotated = false;
         for p in 0..k {
             for q in p + 1..k {
-                let alpha = dot(&a[p], &a[p]);
-                let beta = dot(&a[q], &a[q]);
-                let gamma = dot(&a[p], &a[q]);
+                // The three dot products in one pass, each summed in the
+                // same order as `dot`
+                let (mut alpha, mut beta, mut gamma) = (-0.0f64, -0.0f64, -0.0f64);
+                for (x, y) in a[p].iter().zip(&a[q]) {
+                    alpha += x * x;
+                    beta += y * y;
+                    gamma += x * y;
+                }
                 if gamma == 0.0 || gamma.abs() <= f64::EPSILON * (alpha * beta).sqrt() {
                     continue;
                 }
@@ -254,13 +441,20 @@ fn jacobi_svd(mut a: Vec<Vec<f64>>) -> (Vec<Vec<f64>>, Vec<f64>, Vec<Vec<f64>>) 
 /// # Edge cases
 /// - Nulls are dropped first; a group with no non-null values gives NaN.
 /// - `coeff` $> k$ gives NaN.
-/// - Fewer than $2k + 2$ values (statsmodels needs more observations than
-///   regressors and raises otherwise): NaN for `coeff` $< k$ and
-///   0 for `coeff` $= k$, as tsfresh (whose fallback has only $k$ entries).
+/// - Fewer than $2k + 1$ values (statsmodels needs at least as many
+///   observations as regressors and raises otherwise): NaN for `coeff`
+///   $< k$ and 0 for `coeff` $= k$, as tsfresh (whose fallback has only $k$
+///   entries).
+/// - Exactly $2k + 1$ values: the exact fit (no residual degrees of
+///   freedom), as statsmodels 0.15; for example the value itself for a
+///   single value and $k = 0$.
 /// - A constant or otherwise collinear series gives the minimum-norm least
 ///   squares solution, as statsmodels' pseudoinverse. For near-collinear
 ///   (ill-conditioned) lag matrices the result is rounding-dependent, in
 ///   statsmodels too.
+/// - Well-conditioned fits far from exact are solved from the Gram matrix
+///   rather than a QR decomposition (faster on long series), agreeing to
+///   within about $10^{-10}$ of the largest coefficient, not bit for bit.
 /// - **Deliberate deviation from tsfresh:** a series containing NaN or
 ///   $\pm\infty$ gives NaN for every coefficient. tsfresh raises
 ///   (statsmodels' `MissingDataError` is not caught), failing the whole
@@ -277,10 +471,10 @@ pub struct ArCoefficient {
 /// model cannot be fitted.
 fn ar_fit(x: &[f64], k: usize) -> Option<Vec<f64>> {
     let n = x.len();
-    // statsmodels needs more observations (n - k) than regressors (k + 1):
-    // ValueError if fewer, ZeroDivisionError (a degree-of-freedom correction)
-    // if as many
-    if n < 2 * k + 2 {
+    // statsmodels needs at least as many observations (n - k) as regressors
+    // (k + 1) and raises ValueError otherwise; with exactly as many, 0.15
+    // returns the exact fit (0.14 raised ZeroDivisionError)
+    if n < 2 * k + 1 {
         return None;
     }
     let nobs = n - k;
@@ -517,10 +711,16 @@ fn adfuller(x: &[f64], autolag: AdfAutolag) -> [f64; 3] {
 /// - Nonzero values so small that their squares underflow (below about
 ///   $10^{-150}$) leave the regression numerically rank-deficient; the
 ///   result then depends on rounding, in statsmodels as here.
+/// - Well-conditioned regressions that are far from an exact fit (most
+///   series) are solved from the Gram matrix instead of a QR decomposition,
+///   which is much faster on long series. The two agree to within about
+///   $10^{-10}$ relative, not bit for bit; ill-conditioned, near-exact and
+///   exactly fitting regressions always use the QR decomposition.
 ///
 /// # Cost
 /// $O(n\,p^2)$ per distinct `autolag`, with $p$ the largest lag (68 for
-/// $n = 10^5$): the $p + 1$ candidate fits share one QR decomposition.
+/// $n = 10^5$): the $p + 1$ candidate fits share one Gram matrix (or QR
+/// decomposition), which needs a single pass over the series.
 ///
 /// # tsfresh
 /// `feature_calculators.augmented_dickey_fuller` (v0.21.2).
@@ -582,5 +782,15 @@ mod tests {
             assert!((p - 0.25).abs() < 1e-12, "{p}");
         }
         assert!(ar_fit(&[1.0, 2.0, 3.0, 7.0], 3).is_none());
+    }
+
+    #[test]
+    fn test_ar_fit_exactly_determined() {
+        // statsmodels 0.15: AutoReg([2.5], lags=0).fit().params
+        assert_eq!(ar_fit(&[2.5], 0), Some(vec![2.5]));
+        // 2k + 1 values fit exactly; one fewer cannot be fitted
+        let params = ar_fit(&[1.0, 3.0, 2.0], 1).unwrap();
+        assert!((params[0] - 3.5).abs() < 1e-12 && (params[1] + 0.5).abs() < 1e-12);
+        assert!(ar_fit(&[1.0, 3.0], 1).is_none());
     }
 }

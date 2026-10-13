@@ -1,6 +1,6 @@
 # 1 Billion Row Benchmark
 
-To do perform the benchmark you must first generate data (if you are in the root
+To perform the benchmark you must first generate data (if you are in the root
 directory):
 
 ```bash
@@ -9,14 +9,26 @@ python python_benchmarks/1brc/generate_data.py N
 
 where `N` is a number (1_000_000_000 for the proper 1 billion row challenge).
 
-Then run benchmark like so:
+Then compare TSFX against TSFresh like so:
 
 ```bash
-python python_benchmarks/1brc/benchmark.py
+python python_benchmarks/tsfresh_compare.py --dataset 1brc --rows 10_000_000
 ```
 
-If `tsfx` runs out of memory you can specify how many threads polars should use,
-by setting the environment variable:
+`--rows` limits how many measurements are read (default 10 million, `0` for
+all). For scale, on an 80-core machine with the `efficient` tier (8,859
+stations, best of two timed runs):
+
+| rows | TSFX   | TSFresh |
+| ---- | ------ | ------- |
+| 10M  | 1.3 s  | 52.3 s  |
+| 50M  | 7.1 s  | 192.7 s |
+
+The full billion rows has not been measured. See
+the docstring of `tsfresh_compare.py` for how the comparison is kept fair.
+
+Both libraries use as many threads (TSFresh: processes) as Polars does. To
+limit them, for example if you run out of memory, set:
 
 ```bash
 export POLARS_MAX_THREADS=16

@@ -234,28 +234,40 @@ impl Kernel for ChangeQuantiles {
             .copied()
             .filter(|v| !v.is_nan())
             .collect::<Vec<f64>>();
-        let mut changes = Vec::new();
+        // The corridor's changes, shared by the aggregations of the same
+        // (ql, qh, isabs); the default grid has 3 per corridor and side
+        let mut corridors: Vec<((f64, f64, bool), Vec<f64>)> = Vec::new();
+        let mut scratch = Vec::new();
         for &(ql, qh, isabs, f_agg) in &self.params {
             if ql >= qh {
                 out.push(0.0);
                 continue;
             }
-            let bins = [ql, qh].map(|q| pandas_quantile(&finite_sorted, q));
-            let inside = qcut_first_bin(x, bins);
-            changes.clear();
-            // Only changes that start and end inside the corridor
-            changes.extend(
-                (0..x.len().saturating_sub(1))
-                    .filter(|&i| inside[i] && inside[i + 1])
-                    .map(|i| {
-                        let d = x[i + 1] - x[i];
-                        if isabs { d.abs() } else { d }
-                    }),
-            );
+            let key = (ql, qh, isabs);
+            let changes = match corridors.iter().position(|(k, _)| *k == key) {
+                Some(i) => &corridors[i].1,
+                None => {
+                    let bins = [ql, qh].map(|q| pandas_quantile(&finite_sorted, q));
+                    let inside = qcut_first_bin(x, bins);
+                    // Only changes that start and end inside the corridor
+                    let changes = (0..x.len().saturating_sub(1))
+                        .filter(|&i| inside[i] && inside[i + 1])
+                        .map(|i| {
+                            let d = x[i + 1] - x[i];
+                            if isabs { d.abs() } else { d }
+                        })
+                        .collect();
+                    corridors.push((key, changes));
+                    &corridors.last().unwrap().1
+                }
+            };
             out.push(if changes.is_empty() {
                 0.0
             } else {
-                f_agg.aggregate(&mut changes)
+                // A fresh copy: the median reorders it
+                scratch.clear();
+                scratch.extend_from_slice(changes);
+                f_agg.aggregate(&mut scratch)
             });
         }
     }

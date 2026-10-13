@@ -15,8 +15,8 @@ crate-type = ["lib", "cdylib"]
 serde = { version = "1", features = ["derive"] }
 toml = "1.1"
 # abi3: one wheel per platform for every CPython >= 3.11, including future
-# versions (free-threaded builds, which have no stable ABI, still get
-# version-specific wheels)
+# versions. Free-threaded CPython and PyPy have no stable ABI: on Linux, CI
+# builds version-specific wheels for them (see the -i flags in CI.yml)
 pyo3 = { version = "0.29", features = ["abi3-py311"] }
 chrono = "0.4.42"
 csv = "1.3"

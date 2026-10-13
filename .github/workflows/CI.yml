@@ -48,7 +48,7 @@ jobs:
           HYPOTHESIS_PROFILE: ci
         run: |
           # bit-exact parity is checked against these versions
-          uv pip install --system hypothesis tsfresh==0.21.2 numpy==2.4.4 pandas==3.0.2 scipy==1.17.1
+          uv pip install --system hypothesis tsfresh==0.21.2 numpy==2.4.4 pandas==3.0.2 scipy==1.17.1 statsmodels==0.15.0
           pytest -m fuzz
 
   linux:
@@ -75,7 +75,12 @@ jobs:
           CFLAGS_aarch64_unknown_linux_gnu: "-D__ARM_ARCH=8"
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter
+          # One abi3 wheel for CPython >= 3.11, plus version-specific wheels
+          # for the interpreters abi3 does not cover (free-threaded CPython,
+          # PyPy). --find-interpreter builds only the abi3 wheel. maturin
+          # knows these interpreters' configuration, so they need not be
+          # installed in the build image
+          args: --release --out dist -i python3.11 -i python3.14t -i pypy3.11
           sccache: false
           manylinux: auto
       - name: Upload wheels
@@ -108,7 +113,8 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter
+          # As for manylinux: abi3 plus free-threaded and PyPy wheels
+          args: --release --out dist -i python3.11 -i python3.14t -i pypy3.11
           sccache: false
           manylinux: musllinux_1_2
       - name: Upload wheels
