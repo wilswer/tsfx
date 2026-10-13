@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PSI_POINTS"],"fn":["compute_integrated_mexh","count_cwt_peaks","integrated_mexh","np_convolve","pywt_cwt_mexh","ricker","score_at_percentile"],"struct":["CwtCoefficients","NumberCwtPeaks","RidgeLine"]};

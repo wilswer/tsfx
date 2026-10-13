@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["balance","estimate_friedrich_coefficients","interval_label_groups","max_real_root","numpy_around","polish_root","polyfit","round_frac"],"struct":["FriedrichCoefficients","Kahan","MaxLangevinFixedPoint"]};

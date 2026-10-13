@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["AbsoluteSumOfChanges","CidCe","MeanAbsoluteChange","MeanChange"]};
+window.SIDEBAR_ITEMS = {"fn":["numpy_searchsorted_left","pandas_quantile","qcut_first_bin"],"struct":["AbsoluteSumOfChanges","ChangeQuantiles","CidCe","MeanAbsoluteChange","MeanChange","MeanSecondDerivativeCentral"]};

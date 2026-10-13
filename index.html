@@ -642,18 +642,22 @@ with pl.Config(set_tbl_width_chars=80):
     print(gdf)
 </code></pre>
 <p>which produces the following output:</p>
-<pre><code class="language-bash">shape: (3, 314)
+<pre><code class="language-bash">shape: (3, 1_498)
 ┌─────┬────────┬─────────┬─────────┬───┬─────────┬─────────┬─────────┬─────────┐
 │ id  ┆ length ┆ val__su ┆ val__me ┆ … ┆ value__ ┆ value__ ┆ value__ ┆ value__ │
-│ --- ┆ ---    ┆ m_value ┆ an      ┆   ┆ number_ ┆ number_ ┆ number_ ┆ number_ │
-│ str ┆ u32    ┆ s       ┆ ---     ┆   ┆ peaks__ ┆ peaks__ ┆ peaks__ ┆ peaks__ │
-│     ┆        ┆ ---     ┆ f64     ┆   ┆ n_3     ┆ n_5     ┆ n_10    ┆ n_50    │
-│     ┆        ┆ f64     ┆         ┆   ┆ ---     ┆ ---     ┆ ---     ┆ ---     │
+│ --- ┆ ---    ┆ m_value ┆ an      ┆   ┆ friedri ┆ friedri ┆ friedri ┆ max_lan │
+│ str ┆ u32    ┆ s       ┆ ---     ┆   ┆ ch_coef ┆ ch_coef ┆ ch_coef ┆ gevin_f │
+│     ┆        ┆ ---     ┆ f64     ┆   ┆ ficient ┆ ficient ┆ ficient ┆ ixed_po │
+│     ┆        ┆ f64     ┆         ┆   ┆ s_…     ┆ s_…     ┆ s_…     ┆ in…     │
+│     ┆        ┆         ┆         ┆   ┆ ---     ┆ ---     ┆ ---     ┆ ---     │
 │     ┆        ┆         ┆         ┆   ┆ f64     ┆ f64     ┆ f64     ┆ f64     │
 ╞═════╪════════╪═════════╪═════════╪═══╪═════════╪═════════╪═════════╪═════════╡
-│ a   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.0     ┆ 0.0     ┆ 0.0     ┆ 0.0     │
-│ b   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.0     ┆ 0.0     ┆ 0.0     ┆ 0.0     │
-│ c   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.0     ┆ 0.0     ┆ 0.0     ┆ 0.0     │
+│ a   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.00399 ┆ 0.08720 ┆ 0.71646 ┆ 9.92847 │
+│     ┆        ┆         ┆         ┆   ┆ 6       ┆ 7       ┆ 2       ┆ 5       │
+│ b   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ -0.0028 ┆ -0.0718 ┆ -0.7111 ┆ 12.0654 │
+│     ┆        ┆         ┆         ┆   ┆ 71      ┆ 12      ┆ 93      ┆ 07      │
+│ c   ┆ 3      ┆ 6.0     ┆ 2.0     ┆ … ┆ 0.00399 ┆ 0.08720 ┆ 0.71646 ┆ 9.92847 │
+│     ┆        ┆         ┆         ┆   ┆ 6       ┆ 7       ┆ 2       ┆ 5       │
 └─────┴────────┴─────────┴─────────┴───┴─────────┴─────────┴─────────┴─────────┘
 </code></pre>
 <h3 id="extracting-over-a-time-window">Extracting over a time window</h3>
@@ -703,17 +707,21 @@ gdf = gdf.sort(by=&quot;id&quot;)
 print(gdf)
 </code></pre>
 <p>which produces the following output:</p>
-<pre><code class="language-bash">shape: (3, 317)
+<pre><code class="language-bash">shape: (6, 1_499)
 ┌─────┬────────────┬────────┬─────────────┬───┬─────────────┬────────────┬────────────┬────────────┐
-│ id  ┆ time       ┆ length ┆ val__sum_va ┆ … ┆ value__numb ┆ value__num ┆ value__num ┆ value__num │
-│ --- ┆ ---        ┆ ---    ┆ lues        ┆   ┆ er_peaks__n ┆ ber_peaks_ ┆ ber_peaks_ ┆ ber_peaks_ │
-│ str ┆ date       ┆ u32    ┆ ---         ┆   ┆ _3          ┆ _n_5       ┆ _n_10      ┆ _n_50      │
-│     ┆            ┆        ┆ f32         ┆   ┆ ---         ┆ ---        ┆ ---        ┆ ---        │
-│     ┆            ┆        ┆             ┆   ┆ f32         ┆ f32        ┆ f32        ┆ f32        │
+│ id  ┆ time       ┆ length ┆ val__sum_va ┆ … ┆ value__frie ┆ value__fri ┆ value__fri ┆ value__max │
+│ --- ┆ ---        ┆ ---    ┆ lues        ┆   ┆ drich_coeff ┆ edrich_coe ┆ edrich_coe ┆ _langevin_ │
+│ str ┆ date       ┆ u32    ┆ ---         ┆   ┆ icients_…   ┆ fficients_ ┆ fficients_ ┆ fixed_poin │
+│     ┆            ┆        ┆ f64         ┆   ┆ ---         ┆ …          ┆ …          ┆ …          │
+│     ┆            ┆        ┆             ┆   ┆ f64         ┆ ---        ┆ ---        ┆ ---        │
+│     ┆            ┆        ┆             ┆   ┆             ┆ f64        ┆ f64        ┆ f64        │
 ╞═════╪════════════╪════════╪═════════════╪═══╪═════════════╪════════════╪════════════╪════════════╡
-│ a   ┆ 2001-01-01 ┆ 3      ┆ 6.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
-│ b   ┆ 2001-01-01 ┆ 3      ┆ 6.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
-│ c   ┆ 2001-01-01 ┆ 3      ┆ 6.0         ┆ … ┆ 0.0         ┆ 0.0        ┆ 0.0        ┆ 0.0        │
+│ a   ┆ 2000-01-01 ┆ 2      ┆ 3.0         ┆ … ┆ NaN         ┆ NaN        ┆ NaN        ┆ NaN        │
+│ a   ┆ 2003-01-01 ┆ 1      ┆ 3.0         ┆ … ┆ NaN         ┆ NaN        ┆ NaN        ┆ NaN        │
+│ b   ┆ 2000-01-01 ┆ 2      ┆ 3.0         ┆ … ┆ NaN         ┆ NaN        ┆ NaN        ┆ NaN        │
+│ b   ┆ 2003-01-01 ┆ 1      ┆ 3.0         ┆ … ┆ NaN         ┆ NaN        ┆ NaN        ┆ NaN        │
+│ c   ┆ 2000-01-01 ┆ 2      ┆ 3.0         ┆ … ┆ NaN         ┆ NaN        ┆ NaN        ┆ NaN        │
+│ c   ┆ 2003-01-01 ┆ 1      ┆ 3.0         ┆ … ┆ NaN         ┆ NaN        ┆ NaN        ┆ NaN        │
 └─────┴────────────┴────────┴─────────────┴───┴─────────────┴────────────┴────────────┴────────────┘
 </code></pre>
 <p>For more examples, see the <a href="examples">examples</a> directory.</p>
@@ -747,7 +755,7 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Returns the sum over the absolute value of consecutive changes in the series x</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>agg_autocorrelation(x, param)</code></td>
 <td>Descriptive statistics on the autocorrelation of the time series</td>
 </tr>
@@ -757,17 +765,17 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Calculates a linear least-squares regression for values of the time series that were aggregated over chunks versus the sequence from 0 up to the number of chunks minus one</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>approximate_entropy(x, m, r)</code></td>
 <td>Implements a vectorized Approximate entropy algorithm</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>ar_coefficient(x, param)</code></td>
 <td>This feature calculator fits the unconditional maximum likelihood of an autoregressive AR(k) process</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>augmented_dickey_fuller(x, param)</code></td>
 <td>Does the time series have a unit root?</td>
 </tr>
@@ -777,12 +785,12 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Calculates the autocorrelation of the specified lag, according to the formula [1]</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>benford_correlation(x)</code></td>
 <td>Useful for anomaly detection applications [1][2]. Returns the correlation from first digit distribution when</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>binned_entropy(x, max_bins)</code></td>
 <td>First bins the values of x into max_bins equidistant bins</td>
 </tr>
@@ -792,7 +800,7 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Uses c3 statistics to measure non linearity in the time series</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>change_quantiles(x, ql, qh, isabs, f_agg)</code></td>
 <td>First fixes a corridor given by the quantiles ql and qh of the distribution of x</td>
 </tr>
@@ -822,22 +830,22 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Returns the number of values in x that are lower than the mean of x</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>cwt_coefficients(x, param)</code></td>
 <td>Calculates a Continuous wavelet transform for the Ricker wavelet, also known as the "Mexican hat wavelet" which is defined by</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>energy_ratio_by_chunks(x, param)</code></td>
 <td>Calculates the sum of squares of chunk i out of N chunks expressed as a ratio with the sum of squares over the whole series.</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>fft_aggregated(x, param)</code></td>
 <td>Returns the spectral centroid (mean), variance, skew, and kurtosis of the absolute fourier transform spectrum</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>fft_coefficient(x, param)</code></td>
 <td>Calculates the fourier coefficients of the one-dimensional discrete Fourier Transform for real input by fast fourier transformation algorithm</td>
 </tr>
@@ -852,12 +860,12 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Returns the first location of the minimal value of x</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>fourier_entropy(x, bins)</code></td>
 <td>Calculate the binned entropy of the power spectral density of the time series (using the welch method)</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>friedrich_coefficients(x, param)</code></td>
 <td>Coefficients of polynomial h(x), which has been fitted to the deterministic dynamics of Langevin model</td>
 </tr>
@@ -902,7 +910,7 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Returns the last location of the minimal value of x.</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>lempel_ziv_complexity(x, bins)</code></td>
 <td>Calculate a complexity estimate based on the Lempel-Ziv compression algorithm.</td>
 </tr>
@@ -937,7 +945,7 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Calculates the 1-D Matrix Profile[1] and returns Tukey's Five Number Set plus the mean of that Matrix Profile.</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>max_langevin_fixed_point(x, r, m)</code></td>
 <td>Largest fixed point of dynamics <code>:math:argmax_x {h(x)=0}</code> estimated from polynomial h(x), which has been fitted to the deterministic dynamics of Langevin model</td>
 </tr>
@@ -967,7 +975,7 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Calculates the arithmetic mean of the n absolute maximum values of the time series.</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>mean_second_derivative_central(x)</code></td>
 <td>Returns the mean value of a central approximation of the second derivative</td>
 </tr>
@@ -987,7 +995,7 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Calculates the number of crossings of x on m.</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>number_cwt_peaks(x, n)</code></td>
 <td>Number of different peaks in x.</td>
 </tr>
@@ -997,7 +1005,7 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Calculates the number of peaks of at least support n in the time series x.</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>partial_autocorrelation(x, param)</code></td>
 <td>Calculates the value of the partial autocorrelation function at the given lag.</td>
 </tr>
@@ -1012,7 +1020,7 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Returns the percentage of values that are present in the time series more than once.</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>permutation_entropy(x, tau, dimension)</code></td>
 <td>Calculate the permutation entropy.</td>
 </tr>
@@ -1022,7 +1030,7 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Calculates the q quantile of x.</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>query_similarity_count(x, param)</code></td>
 <td>This feature calculator accepts an input query subsequence parameter, compares the query (under z-normalized Euclidean distance)to all subsequences within the time series, and returns a count of the number of times the query was found in the time series (within some predefined maximum distance threshold).</td>
 </tr>
@@ -1057,7 +1065,7 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Returns the sample skewness of x (calculated with the adjusted Fisher-Pearson standardized moment coefficient G1).</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>spkt_welch_density(x, param)</code></td>
 <td>This feature calculator estimates the cross power spectral density of the time series x at different frequencies.</td>
 </tr>
@@ -1092,7 +1100,7 @@ enhancements, pull requests, etc.). More information can be found in the
 <td>Returns the time reversal asymmetry statistic.</td>
 </tr>
 <tr>
-<td>&#9744;</td>
+<td>&#9745;</td>
 <td><code>value_count(x, value)</code></td>
 <td>Count occurrences of value in time series x.</td>
 </tr>

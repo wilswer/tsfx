@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["lagged_mean"],"struct":["Autocorrelation","C3","TimeReversalAsymmetryStatistic"]};
+window.SIDEBAR_ITEMS = {"fn":["adjusted_acovf","lagged_mean","levinson_durbin_pacf"],"struct":["AggAutocorrelation","Autocorrelation","C3","PartialAutocorrelation","TimeReversalAsymmetryStatistic"]};

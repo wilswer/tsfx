@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_SEGMENT_LENGTH","PLANNER"],"fn":["dft","hann_periodic","rfft","welch_psd"],"struct":["FftAggregated","FftCoefficient","FourierEntropy","SpktWelchDensity"]};

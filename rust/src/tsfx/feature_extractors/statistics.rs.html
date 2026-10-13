@@ -563,4 +563,155 @@
 <a href=#547 id=547 data-nosnippet>547</a>        out.extend(<span class="self">self</span>.qs.iter().map(|<span class="kw-2">&amp;</span>q| numpy_quantile(sorted, q)));
 <a href=#548 id=548 data-nosnippet>548</a>    }
 <a href=#549 id=549 data-nosnippet>549</a>}
+<a href=#550 id=550 data-nosnippet>550</a>
+<a href=#551 id=551 data-nosnippet>551</a><span class="doccomment">/// Energy ratio by chunks feature.
+<a href=#552 id=552 data-nosnippet>552</a>///
+<a href=#553 id=553 data-nosnippet>553</a>/// Split the series into `num_segments` consecutive segments and return the
+<a href=#554 id=554 data-nosnippet>554</a>/// sum of squares of segment `segment_focus` (0-based) as a share of the
+<a href=#555 id=555 data-nosnippet>555</a>/// sum of squares of the whole series:
+<a href=#556 id=556 data-nosnippet>556</a>/// $$ \frac{\sum_{i \in S_k} x_i^2}{\sum_{i=1}^{n} x_i^2}. $$
+<a href=#557 id=557 data-nosnippet>557</a>/// Segments are formed as `np.array_split` does: when $n$ is not a multiple
+<a href=#558 id=558 data-nosnippet>558</a>/// of the number of segments, the first $n \bmod N$ segments get one extra
+<a href=#559 id=559 data-nosnippet>559</a>/// value. The shares of all segments add up to 1.
+<a href=#560 id=560 data-nosnippet>560</a>///
+<a href=#561 id=561 data-nosnippet>561</a>/// # Parameters
+<a href=#562 id=562 data-nosnippet>562</a>/// - `num_segments`: number of segments $N \geq 1$.
+<a href=#563 id=563 data-nosnippet>563</a>/// - `segment_focus`: the segment $k &lt; N$ to return.
+<a href=#564 id=564 data-nosnippet>564</a>///
+<a href=#565 id=565 data-nosnippet>565</a>/// Config:
+<a href=#566 id=566 data-nosnippet>566</a>/// `[energy_ratio_by_chunks] parameters = [{ num_segments = 10, segment_focus = 0 }, ...]`;
+<a href=#567 id=567 data-nosnippet>567</a>/// one column per entry. `num_segments = 0` or `segment_focus &gt;= num_segments`
+<a href=#568 id=568 data-nosnippet>568</a>/// is rejected when the config is loaded.
+<a href=#569 id=569 data-nosnippet>569</a>///
+<a href=#570 id=570 data-nosnippet>570</a>/// # Output column
+<a href=#571 id=571 data-nosnippet>571</a>/// `{name}__energy_ratio_by_chunks__num_segments_{num_segments}__segment_focus_{segment_focus}`
+<a href=#572 id=572 data-nosnippet>572</a>///
+<a href=#573 id=573 data-nosnippet>573</a>/// # Edge cases
+<a href=#574 id=574 data-nosnippet>574</a>/// - Nulls are dropped first; a group with no non-null values gives NaN.
+<a href=#575 id=575 data-nosnippet>575</a>/// - A series whose sum of squares is 0 gives NaN.
+<a href=#576 id=576 data-nosnippet>576</a>/// - With fewer values than segments, the trailing segments are empty and
+<a href=#577 id=577 data-nosnippet>577</a>///   give 0.
+<a href=#578 id=578 data-nosnippet>578</a>/// - NaN values are kept and make the result NaN.
+<a href=#579 id=579 data-nosnippet>579</a>///
+<a href=#580 id=580 data-nosnippet>580</a>/// # tsfresh
+<a href=#581 id=581 data-nosnippet>581</a>/// `feature_calculators.energy_ratio_by_chunks` (v0.21.2), summed as numpy
+<a href=#582 id=582 data-nosnippet>582</a>/// does.
+<a href=#583 id=583 data-nosnippet>583</a></span><span class="kw">pub struct </span>EnergyRatioByChunks {
+<a href=#584 id=584 data-nosnippet>584</a>    <span class="doccomment">/// `(num_segments, segment_focus)` per config entry.
+<a href=#585 id=585 data-nosnippet>585</a>    </span><span class="kw">pub </span>params: Vec&lt;(usize, usize)&gt;,
+<a href=#586 id=586 data-nosnippet>586</a>}
+<a href=#587 id=587 data-nosnippet>587</a>
+<a href=#588 id=588 data-nosnippet>588</a><span class="kw">impl </span>Kernel <span class="kw">for </span>EnergyRatioByChunks {
+<a href=#589 id=589 data-nosnippet>589</a>    <span class="kw">fn </span>names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
+<a href=#590 id=590 data-nosnippet>590</a>        <span class="self">self</span>.params
+<a href=#591 id=591 data-nosnippet>591</a>            .iter()
+<a href=#592 id=592 data-nosnippet>592</a>            .map(|(num_segments, segment_focus)| {
+<a href=#593 id=593 data-nosnippet>593</a>                <span class="macro">format!</span>(
+<a href=#594 id=594 data-nosnippet>594</a>                    <span class="string">"energy_ratio_by_chunks__num_segments_{num_segments}__segment_focus_{segment_focus}"
+<a href=#595 id=595 data-nosnippet>595</a>                </span>)
+<a href=#596 id=596 data-nosnippet>596</a>            })
+<a href=#597 id=597 data-nosnippet>597</a>            .collect()
+<a href=#598 id=598 data-nosnippet>598</a>    }
+<a href=#599 id=599 data-nosnippet>599</a>
+<a href=#600 id=600 data-nosnippet>600</a>    <span class="kw">fn </span>compute(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>GroupContext, out: <span class="kw-2">&amp;mut </span>Vec&lt;f64&gt;) {
+<a href=#601 id=601 data-nosnippet>601</a>        <span class="kw">let </span>x = ctx.values();
+<a href=#602 id=602 data-nosnippet>602</a>        <span class="kw">let </span>n = x.len();
+<a href=#603 id=603 data-nosnippet>603</a>        <span class="comment">// np.sum(x**2)
+<a href=#604 id=604 data-nosnippet>604</a>        </span><span class="kw">let </span>full = numpy_sum(n, |i| x[i] * x[i]);
+<a href=#605 id=605 data-nosnippet>605</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>(num_segments, segment_focus) <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.params {
+<a href=#606 id=606 data-nosnippet>606</a>            <span class="kw">if </span>full == <span class="number">0.0 </span>{
+<a href=#607 id=607 data-nosnippet>607</a>                out.push(f64::NAN);
+<a href=#608 id=608 data-nosnippet>608</a>                <span class="kw">continue</span>;
+<a href=#609 id=609 data-nosnippet>609</a>            }
+<a href=#610 id=610 data-nosnippet>610</a>            <span class="comment">// np.array_split: the first n % N segments have one more value
+<a href=#611 id=611 data-nosnippet>611</a>            </span><span class="kw">let </span>(size, extra) = (n / num_segments, n % num_segments);
+<a href=#612 id=612 data-nosnippet>612</a>            <span class="kw">let </span>start = segment_focus * size + segment_focus.min(extra);
+<a href=#613 id=613 data-nosnippet>613</a>            <span class="kw">let </span>len = size + usize::from(segment_focus &lt; extra);
+<a href=#614 id=614 data-nosnippet>614</a>            <span class="kw">let </span>segment = <span class="kw-2">&amp;</span>x[start..start + len];
+<a href=#615 id=615 data-nosnippet>615</a>            out.push(numpy_sum(len, |i| segment[i] * segment[i]) / full);
+<a href=#616 id=616 data-nosnippet>616</a>        }
+<a href=#617 id=617 data-nosnippet>617</a>    }
+<a href=#618 id=618 data-nosnippet>618</a>}
+<a href=#619 id=619 data-nosnippet>619</a>
+<a href=#620 id=620 data-nosnippet>620</a><span class="doccomment">/// Newcomb-Benford's law: the share of numbers with leading digit $d$,
+<a href=#621 id=621 data-nosnippet>621</a>/// $\log_{10}(1 + 1/d)$ for $d = 1, \dots, 9$, as numpy computes it.
+<a href=#622 id=622 data-nosnippet>622</a></span><span class="kw">const </span>BENFORD_DISTRIBUTION: [f64; <span class="number">9</span>] = [
+<a href=#623 id=623 data-nosnippet>623</a>    std::f64::consts::LOG10_2,
+<a href=#624 id=624 data-nosnippet>624</a>    <span class="number">0.17609125905568124</span>,
+<a href=#625 id=625 data-nosnippet>625</a>    <span class="number">0.12493873660829993</span>,
+<a href=#626 id=626 data-nosnippet>626</a>    <span class="number">0.09691001300805642</span>,
+<a href=#627 id=627 data-nosnippet>627</a>    <span class="number">0.07918124604762482</span>,
+<a href=#628 id=628 data-nosnippet>628</a>    <span class="number">0.06694678963061322</span>,
+<a href=#629 id=629 data-nosnippet>629</a>    <span class="number">0.05799194697768673</span>,
+<a href=#630 id=630 data-nosnippet>630</a>    <span class="number">0.05115252244738129</span>,
+<a href=#631 id=631 data-nosnippet>631</a>    <span class="number">0.04575749056067514</span>,
+<a href=#632 id=632 data-nosnippet>632</a>];
+<a href=#633 id=633 data-nosnippet>633</a>
+<a href=#634 id=634 data-nosnippet>634</a><span class="doccomment">/// The leading digit of `|x|` as `np.format_float_scientific` writes it
+<a href=#635 id=635 data-nosnippet>635</a>/// (shortest round-trip digits), after `np.nan_to_num`: NaN counts as 0 and
+<a href=#636 id=636 data-nosnippet>636</a>/// $\pm\infty$ as the largest finite float.
+<a href=#637 id=637 data-nosnippet>637</a></span><span class="kw">fn </span>leading_digit(x: f64) -&gt; u8 {
+<a href=#638 id=638 data-nosnippet>638</a>    <span class="kw">let </span>x = <span class="kw">if </span>x.is_nan() {
+<a href=#639 id=639 data-nosnippet>639</a>        <span class="number">0.0
+<a href=#640 id=640 data-nosnippet>640</a>    </span>} <span class="kw">else if </span>x.is_infinite() {
+<a href=#641 id=641 data-nosnippet>641</a>        f64::MAX
+<a href=#642 id=642 data-nosnippet>642</a>    } <span class="kw">else </span>{
+<a href=#643 id=643 data-nosnippet>643</a>        x.abs()
+<a href=#644 id=644 data-nosnippet>644</a>    };
+<a href=#645 id=645 data-nosnippet>645</a>    <span class="kw">if </span>x == <span class="number">0.0 </span>{
+<a href=#646 id=646 data-nosnippet>646</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#647 id=647 data-nosnippet>647</a>    }
+<a href=#648 id=648 data-nosnippet>648</a>    <span class="macro">format!</span>(<span class="string">"{x:e}"</span>).as_bytes()[<span class="number">0</span>] - <span class="string">b'0'
+<a href=#649 id=649 data-nosnippet>649</a></span>}
+<a href=#650 id=650 data-nosnippet>650</a>
+<a href=#651 id=651 data-nosnippet>651</a><span class="macro">scalar_kernel!</span> {
+<a href=#652 id=652 data-nosnippet>652</a><span class="doccomment">/// Benford correlation feature.
+<a href=#653 id=653 data-nosnippet>653</a>///
+<a href=#654 id=654 data-nosnippet>654</a>/// The Pearson correlation between the distribution of the leading digits
+<a href=#655 id=655 data-nosnippet>655</a>/// of the values and Newcomb-Benford's law, $P(d) = \log_{10}(1 + 1/d)$ for
+<a href=#656 id=656 data-nosnippet>656</a>/// $d = 1, \dots, 9$. Useful for anomaly detection: many natural data sets
+<a href=#657 id=657 data-nosnippet>657</a>/// follow Benford's law closely (correlation near 1).
+<a href=#658 id=658 data-nosnippet>658</a>///
+<a href=#659 id=659 data-nosnippet>659</a>/// # Output column
+<a href=#660 id=660 data-nosnippet>660</a>/// `{name}__benford_correlation`
+<a href=#661 id=661 data-nosnippet>661</a>///
+<a href=#662 id=662 data-nosnippet>662</a>/// # Edge cases
+<a href=#663 id=663 data-nosnippet>663</a>/// - Nulls are dropped first; a group with no non-null values gives NaN.
+<a href=#664 id=664 data-nosnippet>664</a>/// - NaN and 0 have leading digit 0 (they count towards no digit but still
+<a href=#665 id=665 data-nosnippet>665</a>///   towards $n$); $\pm\infty$ has leading digit 1 (tsfresh's
+<a href=#666 id=666 data-nosnippet>666</a>///   `np.nan_to_num`).
+<a href=#667 id=667 data-nosnippet>667</a>/// - If all nine digit shares are equal (e.g. all values 0, or each digit
+<a href=#668 id=668 data-nosnippet>668</a>///   equally often), the correlation is undefined and the result is NaN.
+<a href=#669 id=669 data-nosnippet>669</a>///
+<a href=#670 id=670 data-nosnippet>670</a>/// # tsfresh
+<a href=#671 id=671 data-nosnippet>671</a>/// `feature_calculators.benford_correlation` (v0.21.2). tsfresh's
+<a href=#672 id=672 data-nosnippet>672</a>/// `np.corrcoef` uses a BLAS dot product, so results agree to rounding.
+<a href=#673 id=673 data-nosnippet>673</a>    </span>BenfordCorrelation, <span class="string">"benford_correlation"</span>, |ctx| {
+<a href=#674 id=674 data-nosnippet>674</a>        <span class="kw">let </span>x = ctx.values();
+<a href=#675 id=675 data-nosnippet>675</a>        <span class="kw">let </span><span class="kw-2">mut </span>counts = [<span class="number">0usize</span>; <span class="number">10</span>];
+<a href=#676 id=676 data-nosnippet>676</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>v <span class="kw">in </span>x {
+<a href=#677 id=677 data-nosnippet>677</a>            counts[leading_digit(v) <span class="kw">as </span>usize] += <span class="number">1</span>;
+<a href=#678 id=678 data-nosnippet>678</a>        }
+<a href=#679 id=679 data-nosnippet>679</a>        <span class="kw">let </span>data: [f64; <span class="number">9</span>] = std::array::from_fn(|d| counts[d + <span class="number">1</span>] <span class="kw">as </span>f64 / x.len() <span class="kw">as </span>f64);
+<a href=#680 id=680 data-nosnippet>680</a>        pearson_correlation(<span class="kw-2">&amp;</span>BENFORD_DISTRIBUTION, <span class="kw-2">&amp;</span>data)
+<a href=#681 id=681 data-nosnippet>681</a>    }
+<a href=#682 id=682 data-nosnippet>682</a>}
+<a href=#683 id=683 data-nosnippet>683</a>
+<a href=#684 id=684 data-nosnippet>684</a><span class="doccomment">/// `np.corrcoef(a, b)[0, 1]`: covariance over the product of standard
+<a href=#685 id=685 data-nosnippet>685</a>/// deviations (`ddof = 1`, which cancels), clipped to $[-1, 1]$. NaN if
+<a href=#686 id=686 data-nosnippet>686</a>/// either series is constant.
+<a href=#687 id=687 data-nosnippet>687</a></span><span class="kw">fn </span>pearson_correlation(a: <span class="kw-2">&amp;</span>[f64], b: <span class="kw-2">&amp;</span>[f64]) -&gt; f64 {
+<a href=#688 id=688 data-nosnippet>688</a>    <span class="kw">let </span>n = a.len();
+<a href=#689 id=689 data-nosnippet>689</a>    <span class="kw">let </span>(mean_a, mean_b) = (numpy_mean(a), numpy_mean(b));
+<a href=#690 id=690 data-nosnippet>690</a>    <span class="kw">let </span>fact = <span class="number">1.0 </span>/ (n - <span class="number">1</span>) <span class="kw">as </span>f64;
+<a href=#691 id=691 data-nosnippet>691</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>cab, <span class="kw-2">mut </span>caa, <span class="kw-2">mut </span>cbb) = (<span class="number">0.0</span>, <span class="number">0.0</span>, <span class="number">0.0</span>);
+<a href=#692 id=692 data-nosnippet>692</a>    <span class="kw">for </span>(<span class="kw-2">&amp;</span>x, <span class="kw-2">&amp;</span>y) <span class="kw">in </span>a.iter().zip(b) {
+<a href=#693 id=693 data-nosnippet>693</a>        <span class="kw">let </span>(dx, dy) = (x - mean_a, y - mean_b);
+<a href=#694 id=694 data-nosnippet>694</a>        cab += dx * dy;
+<a href=#695 id=695 data-nosnippet>695</a>        caa += dx * dx;
+<a href=#696 id=696 data-nosnippet>696</a>        cbb += dy * dy;
+<a href=#697 id=697 data-nosnippet>697</a>    }
+<a href=#698 id=698 data-nosnippet>698</a>    <span class="kw">let </span>r = cab * fact / (caa * fact).sqrt() / (cbb * fact).sqrt();
+<a href=#699 id=699 data-nosnippet>699</a>    <span class="kw">if </span>r.is_nan() { r } <span class="kw">else </span>{ r.clamp(-<span class="number">1.0</span>, <span class="number">1.0</span>) }
+<a href=#700 id=700 data-nosnippet>700</a>}
 </code></pre></div></section></main></body></html>

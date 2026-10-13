@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GRAM_BLOCK_ROWS","IC_TIE_TOL","MAX_GRAM_CONDITION","MAX_GRAM_RESIDUAL_ERROR","PERFECT_FIT_TOL"],"fn":["adf_regression","adfuller","ar_fit","dot","householder_qr","jacobi_svd","mackinnon_p","normal_cdf"],"struct":["ArCoefficient","AugmentedDickeyFuller","Ols"]};

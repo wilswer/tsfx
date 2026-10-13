@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["_get_matches","_into_subchunks"],"struct":["SampleEntropy"]};
+window.SIDEBAR_ITEMS = {"fn":["_get_matches","_into_subchunks","approximate_entropies","binned_entropy","nan_max","pattern_terms","permutation_entropy"],"struct":["ApproximateEntropy","BinnedEntropy","LempelZivComplexity","PermutationEntropy","SampleEntropy"]};
