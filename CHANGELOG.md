@@ -2,6 +2,19 @@
 
 All notable changes to TSFX are documented here.
 
+## Unreleased
+
+### Changed
+
+- **A `config_path` that does not exist raises `ValueError`** ("could not
+  read config file …") instead of silently using the default config, so a
+  mistyped path no longer goes unnoticed. Without a `config_path`, a
+  `.tsfx-config.toml` in the working directory is still used if present,
+  else the default config.
+- tsfx no longer prints "No config file detected. Using default config."
+  when it uses the default config (the message went to the process's
+  standard output, which Python cannot capture or silence).
+
 ## 0.6.0 (2026-10-13)
 
 ### Added
