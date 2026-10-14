@@ -416,11 +416,11 @@
 <a href=#400 id=400 data-nosnippet>400</a>        }
 <a href=#401 id=401 data-nosnippet>401</a>    }
 <a href=#402 id=402 data-nosnippet>402</a>
-<a href=#403 id=403 data-nosnippet>403</a>    <span class="comment">// Comprehensive tier: sample_entropy is always on, independent of the
-<a href=#404 id=404 data-nosnippet>404</a>    // config
-<a href=#405 id=405 data-nosnippet>405</a>    </span><span class="kw">if </span><span class="kw-2">*</span>tier &gt;= FeatureSetting::Comprehensive {
-<a href=#406 id=406 data-nosnippet>406</a>        <span class="kw">for </span>plan <span class="kw">in </span>plans.iter_mut() {
-<a href=#407 id=407 data-nosnippet>407</a>            plan.push(SampleEntropy);
+<a href=#403 id=403 data-nosnippet>403</a>    <span class="kw">if </span><span class="kw-2">*</span>tier &gt;= FeatureSetting::Comprehensive {
+<a href=#404 id=404 data-nosnippet>404</a>        <span class="kw">for </span>plan <span class="kw">in </span>plans.iter_mut() {
+<a href=#405 id=405 data-nosnippet>405</a>            <span class="kw">if </span>config.sample_entropy.is_some() {
+<a href=#406 id=406 data-nosnippet>406</a>                plan.push(SampleEntropy);
+<a href=#407 id=407 data-nosnippet>407</a>            }
 <a href=#408 id=408 data-nosnippet>408</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(feature) = <span class="kw-2">&amp;</span>config.approximate_entropy {
 <a href=#409 id=409 data-nosnippet>409</a>                <span class="kw">let </span>params = feature.parameters.iter().map(|p| (p.m, p.r)).collect();
 <a href=#410 id=410 data-nosnippet>410</a>                plan.push(ApproximateEntropy { params });
