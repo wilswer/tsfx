@@ -2,35 +2,33 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use itertools::Itertools;
-use ndarray::{Array1, ArrayView1, Axis};
-
 use super::kernel::{GroupContext, Kernel, extremes, scalar_kernel};
 use crate::utils::stats::{numpy_linspace, numpy_searchsorted_left, numpy_sum};
 
-/// All length-`chunk_size` sliding windows of `x`, one step apart.
-fn _into_subchunks(x: &ArrayView1<f64>, chunk_size: usize) -> Vec<Array1<f64>> {
-    let mut subchunks = Vec::with_capacity(x.len());
-    for chunk in x.axis_windows(Axis(0), chunk_size) {
-        subchunks.push(chunk.to_owned());
-    }
-    subchunks
-}
-
-/// Number of unordered pairs of templates within Chebyshev distance `r`.
-fn _get_matches(templates: Vec<Array1<f64>>, r: f64) -> usize {
-    let mut matches = 0;
-    for combo in templates.into_iter().combinations(2) {
-        let a = combo[0].to_owned();
-        let b = combo[1].to_owned();
-        let diff = a - b;
-        // tsfresh counts a match at distance <= tolerance
-        let dist_check = diff.mapv(|x| if x.abs() <= r { 1 } else { 0 }).sum();
-        if dist_check == diff.len() {
-            matches += 1;
+/// Numbers of unordered pairs of length-`m` and of length-`(m + 1)` sliding
+/// windows of `x` within Chebyshev distance `r` of each other (tsfresh counts
+/// a match at distance <= tolerance).
+///
+/// Both counts come from one pass over the pairs, comparing values in place:
+/// a pair of length-`(m + 1)` windows can only match if its first `m` values
+/// do.
+fn _count_matches(x: &[f64], m: usize, r: f64) -> (usize, usize) {
+    // Numbers of windows of length m and m + 1
+    let n_m = (x.len() + 1).saturating_sub(m);
+    let n_m_plus_1 = x.len().saturating_sub(m);
+    let close = |i: usize, j: usize, k: usize| (x[i + k] - x[j + k]).abs() <= r;
+    let (mut matches_m, mut matches_m_plus_1) = (0, 0);
+    for i in 0..n_m {
+        for j in (i + 1)..n_m {
+            if (0..m).all(|k| close(i, j, k)) {
+                matches_m += 1;
+                if j < n_m_plus_1 && close(i, j, m) {
+                    matches_m_plus_1 += 1;
+                }
+            }
         }
     }
-    matches
+    (matches_m, matches_m_plus_1)
 }
 
 scalar_kernel! {
@@ -71,8 +69,7 @@ scalar_kernel! {
         } else {
             let m = 2;
             let r = 0.2 * ctx.std();
-            let matches_m = _get_matches(_into_subchunks(ctx.x(), m), r);
-            let matches_m_plus_1 = _get_matches(_into_subchunks(ctx.x(), m + 1), r);
+            let (matches_m, matches_m_plus_1) = _count_matches(ctx.values(), m, r);
             ((matches_m as f64) / (matches_m_plus_1 as f64)).ln()
         }
     }
@@ -483,6 +480,8 @@ fn approximate_entropies(x: &[f64], m: usize, rs: &[f64]) -> Vec<f64> {
 
 #[cfg(test)]
 mod tests {
+    use ndarray::ArrayView1;
+
     use super::*;
 
     // Expected values from tsfresh v0.21.2 / numpy 2.4.4.
