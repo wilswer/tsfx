@@ -79,6 +79,11 @@ class ExtractionSettings:
     config_path: str | None
     dynamic_settings: DynamicGroupBySettings | None
 
+    @property
+    def _input_columns(self) -> list[str]:
+        """Columns extraction reads: grouping, value and any time column."""
+        ...
+
     def __init__(
         self,
         grouping_cols: Sequence[str],
@@ -87,6 +92,13 @@ class ExtractionSettings:
         config_path: str | None = None,
         dynamic_settings: DynamicGroupBySettings | None = None,
     ) -> None: ...
+
+def extract_features_df(
+    df: pl.DataFrame,
+    settings: ExtractionSettings,
+) -> pl.DataFrame:
+    """Extract features from an in-memory DataFrame (used by the Python wrapper)."""
+    ...
 
 def extract_features(
     lf: pl.LazyFrame,

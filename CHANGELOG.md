@@ -9,6 +9,8 @@ All notable changes to TSFX are documented here.
 - No more 32-bit x86 wheels (manylinux, musllinux, Windows). polars and
   pyarrow publish none for these platforms, so tsfx could not be installed
   there anyway.
+- No more free-threaded CPython or PyPy wheels on Linux, for the same
+  reason: polars ships only abi3 wheels, which neither can install.
 
 ## 0.6.1 (2026-10-14)
 
