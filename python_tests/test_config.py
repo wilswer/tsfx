@@ -1,7 +1,7 @@
+import random
 import re
 from pathlib import Path
 
-import numpy as np
 import polars as pl
 import pytest
 from tsfx import (
@@ -63,8 +63,9 @@ def test_every_feature_comes_from_its_config_section(tmp_path):
     sections = [
         text[a:b] for a, b in zip(starts, [*starts[1:], len(text)], strict=True)
     ]
-    rng = np.random.default_rng(0)
-    df = pl.DataFrame({"id": ["a"] * 60, "val": rng.normal(size=60)}).lazy()
+    rng = random.Random(0)
+    values = [rng.gauss(0.0, 1.0) for _ in range(60)]
+    df = pl.DataFrame({"id": ["a"] * 60, "val": values}).lazy()
 
     def columns(config_text: str) -> set[str]:
         config = tmp_path / "config.toml"
