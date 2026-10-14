@@ -9,8 +9,9 @@ on:
   push:
     tags:
       - '*'
+    # Other branches are tested through their pull request
     branches:
-      - '**'
+      - main
   pull_request:
   workflow_dispatch:
 
@@ -33,19 +34,23 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
+      - uses: Swatinem/rust-cache@v2
       - name: Run cargo test
         run: cargo test --release
       - name: Install uv
         uses: astral-sh/setup-uv@v7
-      - name: Build and install wheel
-        uses: PyO3/maturin-action@v1
+      # Built on the runner rather than in a manylinux container, so it reuses
+      # the cached target directory; this wheel is only tested, not released
+      - name: Build wheel
+        run: uvx maturin build --release --out dist
+      - name: Upload test wheel
+        uses: actions/upload-artifact@v6
         with:
-          args: --release --out dist
+          name: test-wheel
+          path: dist
       - name: Run pytest
         run: |
-          uv pip install --system dist/*.whl
-          uv pip install --system pytest polars
-          uv pip install --system pytest
+          uv pip install --system dist/*.whl pytest
           pytest
       - name: Fuzz against tsfresh
         env:
@@ -54,6 +59,90 @@ jobs:
           # bit-exact parity is checked against these versions
           uv pip install --system hypothesis tsfresh==0.21.2 numpy==2.4.4 pandas==3.0.2 scipy==1.17.1 statsmodels==0.15.0
           pytest -m fuzz
+
+  # The abi3 wheel claims Python >= 3.11; run the tests on the oldest version
+  test-py311:
+    name: Test (Python 3.11)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: test-wheel
+          path: dist
+      - name: Run pytest
+        run: |
+          uv pip install --system dist/*.whl pytest
+          pytest
+
+  # The checks pre-commit runs, for commits made without it. Versions match
+  # .pre-commit-config.yaml
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    if: ${{ startsWith(github.ref, 'refs/tags/') || !startsWith(github.event.head_commit.message, 'Bump version') }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install rustfmt and clippy
+        run: rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo fmt
+        run: cargo fmt --check
+      - name: clippy
+        run: cargo clippy -- -D warnings
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: ruff
+        run: |
+          uvx ruff@0.15.18 check python
+          uvx ruff@0.15.18 format --check .
+      - name: mypy
+        run: uv run --no-project --with mypy==2.1.0 --with polars==1.44.2 mypy python/tsfx
+
+  # Built on every run so broken docs fail the pull request; deployed by
+  # deploy-docs after a release
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    if: ${{ startsWith(github.ref, 'refs/tags/') || !startsWith(github.event.head_commit.message, 'Bump version') }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - uses: Swatinem/rust-cache@v2
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          source .venv/bin/activate
+          pip install maturin mkdocs-material mkdocstrings-python
+          maturin develop
+      - name: Build MkDocs (Python docs)
+        run: mkdocs build
+      - name: Build Cargo docs (Rust docs)
+        # Load KaTeX so $$...$$ formulas in doc comments render
+        env:
+          RUSTDOCFLAGS: --html-in-header ${{ github.workspace }}/src/html/docs-header.html
+        run: cargo doc --no-deps --document-private-items
+      - name: Merge Rust docs into MkDocs
+        run: |
+          mkdir -p site/rust
+          cp -r target/doc/* site/rust/
+      - name: Upload site
+        uses: actions/upload-artifact@v6
+        with:
+          name: docs-site
+          path: site
 
   linux:
     runs-on: ${{ matrix.platform.runner }}
@@ -64,8 +153,6 @@ jobs:
         platform:
           - runner: ubuntu-22.04
             target: x86_64
-          - runner: ubuntu-22.04
-            target: x86
           - runner: ubuntu-22.04
             target: aarch64
     steps:
@@ -79,12 +166,9 @@ jobs:
           CFLAGS_aarch64_unknown_linux_gnu: "-D__ARM_ARCH=8"
         with:
           target: ${{ matrix.platform.target }}
-          # One abi3 wheel for CPython >= 3.11, plus version-specific wheels
-          # for the interpreters abi3 does not cover (free-threaded CPython,
-          # PyPy). --find-interpreter builds only the abi3 wheel. maturin
-          # knows these interpreters' configuration, so they need not be
-          # installed in the build image
-          args: --release --out dist -i python3.11 -i python3.14t -i pypy3.11
+          # One abi3 wheel for CPython >= 3.11. No free-threaded or PyPy
+          # wheels: polars ships only abi3 wheels, which neither can install
+          args: --release --out dist -i python3.11
           sccache: false
           manylinux: auto
       - name: Upload wheels
@@ -103,8 +187,6 @@ jobs:
           - runner: ubuntu-22.04
             target: x86_64
           - runner: ubuntu-22.04
-            target: x86
-          - runner: ubuntu-22.04
             target: aarch64
     steps:
       - uses: actions/checkout@v6
@@ -117,8 +199,8 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          # As for manylinux: abi3 plus free-threaded and PyPy wheels
-          args: --release --out dist -i python3.11 -i python3.14t -i pypy3.11
+          # As for manylinux: the abi3 wheel only
+          args: --release --out dist -i python3.11
           sccache: false
           manylinux: musllinux_1_2
       - name: Upload wheels
@@ -137,9 +219,6 @@ jobs:
           - runner: windows-latest
             target: x64
             python_arch: x64
-          - runner: windows-latest
-            target: x86
-            python_arch: x86
           - runner: windows-11-arm
             target: aarch64
             python_arch: arm64
@@ -210,7 +289,7 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
-    needs: [linux, musllinux, windows, macos, sdist]
+    needs: [test-py311, lint, docs, linux, musllinux, windows, macos, sdist]
     permissions:
       # Use to sign the release artifacts
       id-token: write
@@ -220,6 +299,8 @@ jobs:
       attestations: write
     steps:
       - uses: actions/download-artifact@v7
+        with:
+          pattern: wheels-*
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v3
         with:
@@ -232,3 +313,21 @@ jobs:
         run: uv publish 'wheels-*/*'
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+  deploy-docs:
+    name: Deploy docs
+    runs-on: ubuntu-latest
+    needs: [docs, release]
+    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: docs-site
+          path: site
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site

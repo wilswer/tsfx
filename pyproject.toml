@@ -10,7 +10,6 @@ requires-python = ">=3.11"
 classifiers = [
   "Programming Language :: Rust",
   "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
 dependencies = ["polars==1.44.2", "pyarrow"]
