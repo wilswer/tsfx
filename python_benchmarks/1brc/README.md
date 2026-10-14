@@ -24,7 +24,8 @@ stations, best of two timed runs):
 | 10M  | 1.3 s  | 52.3 s  |
 | 50M  | 7.1 s  | 192.7 s |
 
-The full billion rows has not been measured. See
+For the full billion rows and a comparison with functime, see the
+[main README](../../README.md#performance) and `library_compare.py`. See
 the docstring of `tsfresh_compare.py` for how the comparison is kept fair.
 
 Both libraries use as many threads (TSFresh: processes) as Polars does. To
