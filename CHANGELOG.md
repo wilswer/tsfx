@@ -2,9 +2,9 @@
 
 All notable changes to TSFX are documented here.
 
-## Unreleased
+## 0.6.1 (2026-10-14)
 
-### Changed
+### Fixed
 
 - **A `config_path` that does not exist raises `ValueError`** ("could not
   read config file …") instead of silently using the default config, so a
