@@ -316,10 +316,11 @@ To build the Rust documentation:
 cargo doc --no-deps --document-private-items --open
 ```
 
-The full documentation site is built and deployed to
-[GitHub Pages](https://wilswer.github.io/tsfx/) automatically whenever a new
-version tag is pushed (see `.github/workflows/docs.yml`), so you don't need to
-deploy anything yourself — just include your documentation changes in your pull
+CI builds the full documentation site on every pull request, so a broken docs
+build fails the pull request, and deploys it to
+[GitHub Pages](https://wilswer.github.io/tsfx/) after each release (the `docs`
+and `deploy-docs` jobs in `.github/workflows/CI.yml`). You don't need to deploy
+anything yourself — just include your documentation changes in your pull
 request.
 
 <!-- omit in toc -->
