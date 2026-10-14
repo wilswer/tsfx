@@ -6,6 +6,12 @@ All notable changes to TSFX are documented here.
 
 ### Changed
 
+- **`sample_entropy` has a config section**, `[sample_entropy]` (no
+  parameters), like every other feature. Leave it out to skip this
+  O(n²) feature in the `Comprehensive` tier; before, it always ran there.
+  It is in the default config and `.tsfx-config.toml`. A custom config
+  without the section no longer computes it: add `[sample_entropy]` to keep
+  it.
 - No more 32-bit x86 wheels (manylinux, musllinux, Windows). polars and
   pyarrow publish none for these platforms, so tsfx could not be installed
   there anyway.

@@ -346,6 +346,8 @@ parameters = [
     { tau = 1, dimension = 7 },
 ]
 
+[sample_entropy]
+
 [approximate_entropy]
 parameters = [{ m = 2, r = 0.1 }, { m = 2, r = 0.5 }, { m = 2, r = 0.9 }, { m = 1, r = 0.3 }]
 

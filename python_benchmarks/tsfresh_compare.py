@@ -85,7 +85,7 @@ def active_calculators(tier: FeatureSetting) -> set[str]:
         if matched:
             active.add(name)
             cols -= matched
-    # Parameterless features without a config section (e.g. `sample_entropy`)
+    # Features without a config section
     active |= {c.removeprefix("x__") for c in cols}
     return active
 

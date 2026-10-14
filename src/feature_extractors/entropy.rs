@@ -59,8 +59,8 @@ scalar_kernel! {
 ///
 /// # Cost
 /// $O(n^2)$ in the series length; only computed for
-/// `FeatureSetting::Comprehensive`, where it is always on (the config file
-/// does not switch it off).
+/// `FeatureSetting::Comprehensive`, and only with a `[sample_entropy]`
+/// config section (in the default config).
 ///
 /// # tsfresh
 /// `feature_calculators.sample_entropy` (v0.21.2).

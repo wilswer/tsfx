@@ -78,6 +78,7 @@ pub struct Config {
     pub binned_entropy: Option<BinnedEntropy>,
     pub lempel_ziv_complexity: Option<LempelZivComplexity>,
     pub permutation_entropy: Option<PermutationEntropy>,
+    pub sample_entropy: Option<SampleEntropy>,
     pub approximate_entropy: Option<ApproximateEntropy>,
     pub friedrich_coefficients: Option<FriedrichCoefficients>,
     pub max_langevin_fixed_point: Option<MaxLangevinFixedPoint>,
@@ -165,6 +166,7 @@ impl Default for Config {
             binned_entropy: Some(BinnedEntropy::default()),
             lempel_ziv_complexity: Some(LempelZivComplexity::default()),
             permutation_entropy: Some(PermutationEntropy::default()),
+            sample_entropy: Some(SampleEntropy::default()),
             approximate_entropy: Some(ApproximateEntropy::default()),
             friedrich_coefficients: Some(FriedrichCoefficients::default()),
             max_langevin_fixed_point: Some(MaxLangevinFixedPoint::default()),
@@ -1369,6 +1371,10 @@ pub struct PermutationEntropyParams {
     pub dimension: usize,
 }
 
+/// No parameters; tsfresh fixes $m = 2$ and $r = 0.2\,\sigma$.
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct SampleEntropy {}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct ApproximateEntropy {
     pub parameters: Vec<ApproximateEntropyParams>,
@@ -2010,6 +2016,7 @@ mod tests {
             config.clone().permutation_entropy.unwrap().parameters[..],
             [3, 4, 5, 6, 7].map(|dimension| PermutationEntropyParams { tau: 1, dimension })
         );
+        assert!(config.sample_entropy.is_some());
         assert_eq!(
             config.clone().approximate_entropy.unwrap().parameters[..],
             [0.1, 0.3, 0.5, 0.7, 0.9].map(|r| ApproximateEntropyParams { m: 2, r })
