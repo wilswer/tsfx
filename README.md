@@ -13,6 +13,26 @@ similar feature set focused on performance on large datasets. In order to
 achieve this, TSFX is built on top of the [Polars](https://pola.rs/) DataFrame
 library, and feature extractors are implemented in Rust.
 
+## Performance
+
+Extracting the 201 features TSFX, [functime](https://github.com/functime-org/functime)
+and TSFresh all implement (`efficient` tier, TSFresh's default parameters) from
+the [1 Billion Row Challenge](https://github.com/gunnarmorling/1brc) data (8,859
+series), on a 2× Xeon Gold 6230 (80 threads, 503 GB RAM). Best of three runs, one
+run at 1B:
+
+| rows | TSFX    | functime | TSFresh | vs functime | vs TSFresh |
+| ---- | ------- | -------- | ------- | ----------- | ---------- |
+| 1M   | 0.137 s | 3.62 s   | 15.2 s  | 26x         | 111x       |
+| 10M  | 0.72 s  | 31.1 s   | 20.1 s  | 43x         | 28x        |
+| 100M | 6.9 s   | 313 s    | 70 s    | 45x         | 10x        |
+| 1B   | 84.8 s  | –¹       | 643 s   | –           | 8x         |
+
+¹ functime ran out of memory (it peaked at 257 GB at 100M rows).
+
+To reproduce, see [`python_benchmarks/library_compare.py`](python_benchmarks/library_compare.py)
+and [`python_benchmarks/1brc`](python_benchmarks/1brc/README.md).
+
 ## Installation
 
 For most common platforms and architectures, pre-built wheels are available. You
