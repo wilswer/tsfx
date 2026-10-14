@@ -62,6 +62,7 @@ fn test_read_config_from_empty_file() {
     assert!(config.c3.is_none());
     assert!(config.time_reversal_asymmetry_statistic.is_none());
     assert!(config.number_peaks.is_none());
+    assert!(config.sample_entropy.is_none());
 }
 
 #[test]

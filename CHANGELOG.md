@@ -6,11 +6,24 @@ All notable changes to TSFX are documented here.
 
 ### Changed
 
+- **`sample_entropy` has a config section**, `[sample_entropy]` (no
+  parameters), like every other feature. Leave it out to skip this
+  O(n²) feature in the `Comprehensive` tier; before, it always ran there.
+  It is in the default config and `.tsfx-config.toml`. A custom config
+  without the section no longer computes it: add `[sample_entropy]` to keep
+  it.
 - No more 32-bit x86 wheels (manylinux, musllinux, Windows). polars and
   pyarrow publish none for these platforms, so tsfx could not be installed
   there anyway.
 - No more free-threaded CPython or PyPy wheels on Linux, for the same
   reason: polars ships only abi3 wheels, which neither can install.
+
+### Performance
+
+- **`sample_entropy` is about 25x faster** (2M 1BRC rows: 3.3 s to 0.14 s),
+  with bit-identical results. Windows are compared in place instead of
+  being copied for every pair, and the length-2 and length-3 matches are
+  counted in one pass. It is still O(n²) in the series length.
 
 ## 0.6.1 (2026-10-14)
 

@@ -400,11 +400,11 @@ pub fn aggregators(opts: &ExtractionSettings) -> Result<FeatureExprs, ConfigErro
         }
     }
 
-    // Comprehensive tier: sample_entropy is always on, independent of the
-    // config
     if *tier >= FeatureSetting::Comprehensive {
         for plan in plans.iter_mut() {
-            plan.push(SampleEntropy);
+            if config.sample_entropy.is_some() {
+                plan.push(SampleEntropy);
+            }
             if let Some(feature) = &config.approximate_entropy {
                 let params = feature.parameters.iter().map(|p| (p.m, p.r)).collect();
                 plan.push(ApproximateEntropy { params });
