@@ -751,7 +751,10 @@
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Optional path to <code>.tsfx-config.toml</code> config file.</p>
+                <p>Optional path to a TOML feature config file; a path that does not
+exist raises <code>ValueError</code> on extraction. Without one,
+<code>.tsfx-config.toml</code> in the working directory is used if present, else
+the default config.</p>
               </div>
             </td>
             <td>

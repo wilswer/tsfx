@@ -69,7 +69,7 @@
 <a href=#53 id=53 data-nosnippet>53</a>    ///     grouping_cols (list[str]): The columns used to group the data (e.g., IDs).
 <a href=#54 id=54 data-nosnippet>54</a>    ///     value_cols (list[str]): The columns containing the numerical values to extract features from.
 <a href=#55 id=55 data-nosnippet>55</a>    ///     feature_setting (FeatureSetting): The complexity/depth of features to calculate.
-<a href=#56 id=56 data-nosnippet>56</a>    ///     config_path (str | None, optional): Path to a custom configuration JSON/YAML file. Defaults to None.
+<a href=#56 id=56 data-nosnippet>56</a>    ///     config_path (str | None, optional): Path to a TOML feature config file, which must exist. Defaults to None: `.tsfx-config.toml` in the working directory if present, else the default config.
 <a href=#57 id=57 data-nosnippet>57</a>    ///     dynamic_settings (DynamicGroupBySettings | None, optional): Settings for rolling/dynamic time windows. Defaults to None.
 <a href=#58 id=58 data-nosnippet>58</a>    </span><span class="attr">#[new]
 <a href=#59 id=59 data-nosnippet>59</a>    #[pyo3(signature = (grouping_cols, value_cols, feature_setting, config_path=<span class="prelude-val">None</span>, dynamic_settings=<span class="prelude-val">None</span>))]
