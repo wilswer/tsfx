@@ -2,7 +2,7 @@
 
 All notable changes to TSFX are documented here.
 
-## Unreleased
+## 0.8.0 (2026-10-16)
 
 ### Added
 
