@@ -22,6 +22,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     feature_setting: FeatureSetting::Efficient,
                     config_path: None,
                     dynamic_settings: None,
+                    scaling: None,
                 },
             )
             .unwrap()

@@ -470,6 +470,7 @@ mod tests {
             value_cols: vec!["val".to_string()],
             config_path: None,
             dynamic_settings: None,
+            scaling: None,
         };
 
         // Extract features

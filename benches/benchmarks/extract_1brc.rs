@@ -44,6 +44,7 @@ fn bench_tier(c: &mut Criterion, df: &DataFrame, name: &str, tier: FeatureSettin
                     feature_setting: tier.clone(),
                     config_path: None,
                     dynamic_settings: None,
+                    scaling: None,
                 },
             )
             .unwrap()

@@ -3,6 +3,7 @@ use polars::prelude::*;
 
 use crate::error::ExtractionError;
 use crate::feature_extractors::aggregators;
+use crate::scaling::{Scaling, scale_features};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FeatureSetting {
@@ -27,13 +28,24 @@ pub struct ExtractionSettings {
     pub feature_setting: FeatureSetting,
     pub config_path: Option<String>,
     pub dynamic_settings: Option<DynamicGroupBySettings>,
+    /// Scale the features across groups after extraction; None leaves them
+    /// as extracted.
+    pub scaling: Option<Scaling>,
 }
 
 pub fn lazy_feature_df(
     df: LazyFrame,
     opts: ExtractionSettings,
 ) -> Result<LazyFrame, ExtractionError> {
+    if let Some(scaling) = &opts.scaling {
+        scaling.validate()?;
+    }
     let features = aggregators(&opts)?;
+    // Columns identifying a group (or window), which scaling leaves alone
+    let mut key_cols = opts.grouping_cols.clone();
+    if let Some(dynamic_settings) = &opts.dynamic_settings {
+        key_cols.push(dynamic_settings.time_col.clone());
+    }
     let grouping_cols: Vec<Expr> = opts.grouping_cols.into_iter().map(col).collect();
     let mut selected_cols = grouping_cols.clone();
     for val_col in &opts.value_cols {
@@ -68,7 +80,10 @@ pub fn lazy_feature_df(
     for (column, plan) in &features.kernels {
         plan.unpack(&mut fdf, column)?;
     }
-    Ok(fdf.lazy())
+    Ok(match &opts.scaling {
+        Some(scaling) => scale_features(fdf, scaling, &key_cols),
+        None => fdf.lazy(),
+    })
 }
 
 #[cfg(test)]
@@ -90,6 +105,7 @@ mod tests {
             feature_setting: FeatureSetting::Minimal,
             config_path: None,
             dynamic_settings: None,
+            scaling: None,
         };
         let gdf = lazy_feature_df(df, opts).unwrap();
 
@@ -142,6 +158,7 @@ mod tests {
             feature_setting: FeatureSetting::Minimal,
             config_path: None,
             dynamic_settings: None,
+            scaling: None,
         };
         let gdf = lazy_feature_df(df, opts).unwrap();
         println!("{}", gdf.clone().collect().unwrap());

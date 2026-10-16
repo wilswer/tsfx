@@ -52,12 +52,12 @@ jobs:
         run: |
           uv pip install --system dist/*.whl pytest
           pytest
-      - name: Fuzz against tsfresh
+      - name: Fuzz against tsfresh and scikit-learn
         env:
           HYPOTHESIS_PROFILE: ci
         run: |
           # bit-exact parity is checked against these versions
-          uv pip install --system hypothesis tsfresh==0.21.2 numpy==2.4.4 pandas==3.0.2 scipy==1.17.1 statsmodels==0.15.0
+          uv pip install --system hypothesis tsfresh==0.21.2 numpy==2.4.4 pandas==3.0.2 scipy==1.17.1 statsmodels==0.15.0 scikit-learn==1.8.0
           pytest -m fuzz
 
   # The abi3 wheel claims Python >= 3.11; run the tests on the oldest version

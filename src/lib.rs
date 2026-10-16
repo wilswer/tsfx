@@ -1,13 +1,16 @@
 pub mod error;
 pub mod extract;
 pub mod feature_extractors;
+pub mod scaling;
 pub mod utils;
 
 use error::ExtractionError;
 use extract::{DynamicGroupBySettings, ExtractionSettings, FeatureSetting, lazy_feature_df};
 use polars::prelude::IntoLazy;
 use pyo3::prelude::*;
+use pyo3::types::PyType;
 use pyo3_polars::{PyDataFrame, PyLazyFrame};
+use scaling::Scaling;
 
 /// Defines the complexity level of the feature extraction process.
 ///
@@ -23,6 +26,27 @@ enum PyFeatureSetting {
     Comprehensive,
 }
 
+/// How to scale the extracted features, column-wise across groups.
+///
+/// Matches scikit-learn's `StandardScaler` and `MinMaxScaler`: NaN and null
+/// are ignored when fitting and kept in the output, as are infinities (which
+/// scikit-learn rejects), and (near-)constant features map to 0 (`Standard`)
+/// or the lower end of the range (`MinMax`). Grouping and time columns are
+/// not scaled.
+///
+/// Attributes:
+///     Standard: Zero mean and unit (population) variance.
+///     MinMax: Maps each feature's [min, max] onto `feature_range`, (0, 1) by default.
+#[pyclass(from_py_object, name = "ScalerSetting", eq)]
+#[derive(Clone, Debug, PartialEq)]
+enum PyScalerSetting {
+    Standard {},
+    #[pyo3(constructor = (feature_range = (0.0, 1.0)))]
+    MinMax {
+        feature_range: (f64, f64),
+    },
+}
+
 /// Configuration settings for the feature extraction process.
 #[pyclass(from_py_object, name = "ExtractionSettings")]
 #[derive(Clone)]
@@ -32,6 +56,7 @@ struct PyExtractionSettings {
     feature_setting: PyFeatureSetting,
     config_path: Option<String>,
     dynamic_settings: Option<PyDynamicGroupBySettings>,
+    scaling: Option<PyScalerSetting>,
 }
 
 /// Settings for performing dynamic, time-based group-by operations.
@@ -55,22 +80,39 @@ impl PyExtractionSettings {
     ///     feature_setting (FeatureSetting): The complexity/depth of features to calculate.
     ///     config_path (str | None, optional): Path to a TOML feature config file, which must exist. Defaults to None: `.tsfx-config.toml` in the working directory if present, else the default config.
     ///     dynamic_settings (DynamicGroupBySettings | None, optional): Settings for rolling/dynamic time windows. Defaults to None.
+    ///     scaling (ScalerSetting | None, optional): Scale the features across groups after extraction. Defaults to None: no scaling.
     #[new]
-    #[pyo3(signature = (grouping_cols, value_cols, feature_setting, config_path=None, dynamic_settings=None))]
+    #[pyo3(signature = (grouping_cols, value_cols, feature_setting, config_path=None, dynamic_settings=None, scaling=None))]
     fn new(
         grouping_cols: Vec<String>,
         value_cols: Vec<String>,
         feature_setting: PyFeatureSetting,
         config_path: Option<String>,
         dynamic_settings: Option<PyDynamicGroupBySettings>,
-    ) -> Self {
-        PyExtractionSettings {
+        scaling: Option<&Bound<PyAny>>,
+    ) -> PyResult<Self> {
+        let scaling = match scaling {
+            // A variant class without arguments, e.g. `ScalerSetting.Standard`
+            Some(s)
+                if s.cast::<PyType>()
+                    .is_ok_and(|t| t.is_subclass_of::<PyScalerSetting>().unwrap_or(false)) =>
+            {
+                Some(s.call0()?.extract()?)
+            }
+            Some(s) => Some(s.extract::<PyScalerSetting>()?),
+            None => None,
+        };
+        if let Some(s) = &scaling {
+            Scaling::from(s.clone()).validate()?;
+        }
+        Ok(PyExtractionSettings {
             grouping_cols,
             value_cols,
             feature_setting,
             config_path,
             dynamic_settings,
-        }
+            scaling,
+        })
     }
 
     /// Columns the extraction reads: grouping, value and (if set) time
@@ -126,6 +168,15 @@ impl From<PyFeatureSetting> for FeatureSetting {
     }
 }
 
+impl From<PyScalerSetting> for Scaling {
+    fn from(setting: PyScalerSetting) -> Self {
+        match setting {
+            PyScalerSetting::Standard {} => Scaling::Standard,
+            PyScalerSetting::MinMax { feature_range } => Scaling::MinMax { feature_range },
+        }
+    }
+}
+
 impl From<PyDynamicGroupBySettings> for DynamicGroupBySettings {
     fn from(opts: PyDynamicGroupBySettings) -> Self {
         DynamicGroupBySettings {
@@ -148,6 +199,7 @@ impl From<PyExtractionSettings> for ExtractionSettings {
             dynamic_settings: opts
                 .dynamic_settings
                 .map(|dyn_settings| dyn_settings.into()),
+            scaling: opts.scaling.map(|scaling| scaling.into()),
         }
     }
 }
@@ -213,6 +265,7 @@ fn tsfx(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyFeatureSetting>()?;
     m.add_class::<PyExtractionSettings>()?;
     m.add_class::<PyDynamicGroupBySettings>()?;
+    m.add_class::<PyScalerSetting>()?;
     m.add_function(wrap_pyfunction!(extract_features, m)?)?;
     m.add_function(wrap_pyfunction!(extract_features_df, m)?)?;
     Ok(())
