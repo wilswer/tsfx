@@ -338,6 +338,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tsfx.ScalerSetting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ScalerSetting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tsfx.extract_features" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -453,6 +464,17 @@
     <span class="md-ellipsis">
       
         FeatureSetting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tsfx.ScalerSetting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ScalerSetting
       
     </span>
   </a>
@@ -671,7 +693,7 @@
 
 
 <h3 id="tsfx.ExtractionSettings" class="doc doc-heading">
-              <code class="highlight language-python"><span class="n">ExtractionSettings</span><span class="p">(</span><span class="n">grouping_cols</span><span class="p">,</span> <span class="n">value_cols</span><span class="p">,</span> <span class="n">feature_setting</span><span class="p">,</span> <span class="n">config_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dynamic_settings</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+              <code class="highlight language-python"><span class="n">ExtractionSettings</span><span class="p">(</span><span class="n">grouping_cols</span><span class="p">,</span> <span class="n">value_cols</span><span class="p">,</span> <span class="n">feature_setting</span><span class="p">,</span> <span class="n">config_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dynamic_settings</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scaling</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h3>
 
@@ -777,6 +799,27 @@ the default config.</p>
                   <code>None</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>scaling</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ScalerSetting (tsfx.tsfx.ScalerSetting)" href="#tsfx.ScalerSetting">ScalerSetting</a> | <span title="type">type</span>[<a class="autorefs autorefs-internal" title="ScalerSetting (tsfx.tsfx.ScalerSetting)" href="#tsfx.ScalerSetting">ScalerSetting</a>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional <code>ScalerSetting</code> to scale each feature across groups after
+extraction, e.g. <code>ScalerSetting.Standard()</code> or
+<code>ScalerSetting.MinMax(feature_range=(-1, 1))</code>; a variant without
+arguments may be given without calling it (<code>ScalerSetting.Standard</code>).
+Defaults to None: no scaling. An invalid <code>feature_range</code> (not finite,
+or minimum not below maximum) raises <code>ValueError</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -862,6 +905,63 @@ the default config.</p>
 
 </div>
 
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="tsfx.ScalerSetting" class="doc doc-heading">
+            <code>ScalerSetting</code>
+
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>How to scale the extracted features, column-wise across groups.</p>
+<p>Matches scikit-learn's <code>StandardScaler</code> and <code>MinMaxScaler</code> fitted on the
+feature matrix: NaN and null are ignored when fitting and kept in the
+output, as are infinities (which scikit-learn rejects), and
+(near-)constant features map to 0 (<code>Standard</code>) or the lower end of the
+range (<code>MinMax</code>). Grouping and time columns are not scaled, and the
+scaled features are Float64.</p>
+<ul>
+<li><code>Standard()</code>: zero mean and unit (population) variance.</li>
+<li><code>MinMax(feature_range=(0, 1))</code>: maps each feature's [min, max] onto
+  <code>feature_range</code>.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
 
 <div class="doc doc-object doc-function">
 
@@ -912,7 +1012,7 @@ columns produced are unnested to top-level columns.</p>
                 <code>settings</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="ExtractionSettings(grouping_cols, value_cols, feature_setting, config_path=None, dynamic_settings=None) (tsfx.tsfx.ExtractionSettings)" href="#tsfx.ExtractionSettings">ExtractionSettings</a></code>
+                  <code><a class="autorefs autorefs-internal" title="ExtractionSettings(grouping_cols, value_cols, feature_setting, config_path=None, dynamic_settings=None, scaling=None) (tsfx.tsfx.ExtractionSettings)" href="#tsfx.ExtractionSettings">ExtractionSettings</a></code>
             </td>
             <td>
               <div class="doc-md-description">

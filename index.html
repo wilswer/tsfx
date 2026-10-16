@@ -277,6 +277,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#installation" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -321,6 +332,17 @@
     <span class="md-ellipsis">
       
         Extracting over a time window
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scaling-the-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scaling the features
       
     </span>
   </a>
@@ -465,6 +487,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#installation" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -509,6 +542,17 @@
     <span class="md-ellipsis">
       
         Extracting over a time window
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scaling-the-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scaling the features
       
     </span>
   </a>
@@ -580,6 +624,61 @@ by the great <a href="https://tsfresh.com/">TSFresh</a> library, TSFX aims to pr
 similar feature set focused on performance on large datasets. In order to
 achieve this, TSFX is built on top of the <a href="https://pola.rs/">Polars</a> DataFrame
 library, and feature extractors are implemented in Rust.</p>
+<h2 id="performance">Performance</h2>
+<p>Extracting the 201 features TSFX, <a href="https://github.com/functime-org/functime">functime</a>
+and TSFresh all implement (<code>efficient</code> tier, TSFresh's default parameters) from
+the <a href="https://github.com/gunnarmorling/1brc">1 Billion Row Challenge</a> data (8,859
+series), on a 2× Xeon Gold 6230 (80 threads, 503 GB RAM). Best of three runs, one
+run at 1B:</p>
+<table>
+<thead>
+<tr>
+<th>rows</th>
+<th>TSFX</th>
+<th>functime</th>
+<th>TSFresh</th>
+<th>vs functime</th>
+<th>vs TSFresh</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1M</td>
+<td>0.137 s</td>
+<td>3.62 s</td>
+<td>15.2 s</td>
+<td>26x</td>
+<td>111x</td>
+</tr>
+<tr>
+<td>10M</td>
+<td>0.72 s</td>
+<td>31.1 s</td>
+<td>20.1 s</td>
+<td>43x</td>
+<td>28x</td>
+</tr>
+<tr>
+<td>100M</td>
+<td>6.9 s</td>
+<td>313 s</td>
+<td>70 s</td>
+<td>45x</td>
+<td>10x</td>
+</tr>
+<tr>
+<td>1B</td>
+<td>84.8 s</td>
+<td>–¹</td>
+<td>643 s</td>
+<td>–</td>
+<td>8x</td>
+</tr>
+</tbody>
+</table>
+<p>¹ functime ran out of memory (it peaked at 257 GB at 100M rows).</p>
+<p>To reproduce, see <a href="python_benchmarks/library_compare.py"><code>python_benchmarks/library_compare.py</code></a>
+and <a href="python_benchmarks/1brc/README.md"><code>python_benchmarks/1brc</code></a>.</p>
 <h2 id="installation">Installation</h2>
 <p>For most common platforms and architectures, pre-built wheels are available. You
 can install the package directly from PyPI:</p>
@@ -722,6 +821,46 @@ print(gdf)
 │ c   ┆ 2000-01-01 ┆ 2      ┆ 3.0         ┆ … ┆ NaN         ┆ NaN        ┆ NaN        ┆ NaN        │
 │ c   ┆ 2003-01-01 ┆ 1      ┆ 3.0         ┆ … ┆ NaN         ┆ NaN        ┆ NaN        ┆ NaN        │
 └─────┴────────────┴────────┴─────────────┴───┴─────────────┴────────────┴────────────┴────────────┘
+</code></pre>
+<h3 id="scaling-the-features">Scaling the features</h3>
+<p>Features are often scaled before they are used, e.g. to train a model. Pass
+<code>scaling</code> to scale each feature across the groups (or windows) after
+extraction: <code>ScalerSetting.Standard()</code> for zero mean and unit variance, or
+<code>ScalerSetting.MinMax(feature_range=(0, 1))</code> to map each feature's range onto
+<code>feature_range</code>. They match scikit-learn's <code>StandardScaler</code> and <code>MinMaxScaler</code>
+fitted on the feature matrix. NaN, null and infinite values are left out of
+the fit and kept as they are, and constant features map to 0 (<code>Standard</code>) or
+the lower end of the range (<code>MinMax</code>). The grouping and time columns are not
+scaled. The default, <code>scaling=None</code>, leaves the features as extracted.</p>
+<pre><code class="language-python">import polars as pl
+from tsfx import ExtractionSettings, FeatureSetting, ScalerSetting, extract_features
+
+df = pl.DataFrame(
+    {
+        &quot;id&quot;: [&quot;a&quot;, &quot;a&quot;, &quot;a&quot;, &quot;b&quot;, &quot;b&quot;, &quot;b&quot;, &quot;c&quot;, &quot;c&quot;, &quot;c&quot;],
+        &quot;val&quot;: [1.0, 2.0, 3.0, 2.0, 4.0, 6.0, 5.0, 5.0, 5.0],
+    },
+).lazy()
+settings = ExtractionSettings(
+    grouping_cols=[&quot;id&quot;],
+    value_cols=[&quot;val&quot;],
+    feature_setting=FeatureSetting.Minimal,
+    scaling=ScalerSetting.MinMax(feature_range=(-1, 1)),
+)
+gdf = extract_features(df, settings).sort(by=&quot;id&quot;)
+print(gdf.select(&quot;id&quot;, &quot;length&quot;, &quot;val__mean&quot;, &quot;val__maximum&quot;, &quot;val__variance&quot;))
+</code></pre>
+<p>which produces the following output:</p>
+<pre><code class="language-bash">shape: (3, 5)
+┌─────┬────────┬───────────┬──────────────┬───────────────┐
+│ id  ┆ length ┆ val__mean ┆ val__maximum ┆ val__variance │
+│ --- ┆ ---    ┆ ---       ┆ ---          ┆ ---           │
+│ str ┆ f64    ┆ f64       ┆ f64          ┆ f64           │
+╞═════╪════════╪═══════════╪══════════════╪═══════════════╡
+│ a   ┆ -1.0   ┆ -1.0      ┆ -1.0         ┆ -0.5          │
+│ b   ┆ -1.0   ┆ 0.333333  ┆ 1.0          ┆ 1.0           │
+│ c   ┆ -1.0   ┆ 1.0       ┆ 0.333333     ┆ -1.0          │
+└─────┴────────┴───────────┴──────────────┴───────────────┘
 </code></pre>
 <p>For more examples, see the <a href="examples">examples</a> directory.</p>
 <h2 id="contributing">Contributing</h2>
