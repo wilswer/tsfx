@@ -19,6 +19,29 @@ class FeatureSetting(Enum):
     Efficient = auto()
     Comprehensive = auto()
 
+class ScalerSetting:
+    """How to scale the extracted features, column-wise across groups.
+
+    Matches scikit-learn's `StandardScaler` and `MinMaxScaler` fitted on the
+    feature matrix: NaN and null are ignored when fitting and kept in the
+    output, as are infinities (which scikit-learn rejects), and
+    (near-)constant features map to 0 (`Standard`) or the lower end of the
+    range (`MinMax`). Grouping and time columns are not scaled, and the
+    scaled features are Float64.
+
+    - `Standard()`: zero mean and unit (population) variance.
+    - `MinMax(feature_range=(0, 1))`: maps each feature's [min, max] onto
+      `feature_range`.
+    """
+
+    class Standard(ScalerSetting):
+        def __init__(self) -> None: ...
+
+    class MinMax(ScalerSetting):
+        feature_range: tuple[float, float]
+
+        def __init__(self, feature_range: tuple[float, float] = (0.0, 1.0)) -> None: ...
+
 class DynamicGroupBySettings:
     r"""Settings for dynamic (time-windowed) group-by extraction.
 
@@ -70,6 +93,13 @@ class ExtractionSettings:
         the default config.
     dynamic_settings:
         Optional `DynamicGroupBySettings` for time-windowed extraction.
+    scaling:
+        Optional `ScalerSetting` to scale each feature across groups after
+        extraction, e.g. `ScalerSetting.Standard()` or
+        `ScalerSetting.MinMax(feature_range=(-1, 1))`; a variant without
+        arguments may be given without calling it (`ScalerSetting.Standard`).
+        Defaults to None: no scaling. An invalid `feature_range` (not finite,
+        or minimum not below maximum) raises `ValueError`.
 
     """
 
@@ -78,6 +108,7 @@ class ExtractionSettings:
     feature_setting: FeatureSetting
     config_path: str | None
     dynamic_settings: DynamicGroupBySettings | None
+    scaling: ScalerSetting | None
 
     @property
     def _input_columns(self) -> list[str]:
@@ -91,6 +122,7 @@ class ExtractionSettings:
         feature_setting: FeatureSetting,
         config_path: str | None = None,
         dynamic_settings: DynamicGroupBySettings | None = None,
+        scaling: ScalerSetting | type[ScalerSetting] | None = None,
     ) -> None: ...
 
 def extract_features_df(

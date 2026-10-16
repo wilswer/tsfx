@@ -195,6 +195,53 @@ shape: (6, 1_499)
 └─────┴────────────┴────────┴─────────────┴───┴─────────────┴────────────┴────────────┴────────────┘
 ```
 
+### Scaling the features
+
+Features are often scaled before they are used, e.g. to train a model. Pass
+`scaling` to scale each feature across the groups (or windows) after
+extraction: `ScalerSetting.Standard()` for zero mean and unit variance, or
+`ScalerSetting.MinMax(feature_range=(0, 1))` to map each feature's range onto
+`feature_range`. They match scikit-learn's `StandardScaler` and `MinMaxScaler`
+fitted on the feature matrix. NaN, null and infinite values are left out of
+the fit and kept as they are, and constant features map to 0 (`Standard`) or
+the lower end of the range (`MinMax`). The grouping and time columns are not
+scaled. The default, `scaling=None`, leaves the features as extracted.
+
+```python
+import polars as pl
+from tsfx import ExtractionSettings, FeatureSetting, ScalerSetting, extract_features
+
+df = pl.DataFrame(
+    {
+        "id": ["a", "a", "a", "b", "b", "b", "c", "c", "c"],
+        "val": [1.0, 2.0, 3.0, 2.0, 4.0, 6.0, 5.0, 5.0, 5.0],
+    },
+).lazy()
+settings = ExtractionSettings(
+    grouping_cols=["id"],
+    value_cols=["val"],
+    feature_setting=FeatureSetting.Minimal,
+    scaling=ScalerSetting.MinMax(feature_range=(-1, 1)),
+)
+gdf = extract_features(df, settings).sort(by="id")
+print(gdf.select("id", "length", "val__mean", "val__maximum", "val__variance"))
+```
+
+which produces the following output:
+
+```bash
+shape: (3, 5)
+┌─────┬────────┬───────────┬──────────────┬───────────────┐
+│ id  ┆ length ┆ val__mean ┆ val__maximum ┆ val__variance │
+│ --- ┆ ---    ┆ ---       ┆ ---          ┆ ---           │
+│ str ┆ f64    ┆ f64       ┆ f64          ┆ f64           │
+╞═════╪════════╪═══════════╪══════════════╪═══════════════╡
+│ a   ┆ -1.0   ┆ -1.0      ┆ -1.0         ┆ -0.5          │
+│ b   ┆ -1.0   ┆ 0.333333  ┆ 1.0          ┆ 1.0           │
+│ c   ┆ -1.0   ┆ 1.0       ┆ 0.333333     ┆ -1.0          │
+└─────┴────────┴───────────┴──────────────┴───────────────┘
+```
+
 For more examples, see the [examples](examples) directory.
 
 ## Contributing

@@ -2,6 +2,19 @@
 
 All notable changes to TSFX are documented here.
 
+## Unreleased
+
+### Added
+
+- **Feature scaling**: `ExtractionSettings(..., scaling=...)` scales each
+  feature across the groups (or windows) after extraction, in Rust.
+  `ScalerSetting.Standard()` gives zero mean and unit variance and
+  `ScalerSetting.MinMax(feature_range=(0, 1))` maps each feature's range onto
+  `feature_range`, as scikit-learn's `StandardScaler` and `MinMaxScaler` do
+  (fuzzed against them). NaN, null and ±inf are left out of the fit and kept;
+  constant features map to 0 or the lower end of the range. Grouping and time
+  columns are not scaled. Defaults to `None`: no scaling, as before.
+
 ## 0.7.0 (2026-10-14)
 
 ### Changed

@@ -31,6 +31,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         offset: "0".to_string(),
                         datetime_format: Some("%Y-%m-%d".to_string()),
                     }),
+                    scaling: None,
                 },
             )
             .unwrap()

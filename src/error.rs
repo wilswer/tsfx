@@ -17,12 +17,16 @@ pub enum ExtractionError {
     PolarsError(#[from] PolarsError),
     #[error("tsfx config error: {0}")]
     Config(#[from] ConfigError),
+    #[error("Invalid extraction settings: {0}")]
+    InvalidSettings(String),
 }
 
 impl From<ExtractionError> for PyErr {
     fn from(value: ExtractionError) -> Self {
         match value {
-            ExtractionError::Config(_) => PyErr::new::<PyValueError, _>(value.to_string()),
+            ExtractionError::Config(_) | ExtractionError::InvalidSettings(_) => {
+                PyErr::new::<PyValueError, _>(value.to_string())
+            }
             _ => PyErr::new::<PyBaseException, _>(value.to_string()),
         }
     }
