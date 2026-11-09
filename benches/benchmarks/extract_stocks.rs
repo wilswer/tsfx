@@ -38,7 +38,7 @@ fn bench_tier(c: &mut Criterion, df: &DataFrame, name: &str, tier: FeatureSettin
                 },
             )
             .unwrap()
-            .collect()
+            .collect_with_engine(Engine::InMemory)
             .unwrap()
         })
     });

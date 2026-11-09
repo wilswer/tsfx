@@ -33,6 +33,13 @@ pub struct ExtractionSettings {
     pub scaling: Option<Scaling>,
 }
 
+/// Collect `lf` on the in-memory engine, as `collect()` did before polars 2.0.
+/// Since 2.0 a plain `collect()` runs lazy queries on the streaming engine,
+/// which costs tsfx more per query and per group.
+pub fn collect_in_memory(lf: LazyFrame) -> PolarsResult<DataFrame> {
+    Ok(lf.collect_with_engine(Engine::InMemory)?.unwrap_single())
+}
+
 /// Parse the `field` duration of the dynamic group-by settings. An invalid
 /// string is a settings error (a ValueError in Python) rather than the panic
 /// of `Duration::parse`.
@@ -85,7 +92,7 @@ pub fn lazy_feature_df(
     } else {
         df.select(&selected_cols).group_by(&grouping_cols)
     };
-    let mut fdf = gdf.agg(features.aggregations).collect()?;
+    let mut fdf = collect_in_memory(gdf.agg(features.aggregations))?;
     for (column, plan) in &features.kernels {
         plan.unpack(&mut fdf, column)?;
     }

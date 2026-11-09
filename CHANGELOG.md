@@ -4,6 +4,17 @@ All notable changes to TSFX are documented here.
 
 ## Unreleased
 
+### Changed
+
+- **Built on polars 2.1** (was 1.44.2): the package now requires
+  `polars==2.1.0`, so installing this tsfx upgrades polars. See polars'
+  [upgrade guide](https://docs.pola.rs/releases/upgrade/2/) for changes that
+  may affect your own polars code.
+- Feature extraction still runs on polars' in-memory engine. Polars 2 made the
+  streaming engine the default for lazy queries, which made tsfx 6-28% slower
+  on the stocks benchmarks; collecting in memory keeps it about as fast as with
+  polars 1.44. Very small inputs (a few rows) take 2-3 ms longer per call.
+
 ### Fixed
 
 - **An invalid `every`, `period` or `offset` in `DynamicGroupBySettings`

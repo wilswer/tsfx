@@ -35,7 +35,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 },
             )
             .unwrap()
-            .collect()
+            .collect_with_engine(Engine::InMemory)
             .unwrap()
         })
     });
