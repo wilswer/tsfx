@@ -38,7 +38,7 @@ polars = { git = "https://github.com/pola-rs/polars.git", rev = "1bd8ec12f42d40f
   "object",
 ] }
 pyo3-polars = { git = "https://github.com/pola-rs/polars.git", rev = "1bd8ec12f42d40fcec62badf32ef2177d2377d8d", features = ["lazy", "dtype-struct"] }
-itertools = "0.14"
+itertools = "0.15"
 thiserror = "2"
 anyhow = "1"
 rustfft = "6.4.1"
