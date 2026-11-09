@@ -5,7 +5,7 @@ use polars::prelude::*;
 use tsfx::extract::{DynamicGroupBySettings, ExtractionSettings, FeatureSetting, lazy_feature_df};
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let df = LazyCsvReader::new("test_data/all_stocks_5yr.csv".into())
+    let df = LazyCsvReader::new("test_dataset/all_stocks_5yr.csv".into())
         .finish()
         .unwrap()
         .drop_nulls(None);

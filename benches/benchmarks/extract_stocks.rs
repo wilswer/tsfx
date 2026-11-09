@@ -9,7 +9,7 @@ const VALUE_COLS: [&str; 5] = ["open", "high", "low", "close", "volume"];
 
 /// The stocks dataset (619k rows, 505 groups), loaded once outside the timed loop.
 fn load_stocks() -> DataFrame {
-    LazyCsvReader::new(PlRefPath::new("test_data/all_stocks_5yr.csv"))
+    LazyCsvReader::new(PlRefPath::new("test_dataset/all_stocks_5yr.csv"))
         .finish()
         .unwrap()
         .drop_nulls(None)

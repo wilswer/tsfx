@@ -6,7 +6,7 @@ from tsfx import (
     extract_features,
 )
 
-lf = pl.scan_csv("test_data/all_stocks_5yr.csv")
+lf = pl.scan_csv("test_dataset/all_stocks_5yr.csv")
 lf = lf.drop_nulls()
 
 dyn_opts = DynamicGroupBySettings(

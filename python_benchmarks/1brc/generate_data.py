@@ -40,7 +40,7 @@ def check_args(file_args):  # noqa
 def build_weather_station_name_list():  # noqa
     """Grabs the weather station names from example data provided in repo and dedups."""
     station_names = []
-    with open("./test_data/weather_stations.csv") as file:
+    with open("./test_dataset/weather_stations.csv") as file:
         file_contents = file.read()
     for station in file_contents.splitlines():
         if "#" in station:
@@ -100,7 +100,7 @@ def build_test_data(weather_station_names, num_rows_to_create):  # noqa
     print("Building test data...")
 
     try:
-        with open("./test_data/measurements.txt", "w") as file:
+        with open("./test_dataset/measurements.txt", "w") as file:
             progress = 0
             for chunk in range(chunks):
                 batch = random.choices(station_names_10k_max, k=batch_size)  # noqa
@@ -126,7 +126,7 @@ def build_test_data(weather_station_names, num_rows_to_create):  # noqa
 
     end_time = time.time()
     elapsed_time = end_time - start_time
-    file_size = os.path.getsize("./test_data/measurements.txt")
+    file_size = os.path.getsize("./test_dataset/measurements.txt")
     human_file_size = convert_bytes(file_size)
 
     print("Test data successfully written to 1brc/data/measurements.txt")
