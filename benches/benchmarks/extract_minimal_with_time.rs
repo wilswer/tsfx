@@ -28,7 +28,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         time_col: "date".to_string(),
                         every: "1y".to_string(),
                         period: "1y".to_string(),
-                        offset: "0".to_string(),
+                        offset: "0y".to_string(),
                         datetime_format: Some("%Y-%m-%d".to_string()),
                     }),
                     scaling: None,
