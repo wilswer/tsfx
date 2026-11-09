@@ -2,6 +2,16 @@
 
 All notable changes to TSFX are documented here.
 
+## Unreleased
+
+### Fixed
+
+- **An invalid `every`, `period` or `offset` in `DynamicGroupBySettings`
+  raises `ValueError`** naming the field and the string (for example
+  `offset="0"`, which lacks a unit), instead of a Rust panic that reached
+  Python as `PanicException`, a `BaseException` that `except Exception` does
+  not catch.
+
 ## 0.8.0 (2026-10-16)
 
 ### Added

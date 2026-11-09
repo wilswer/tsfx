@@ -1163,3 +1163,31 @@ def test_number_peaks_multiple_groups():
     assert fdf.get_column("val__number_peaks__n_1").to_list() == [2.0]
     assert fdf.get_column("val__number_peaks__n_3").to_list() == [1.0]
     assert fdf.get_column("val__number_peaks__n_5").to_list() == [0.0]
+
+
+@pytest.mark.parametrize("field", ["every", "period", "offset"])
+def test_invalid_window_duration_raises_value_error(field):
+    # Regression: an invalid duration string (here "0", which lacks a unit)
+    # made Duration::parse panic, reaching Python as a PanicException (a
+    # BaseException that `except Exception` misses) instead of a ValueError.
+    df = pl.DataFrame(
+        {
+            "id": ["a", "a"],
+            "time": ["2001-01-01", "2002-01-01"],
+            "val": [1.0, 2.0],
+        },
+    ).lazy()
+    durations = {"every": "1y", "period": "1y", "offset": "0y"}
+    durations[field] = "0"
+    settings = ExtractionSettings(
+        grouping_cols=["id"],
+        value_cols=["val"],
+        feature_setting=FeatureSetting.Minimal,
+        dynamic_settings=DynamicGroupBySettings(
+            time_col="time",
+            datetime_format="%Y-%m-%d",
+            **durations,
+        ),
+    )
+    with pytest.raises(ValueError, match=f'invalid {field} duration "0"'):
+        extract_features(df, settings)

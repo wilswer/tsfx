@@ -33,6 +33,15 @@ pub struct ExtractionSettings {
     pub scaling: Option<Scaling>,
 }
 
+/// Parse the `field` duration of the dynamic group-by settings. An invalid
+/// string is a settings error (a ValueError in Python) rather than the panic
+/// of `Duration::parse`.
+fn parse_window_duration(field: &str, value: &str) -> Result<Duration, ExtractionError> {
+    Duration::try_parse(value).map_err(|e| {
+        ExtractionError::InvalidSettings(format!("invalid {field} duration {value:?}: {e}"))
+    })
+}
+
 pub fn lazy_feature_df(
     df: LazyFrame,
     opts: ExtractionSettings,
@@ -67,9 +76,9 @@ pub fn lazy_feature_df(
             &grouping_cols,
             DynamicGroupOptions {
                 index_column: dynamic_settings.time_col.into(),
-                every: Duration::parse(&dynamic_settings.every),
-                period: Duration::parse(&dynamic_settings.period),
-                offset: Duration::parse(&dynamic_settings.offset),
+                every: parse_window_duration("every", &dynamic_settings.every)?,
+                period: parse_window_duration("period", &dynamic_settings.period)?,
+                offset: parse_window_duration("offset", &dynamic_settings.offset)?,
                 ..Default::default()
             },
         )
@@ -88,7 +97,8 @@ pub fn lazy_feature_df(
 
 #[cfg(test)]
 mod tests {
-    use super::{ExtractionSettings, FeatureSetting, lazy_feature_df};
+    use super::{DynamicGroupBySettings, ExtractionSettings, FeatureSetting, lazy_feature_df};
+    use crate::error::ExtractionError;
     use polars::prelude::*;
 
     #[test]
@@ -232,5 +242,46 @@ mod tests {
                 .unwrap(),
             df!["value__standard_deviation" => [0.0, 0.0, 0.0]].unwrap()
         );
+    }
+
+    #[test]
+    fn test_invalid_window_duration_is_an_error() {
+        // Regression: Duration::parse panicked on a duration without a unit
+        for field in ["every", "period", "offset"] {
+            let mut dynamic = DynamicGroupBySettings {
+                time_col: "time".to_string(),
+                every: "1y".to_string(),
+                period: "1y".to_string(),
+                offset: "0y".to_string(),
+                datetime_format: Some("%Y-%m-%d".to_string()),
+            };
+            let target = match field {
+                "every" => &mut dynamic.every,
+                "period" => &mut dynamic.period,
+                _ => &mut dynamic.offset,
+            };
+            *target = "0".to_string();
+            let df = df![
+                "id" => ["a", "a"],
+                "time" => ["2001-01-01", "2002-01-01"],
+                "value" => [1.0, 2.0],
+            ]
+            .unwrap()
+            .lazy();
+            let opts = ExtractionSettings {
+                grouping_cols: vec!["id".to_string()],
+                value_cols: vec!["value".to_string()],
+                feature_setting: FeatureSetting::Minimal,
+                config_path: None,
+                dynamic_settings: Some(dynamic),
+                scaling: None,
+            };
+            let Err(err) = lazy_feature_df(df, opts) else {
+                panic!("{field} = \"0\" was accepted");
+            };
+            assert!(matches!(err, ExtractionError::InvalidSettings(_)), "{err}");
+            let expected = format!("invalid {field} duration \"0\"");
+            assert!(err.to_string().contains(&expected), "{err}");
+        }
     }
 }
