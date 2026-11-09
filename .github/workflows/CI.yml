@@ -106,7 +106,7 @@ jobs:
           uvx ruff@0.15.18 check python
           uvx ruff@0.15.18 format --check .
       - name: mypy
-        run: uv run --no-project --with mypy==2.1.0 --with polars==1.44.2 mypy python/tsfx
+        run: uv run --no-project --with mypy==2.1.0 --with polars==2.1.0 mypy python/tsfx
 
   # Built on every run so broken docs fail the pull request; deployed by
   # deploy-docs after a release
