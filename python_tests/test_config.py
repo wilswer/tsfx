@@ -30,7 +30,7 @@ def test_empty_config(tier):
         grouping_cols=["id"],
         feature_setting=tier,
         value_cols=["val"],
-        config_path="./python_tests/data/.tsfx-config-empty.toml",
+        config_path="./python_tests/fixtures/.tsfx-config-empty.toml",
     )
     gdf = extract_features(df, opts)
     print(gdf.head())
@@ -92,7 +92,7 @@ def test_invalid_aggregator_raises_value_error():
         grouping_cols=["id"],
         feature_setting=FeatureSetting.Efficient,
         value_cols=["val"],
-        config_path="./python_tests/data/.tsfx-config-invalid-aggregator.toml",
+        config_path="./python_tests/fixtures/.tsfx-config-invalid-aggregator.toml",
     )
     with pytest.raises(ValueError, match="mena"):
         extract_features(df.lazy(), opts)
@@ -104,7 +104,7 @@ def test_missing_config_path_raises_value_error():
         grouping_cols=["id"],
         feature_setting=FeatureSetting.Minimal,
         value_cols=["val"],
-        config_path="./python_tests/data/no-such-config.toml",
+        config_path="./python_tests/fixtures/no-such-config.toml",
     )
     with pytest.raises(ValueError, match="no-such-config.toml"):
         extract_features(df.lazy(), opts)

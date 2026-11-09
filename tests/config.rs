@@ -2,7 +2,7 @@ use tsfx::utils::toml_reader::{ConfigError, load_config};
 
 #[test]
 fn test_read_config_from_empty_file() {
-    let config = load_config(Some("./tests/data/.tsfx-config-empty.toml")).unwrap();
+    let config = load_config(Some("./tests/fixtures/.tsfx-config-empty.toml")).unwrap();
     assert!(config.length.is_none());
     assert!(config.sum_values.is_none());
     assert!(config.mean.is_none());
@@ -67,7 +67,7 @@ fn test_read_config_from_empty_file() {
 
 #[test]
 fn test_missing_explicit_config_file_is_an_error() {
-    let err = load_config(Some("./tests/data/no-such-config.toml")).unwrap_err();
+    let err = load_config(Some("./tests/fixtures/no-such-config.toml")).unwrap_err();
     assert!(matches!(err, ConfigError::Read { .. }), "{err}");
     assert!(err.to_string().contains("no-such-config.toml"), "{err}");
 }

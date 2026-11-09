@@ -49,7 +49,7 @@ import polars as pl
 import pytest
 from tsfx import ExtractionSettings, FeatureSetting, extract_features
 
-CONFIG_PATH = "./python_tests/data/.tsfx-config-tsfresh-parity.toml"
+CONFIG_PATH = "./python_tests/fixtures/.tsfx-config-tsfresh-parity.toml"
 
 
 def _bug(*case: object, reason: str):

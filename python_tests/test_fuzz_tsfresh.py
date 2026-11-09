@@ -41,7 +41,7 @@ st = hypothesis.strategies
 
 pytestmark = pytest.mark.fuzz
 
-CONFIG = "./python_tests/data/.tsfx-config-tsfresh-parity.toml"
+CONFIG = "./python_tests/fixtures/.tsfx-config-tsfresh-parity.toml"
 
 # tsfresh computes these with pandas (skew, kurtosis, chunk aggregates),
 # scipy (linregress), BLAS (np.dot) or a long chain of numpy operations
