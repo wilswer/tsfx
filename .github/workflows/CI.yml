@@ -57,7 +57,7 @@ jobs:
           HYPOTHESIS_PROFILE: ci
         run: |
           # bit-exact parity is checked against these versions
-          uv pip install --system hypothesis tsfresh==0.21.2 numpy==2.5.4 pandas==3.1.1 scipy==1.17.1 statsmodels==0.15.0 scikit-learn==1.9.1
+          uv pip install --system hypothesis tsfresh==0.21.2 numpy==2.5.4 pandas==3.1.1 scipy==1.18.1 statsmodels==0.15.0 scikit-learn==1.9.1
           pytest -m fuzz
 
   # The abi3 wheel claims Python >= 3.11; run the tests on the oldest version

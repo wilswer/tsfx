@@ -22,6 +22,13 @@ All notable changes to TSFX are documented here.
   treated such rounding noise as 0). tsfx now computes the moments as pandas
   3.1 does, so both features match it bit for bit on x86_64. If your models
   need 0 for constant series, fill the NaN (`fill_nan(0)`).
+- **`number_cwt_peaks` follows scipy 1.18**, which fixed how
+  `find_peaks_cwt` sorts the points of a ridge line. When two maxima of one
+  width join the same line, its signal-to-noise test now uses the first of
+  them, so such series can count one peak fewer. (scipy's own choice there
+  depends on numpy's sort order on the CPU; tsfx takes the first point found.)
+  The tsfresh fuzz tests in CI now pin numpy 2.5.4, pandas 3.1.1, scipy 1.18.1
+  and scikit-learn 1.9.1.
 
 ### Fixed
 

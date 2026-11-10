@@ -1500,7 +1500,9 @@ _SINE_60 = [math.sin(i / 2) for i in range(60)]
 
 
 # number_cwt_peaks(np.array(x, dtype=float), n) with tsfresh 0.21.2 /
-# numpy 2.4.4 / scipy 1.17.1 (generated)
+# numpy 2.5.4 / scipy 1.18.1 (generated). In the last two, both maxima of one
+# width join the same ridge line, and scipy >= 1.18 tests that line's
+# signal-to-noise ratio at the first of them (scipy 1.17: the second, 3 peaks).
 @pytest.mark.parametrize(
     ("values", "n", "expected"),
     [
@@ -1513,6 +1515,8 @@ _SINE_60 = [math.sin(i / 2) for i in range(60)]
         ([1, 2], 5, 0),
         ([0, 1, 0], 1, 1),
         ([1, math.nan, 1, 5, 1, 1], 1, 0),
+        ([0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0], 5, 2),
+        ([0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0], 10, 2),
     ],
 )
 def test_number_cwt_peaks_generated(values, n, expected):

@@ -16,13 +16,15 @@ Features tsfresh computes with numpy must match bit for bit; the families in
 compared with a relative and absolute tolerance of 1e-9. The documented
 deliberate deviations are excluded in ``_deviation``, and columns tsfresh has
 no counterpart for in ``_tsfx_only``. ``number_cwt_peaks`` is compared with
-scipy's peak finder run on tsfx's portable arithmetic (``_number_cwt_peaks``),
-because tied coefficients make the count depend on rounding. Calculators get
+scipy's peak finder run on tsfx's portable arithmetic and a stable sort
+(``_number_cwt_peaks``), because tied coefficients make the count depend on
+rounding, and tied ridge points on the CPU's argsort. Calculators get
 what tsfresh's
 ``extract_features`` passes them: a numpy array, or a pandas Series where
 the calculator asks for one.
 """
 
+import functools
 import math
 import re
 import tomllib
@@ -197,16 +199,21 @@ def _number_cwt_peaks(x: object, n: int) -> int:
     """tsfresh's ``number_cwt_peaks`` (scipy's ``find_peaks_cwt``) evaluated
     with tsfx's portable convolution and ``exp``: tied neighbouring
     coefficients are common (any series symmetric about a point between two
-    samples), and which one wins is decided by rounding."""
+    samples), and which one wins is decided by rounding. And with a stable
+    argsort: scipy (>= 1.18) sorts each ridge line's points by row with
+    numpy's default argsort, which is unstable on SIMD CPUs, so when two
+    maxima of a line's lowest row tie, the CPU picks the point scipy tests;
+    tsfx takes the first found."""
     import scipy.signal._wavelets as wavelets
     from scipy.signal import find_peaks_cwt
 
-    original = wavelets.convolve
+    original, original_argsort = wavelets.convolve, np.argsort
     wavelets.convolve = _plain_convolve
+    np.argsort = functools.partial(original_argsort, kind="stable")
     try:
         return len(find_peaks_cwt(x, np.arange(1, n + 1), wavelet=_ricker))
     finally:
-        wavelets.convolve = original
+        wavelets.convolve, np.argsort = original, original_argsort
 
 
 def _tsfresh(x: object, column: str) -> float:
