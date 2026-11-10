@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/feature_extractors/wavelet.rs`."><title>wavelet.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="tsfx" data-themes="" data-resource-suffix="" data-rustdoc-version="1.100.0-nightly (8fa1c96cf 2026-08-17)" data-channel="nightly" data-search-js="search-b167f383.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.css" integrity="sha384-9eLZqc9ds8eNjO3TmqPeYcDj8n+Qfa4nuSiGYa6DjLNcv9BtN69ZIulL9+8CqC9Y" crossorigin="anonymous">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/feature_extractors/wavelet.rs`."><title>wavelet.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-203241e4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="tsfx" data-themes="" data-resource-suffix="" data-rustdoc-version="1.100.0-nightly (0dfb098f3 2026-08-31)" data-channel="nightly" data-search-js="search-b167f383.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-1814ead3.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.css" integrity="sha384-9eLZqc9ds8eNjO3TmqPeYcDj8n+Qfa4nuSiGYa6DjLNcv9BtN69ZIulL9+8CqC9Y" crossorigin="anonymous">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.js"                  integrity="sha384-K3vbOmF2BtaVai+Qk37uypf7VrgBubhQreNQe9aGsz9lB63dIFiQVlJbr92dw2Lx" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/contrib/auto-render.min.js"    integrity="sha384-kmZOZB5ObwgQnS/DuDg6TScgOiWWBiVt0plIRkZCmE6rDZGrEOQeHM5PcHi+nyqe" crossorigin="anonymous"></script>
 <script>
@@ -237,223 +237,240 @@
 <a href=#221 id=221 data-nosnippet>221</a>}
 <a href=#222 id=222 data-nosnippet>222</a>
 <a href=#223 id=223 data-nosnippet>223</a><span class="doccomment">/// One ridge line of `_identify_ridge_lines`: its rows and columns in the
-<a href=#224 id=224 data-nosnippet>224</a>/// order found (rows descending) and the number of rows since it last grew.
-<a href=#225 id=225 data-nosnippet>225</a></span><span class="kw">struct </span>RidgeLine {
-<a href=#226 id=226 data-nosnippet>226</a>    rows: Vec&lt;usize&gt;,
-<a href=#227 id=227 data-nosnippet>227</a>    cols: Vec&lt;usize&gt;,
-<a href=#228 id=228 data-nosnippet>228</a>    gap: usize,
-<a href=#229 id=229 data-nosnippet>229</a>}
-<a href=#230 id=230 data-nosnippet>230</a>
-<a href=#231 id=231 data-nosnippet>231</a><span class="doccomment">/// The number of peaks `scipy.signal.find_peaks_cwt(x, widths=1..=n,
-<a href=#232 id=232 data-nosnippet>232</a>/// wavelet=_ricker)` finds, with all its defaults.
-<a href=#233 id=233 data-nosnippet>233</a></span><span class="kw">fn </span>count_cwt_peaks(x: <span class="kw-2">&amp;</span>[f64], n: usize) -&gt; usize {
-<a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">let </span>len = x.len();
-<a href=#235 id=235 data-nosnippet>235</a>    <span class="kw">let </span>widths: Vec&lt;usize&gt; = (<span class="number">1</span>..=n).collect();
-<a href=#236 id=236 data-nosnippet>236</a>    <span class="comment">// scipy's _cwt: convolve(x, ricker(min(10 w, len), w)[::-1], mode="same"),
-<a href=#237 id=237 data-nosnippet>237</a>    // direct method (see NumberCwtPeaks' docs)
-<a href=#238 id=238 data-nosnippet>238</a>    </span><span class="kw">let </span>cwt: Vec&lt;Vec&lt;f64&gt;&gt; = widths
-<a href=#239 id=239 data-nosnippet>239</a>        .iter()
-<a href=#240 id=240 data-nosnippet>240</a>        .map(|<span class="kw-2">&amp;</span>w| {
-<a href=#241 id=241 data-nosnippet>241</a>            <span class="kw">let </span><span class="kw-2">mut </span>wavelet = ricker((<span class="number">10 </span>* w).min(len), w);
-<a href=#242 id=242 data-nosnippet>242</a>            wavelet.reverse();
-<a href=#243 id=243 data-nosnippet>243</a>            np_convolve(x, <span class="kw-2">&amp;</span>wavelet, <span class="bool-val">false</span>)
-<a href=#244 id=244 data-nosnippet>244</a>        })
-<a href=#245 id=245 data-nosnippet>245</a>        .collect();
-<a href=#246 id=246 data-nosnippet>246</a>    <span class="comment">// argrelmax along each row, mode "clip": the ends are never maxima
-<a href=#247 id=247 data-nosnippet>247</a>    </span><span class="kw">let </span>is_max = |row: <span class="kw-2">&amp;</span>[f64], i: usize| -&gt; bool {
-<a href=#248 id=248 data-nosnippet>248</a>        <span class="kw">let </span>prev = row[i.saturating_sub(<span class="number">1</span>)];
-<a href=#249 id=249 data-nosnippet>249</a>        <span class="kw">let </span>next = row[(i + <span class="number">1</span>).min(len - <span class="number">1</span>)];
-<a href=#250 id=250 data-nosnippet>250</a>        row[i] &gt; prev &amp;&amp; row[i] &gt; next
-<a href=#251 id=251 data-nosnippet>251</a>    };
-<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">let </span>max_cols: Vec&lt;Vec&lt;usize&gt;&gt; = cwt
-<a href=#253 id=253 data-nosnippet>253</a>        .iter()
-<a href=#254 id=254 data-nosnippet>254</a>        .map(|row| (<span class="number">0</span>..len).filter(|<span class="kw-2">&amp;</span>i| is_max(row, i)).collect())
-<a href=#255 id=255 data-nosnippet>255</a>        .collect();
-<a href=#256 id=256 data-nosnippet>256</a>
-<a href=#257 id=257 data-nosnippet>257</a>    <span class="comment">// _identify_ridge_lines(cwt, widths / 4, gap_thresh = ceil(widths[0]))
-<a href=#258 id=258 data-nosnippet>258</a>    </span><span class="kw">let </span><span class="prelude-val">Some</span>(start_row) = (<span class="number">0</span>..n).rev().find(|<span class="kw-2">&amp;</span>r| !max_cols[r].is_empty()) <span class="kw">else </span>{
-<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">return </span><span class="number">0</span>;
-<a href=#260 id=260 data-nosnippet>260</a>    };
-<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">let </span>gap_thresh = <span class="number">1</span>; <span class="comment">// ceil(widths[0])
-<a href=#262 id=262 data-nosnippet>262</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>ridge_lines: Vec&lt;RidgeLine&gt; = max_cols[start_row]
-<a href=#263 id=263 data-nosnippet>263</a>        .iter()
-<a href=#264 id=264 data-nosnippet>264</a>        .map(|<span class="kw-2">&amp;</span>col| RidgeLine {
-<a href=#265 id=265 data-nosnippet>265</a>            rows: <span class="macro">vec!</span>[start_row],
-<a href=#266 id=266 data-nosnippet>266</a>            cols: <span class="macro">vec!</span>[col],
-<a href=#267 id=267 data-nosnippet>267</a>            gap: <span class="number">0</span>,
-<a href=#268 id=268 data-nosnippet>268</a>        })
-<a href=#269 id=269 data-nosnippet>269</a>        .collect();
-<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">let </span><span class="kw-2">mut </span>final_lines = Vec::new();
-<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">for </span>row <span class="kw">in </span>(<span class="number">0</span>..start_row).rev() {
-<a href=#272 id=272 data-nosnippet>272</a>        <span class="kw">let </span>max_distance = widths[row] <span class="kw">as </span>f64 / <span class="number">4.0</span>;
-<a href=#273 id=273 data-nosnippet>273</a>        <span class="kw">for </span>line <span class="kw">in </span>ridge_lines.iter_mut() {
-<a href=#274 id=274 data-nosnippet>274</a>            line.gap += <span class="number">1</span>;
-<a href=#275 id=275 data-nosnippet>275</a>        }
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="comment">// The lines' last columns at the start of the row, sorted, keeping
-<a href=#277 id=277 data-nosnippet>277</a>        // the first line at each column (np.argmin picks the first closest)
-<a href=#278 id=278 data-nosnippet>278</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>ends: Vec&lt;(usize, usize)&gt; = ridge_lines
-<a href=#279 id=279 data-nosnippet>279</a>            .iter()
-<a href=#280 id=280 data-nosnippet>280</a>            .enumerate()
-<a href=#281 id=281 data-nosnippet>281</a>            .map(|(i, l)| (<span class="kw-2">*</span>l.cols.last().unwrap(), i))
-<a href=#282 id=282 data-nosnippet>282</a>            .collect();
-<a href=#283 id=283 data-nosnippet>283</a>        ends.sort_unstable();
-<a href=#284 id=284 data-nosnippet>284</a>        ends.dedup_by_key(|e| e.<span class="number">0</span>);
-<a href=#285 id=285 data-nosnippet>285</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>col <span class="kw">in </span><span class="kw-2">&amp;</span>max_cols[row] {
-<a href=#286 id=286 data-nosnippet>286</a>            <span class="comment">// The closest line is at the nearest end column on either side;
-<a href=#287 id=287 data-nosnippet>287</a>            // on a tie in distance, the first line wins
-<a href=#288 id=288 data-nosnippet>288</a>            </span><span class="kw">let </span>p = ends.partition_point(|<span class="kw-2">&amp;</span>(c, <span class="kw">_</span>)| c &lt; col);
-<a href=#289 id=289 data-nosnippet>289</a>            <span class="kw">let </span>left = p.checked_sub(<span class="number">1</span>).map(|j| ends[j]);
-<a href=#290 id=290 data-nosnippet>290</a>            <span class="kw">let </span>right = ends.get(p).copied();
-<a href=#291 id=291 data-nosnippet>291</a>            <span class="kw">let </span>closest = [left, right]
-<a href=#292 id=292 data-nosnippet>292</a>                .into_iter()
-<a href=#293 id=293 data-nosnippet>293</a>                .flatten()
-<a href=#294 id=294 data-nosnippet>294</a>                .min_by_key(|<span class="kw-2">&amp;</span>(c, i)| (c.abs_diff(col), i))
-<a href=#295 id=295 data-nosnippet>295</a>                .filter(|<span class="kw-2">&amp;</span>(c, <span class="kw">_</span>)| c.abs_diff(col) <span class="kw">as </span>f64 &lt;= max_distance)
-<a href=#296 id=296 data-nosnippet>296</a>                .map(|(<span class="kw">_</span>, i)| i);
-<a href=#297 id=297 data-nosnippet>297</a>            <span class="kw">match </span>closest {
-<a href=#298 id=298 data-nosnippet>298</a>                <span class="prelude-val">Some</span>(i) =&gt; {
-<a href=#299 id=299 data-nosnippet>299</a>                    <span class="kw">let </span>line = <span class="kw-2">&amp;mut </span>ridge_lines[i];
-<a href=#300 id=300 data-nosnippet>300</a>                    line.cols.push(col);
-<a href=#301 id=301 data-nosnippet>301</a>                    line.rows.push(row);
-<a href=#302 id=302 data-nosnippet>302</a>                    line.gap = <span class="number">0</span>;
-<a href=#303 id=303 data-nosnippet>303</a>                }
-<a href=#304 id=304 data-nosnippet>304</a>                <span class="prelude-val">None </span>=&gt; ridge_lines.push(RidgeLine {
-<a href=#305 id=305 data-nosnippet>305</a>                    rows: <span class="macro">vec!</span>[row],
-<a href=#306 id=306 data-nosnippet>306</a>                    cols: <span class="macro">vec!</span>[col],
-<a href=#307 id=307 data-nosnippet>307</a>                    gap: <span class="number">0</span>,
-<a href=#308 id=308 data-nosnippet>308</a>                }),
-<a href=#309 id=309 data-nosnippet>309</a>            }
-<a href=#310 id=310 data-nosnippet>310</a>        }
-<a href=#311 id=311 data-nosnippet>311</a>        <span class="comment">// End lines that skipped too many rows, keeping the others in order
-<a href=#312 id=312 data-nosnippet>312</a>        </span><span class="kw">let </span>(ended, alive): (Vec&lt;<span class="kw">_</span>&gt;, Vec&lt;<span class="kw">_</span>&gt;) = std::mem::take(<span class="kw-2">&amp;mut </span>ridge_lines)
-<a href=#313 id=313 data-nosnippet>313</a>            .into_iter()
-<a href=#314 id=314 data-nosnippet>314</a>            .partition(|line| line.gap &gt; gap_thresh);
-<a href=#315 id=315 data-nosnippet>315</a>        final_lines.extend(ended);
-<a href=#316 id=316 data-nosnippet>316</a>        ridge_lines = alive;
-<a href=#317 id=317 data-nosnippet>317</a>    }
-<a href=#318 id=318 data-nosnippet>318</a>
-<a href=#319 id=319 data-nosnippet>319</a>    <span class="comment">// _filter_ridge_lines(cwt, lines, min_length = ceil(n / 4),
-<a href=#320 id=320 data-nosnippet>320</a>    // window_size = ceil(len / 20), min_snr = 1, noise_perc = 10)
-<a href=#321 id=321 data-nosnippet>321</a>    </span><span class="kw">let </span>min_length = (n <span class="kw">as </span>f64 / <span class="number">4.0</span>).ceil();
-<a href=#322 id=322 data-nosnippet>322</a>    <span class="kw">let </span>window_size = (len <span class="kw">as </span>f64 / <span class="number">20.0</span>).ceil() <span class="kw">as </span>usize;
-<a href=#323 id=323 data-nosnippet>323</a>    <span class="kw">let </span>(hf_window, odd) = (window_size / <span class="number">2</span>, window_size % <span class="number">2</span>);
-<a href=#324 id=324 data-nosnippet>324</a>    <span class="kw">let </span>row_one = <span class="kw-2">&amp;</span>cwt[<span class="number">0</span>];
-<a href=#325 id=325 data-nosnippet>325</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = Vec::new();
-<a href=#326 id=326 data-nosnippet>326</a>    <span class="kw">let </span><span class="kw-2">mut </span>noise = |ind: usize| {
-<a href=#327 id=327 data-nosnippet>327</a>        <span class="kw">let </span>start = ind.saturating_sub(hf_window);
-<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">let </span>end = (ind + hf_window + odd).min(len);
-<a href=#329 id=329 data-nosnippet>329</a>        score_at_percentile(<span class="kw-2">&amp;</span>row_one[start..end], <span class="number">10.0</span>, <span class="kw-2">&amp;mut </span>buf)
-<a href=#330 id=330 data-nosnippet>330</a>    };
-<a href=#331 id=331 data-nosnippet>331</a>    final_lines
-<a href=#332 id=332 data-nosnippet>332</a>        .iter()
-<a href=#333 id=333 data-nosnippet>333</a>        .chain(ridge_lines.iter())
-<a href=#334 id=334 data-nosnippet>334</a>        .filter(|line| {
-<a href=#335 id=335 data-nosnippet>335</a>            <span class="kw">if </span>(line.rows.len() <span class="kw">as </span>f64) &lt; min_length {
-<a href=#336 id=336 data-nosnippet>336</a>                <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#337 id=337 data-nosnippet>337</a>            }
-<a href=#338 id=338 data-nosnippet>338</a>            <span class="comment">// scipy reorders each line's points by row; the first point is
-<a href=#339 id=339 data-nosnippet>339</a>            // then the last one found (the line's lowest row)
-<a href=#340 id=340 data-nosnippet>340</a>            </span><span class="kw">let </span>(row, col) = (<span class="kw-2">*</span>line.rows.last().unwrap(), <span class="kw-2">*</span>line.cols.last().unwrap());
-<a href=#341 id=341 data-nosnippet>341</a>            <span class="kw">let </span>snr = (cwt[row][col] / noise(col)).abs();
-<a href=#342 id=342 data-nosnippet>342</a>            <span class="comment">// NaN compares False, so a NaN SNR keeps the line
-<a href=#343 id=343 data-nosnippet>343</a>            </span>snr &gt;= <span class="number">1.0 </span>|| snr.is_nan()
-<a href=#344 id=344 data-nosnippet>344</a>        })
-<a href=#345 id=345 data-nosnippet>345</a>        .count()
-<a href=#346 id=346 data-nosnippet>346</a>}
-<a href=#347 id=347 data-nosnippet>347</a>
-<a href=#348 id=348 data-nosnippet>348</a><span class="doccomment">/// Number of CWT peaks feature.
-<a href=#349 id=349 data-nosnippet>349</a>///
-<a href=#350 id=350 data-nosnippet>350</a>/// The number of peaks of the series that are visible in its continuous
-<a href=#351 id=351 data-nosnippet>351</a>/// wavelet transform with the Ricker wavelet at widths $1, \dots, n$ and
-<a href=#352 id=352 data-nosnippet>352</a>/// have a high enough signal-to-noise ratio, as found by
-<a href=#353 id=353 data-nosnippet>353</a>/// `scipy.signal.find_peaks_cwt` with its defaults: local maxima of each
-<a href=#354 id=354 data-nosnippet>354</a>/// width's transform are joined into ridge lines across widths (from the
-<a href=#355 id=355 data-nosnippet>355</a>/// largest width with a maximum down to width 1, joining a maximum to the
-<a href=#356 id=356 data-nosnippet>356</a>/// closest line within $w / 4$ columns and ending lines that skip more than
-<a href=#357 id=357 data-nosnippet>357</a>/// one width); a line counts if it spans at least $\lceil n / 4 \rceil$
-<a href=#358 id=358 data-nosnippet>358</a>/// widths and its width-1 coefficient is at least the 10th percentile of
-<a href=#359 id=359 data-nosnippet>359</a>/// the width-1 coefficients in a window of $\lceil \text{len} / 20 \rceil$
-<a href=#360 id=360 data-nosnippet>360</a>/// around it (in absolute ratio).
-<a href=#361 id=361 data-nosnippet>361</a>///
-<a href=#362 id=362 data-nosnippet>362</a>/// # Parameters
-<a href=#363 id=363 data-nosnippet>363</a>/// - `n`: the largest width. Config:
-<a href=#364 id=364 data-nosnippet>364</a>///   `[number_cwt_peaks] parameters = [{ n = 1 }, ...]`; one column per entry.
-<a href=#365 id=365 data-nosnippet>365</a>///
-<a href=#366 id=366 data-nosnippet>366</a>/// # Output column
-<a href=#367 id=367 data-nosnippet>367</a>/// `{name}__number_cwt_peaks__n_{n}`
-<a href=#368 id=368 data-nosnippet>368</a>///
-<a href=#369 id=369 data-nosnippet>369</a>/// # Edge cases
-<a href=#370 id=370 data-nosnippet>370</a>/// - Nulls are dropped first; a group with no non-null values gives NaN.
-<a href=#371 id=371 data-nosnippet>371</a>/// - A series with fewer than 3 values gives 0 (no interior maxima).
-<a href=#372 id=372 data-nosnippet>372</a>/// - NaN and $\pm\infty$ spread to the transform coefficients whose window
-<a href=#373 id=373 data-nosnippet>373</a>///   covers them; NaN coefficients are never maxima, and a NaN
-<a href=#374 id=374 data-nosnippet>374</a>///   signal-to-noise ratio keeps a line, as in scipy.
-<a href=#375 id=375 data-nosnippet>375</a>/// - scipy picks direct or FFT convolution by an operation-count heuristic.
-<a href=#376 id=376 data-nosnippet>376</a>///   tsfx always convolves directly, which is what scipy picks unless the
-<a href=#377 id=377 data-nosnippet>377</a>///   wavelet is very long (widths of roughly 30 and more on long series);
-<a href=#378 id=378 data-nosnippet>378</a>///   there, scipy's FFT rounding noise (and its spreading of NaN or
-<a href=#379 id=379 data-nosnippet>379</a>///   $\pm\infty$ over the whole row) can change the count.
-<a href=#380 id=380 data-nosnippet>380</a>/// - **Deliberate deviation from tsfresh:** where two neighbouring
-<a href=#381 id=381 data-nosnippet>381</a>///   coefficients are tied in real arithmetic, rounding decides which is the
-<a href=#382 id=382 data-nosnippet>382</a>///   maximum. tsfx uses one portable convolution and the standard `exp`, so
-<a href=#383 id=383 data-nosnippet>383</a>///   its counts are the same on every platform, while numpy's rounding (and
-<a href=#384 id=384 data-nosnippet>384</a>///   so tsfresh's count) depends on its BLAS and CPU. Ties are common for
-<a href=#385 id=385 data-nosnippet>385</a>///   smooth series symmetric about a point between two samples: a Gaussian
-<a href=#386 id=386 data-nosnippet>386</a>///   bump centred on a sample counts 2 peaks with `n = 5`, tsfresh 1.
-<a href=#387 id=387 data-nosnippet>387</a>///   Irregular series are not affected.
-<a href=#388 id=388 data-nosnippet>388</a>///
-<a href=#389 id=389 data-nosnippet>389</a>/// # Cost
-<a href=#390 id=390 data-nosnippet>390</a>/// $O(\text{len} \cdot n^2)$ for the transform and $O(n \cdot \text{len}
-<a href=#391 id=391 data-nosnippet>391</a>/// \log \text{len})$ to join ridge lines, plus a selection over a window of
-<a href=#392 id=392 data-nosnippet>392</a>/// $\lceil \text{len} / 20 \rceil$ for each ridge line's noise: up to
-<a href=#393 id=393 data-nosnippet>393</a>/// $O(\text{len}^2)$ in all, which dominates on long series.
+<a href=#224 id=224 data-nosnippet>224</a>/// order found and the number of rows since it last grew. Rows never
+<a href=#225 id=225 data-nosnippet>225</a>/// increase, but can repeat: two maxima of one row can join the same line.
+<a href=#226 id=226 data-nosnippet>226</a></span><span class="kw">struct </span>RidgeLine {
+<a href=#227 id=227 data-nosnippet>227</a>    rows: Vec&lt;usize&gt;,
+<a href=#228 id=228 data-nosnippet>228</a>    cols: Vec&lt;usize&gt;,
+<a href=#229 id=229 data-nosnippet>229</a>    gap: usize,
+<a href=#230 id=230 data-nosnippet>230</a>}
+<a href=#231 id=231 data-nosnippet>231</a>
+<a href=#232 id=232 data-nosnippet>232</a><span class="doccomment">/// The number of peaks `scipy.signal.find_peaks_cwt(x, widths=1..=n,
+<a href=#233 id=233 data-nosnippet>233</a>/// wavelet=_ricker)` finds, with all its defaults.
+<a href=#234 id=234 data-nosnippet>234</a></span><span class="kw">fn </span>count_cwt_peaks(x: <span class="kw-2">&amp;</span>[f64], n: usize) -&gt; usize {
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="kw">let </span>len = x.len();
+<a href=#236 id=236 data-nosnippet>236</a>    <span class="kw">let </span>widths: Vec&lt;usize&gt; = (<span class="number">1</span>..=n).collect();
+<a href=#237 id=237 data-nosnippet>237</a>    <span class="comment">// scipy's _cwt: convolve(x, ricker(min(10 w, len), w)[::-1], mode="same"),
+<a href=#238 id=238 data-nosnippet>238</a>    // direct method (see NumberCwtPeaks' docs)
+<a href=#239 id=239 data-nosnippet>239</a>    </span><span class="kw">let </span>cwt: Vec&lt;Vec&lt;f64&gt;&gt; = widths
+<a href=#240 id=240 data-nosnippet>240</a>        .iter()
+<a href=#241 id=241 data-nosnippet>241</a>        .map(|<span class="kw-2">&amp;</span>w| {
+<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">let </span><span class="kw-2">mut </span>wavelet = ricker((<span class="number">10 </span>* w).min(len), w);
+<a href=#243 id=243 data-nosnippet>243</a>            wavelet.reverse();
+<a href=#244 id=244 data-nosnippet>244</a>            np_convolve(x, <span class="kw-2">&amp;</span>wavelet, <span class="bool-val">false</span>)
+<a href=#245 id=245 data-nosnippet>245</a>        })
+<a href=#246 id=246 data-nosnippet>246</a>        .collect();
+<a href=#247 id=247 data-nosnippet>247</a>    <span class="comment">// argrelmax along each row, mode "clip": the ends are never maxima
+<a href=#248 id=248 data-nosnippet>248</a>    </span><span class="kw">let </span>is_max = |row: <span class="kw-2">&amp;</span>[f64], i: usize| -&gt; bool {
+<a href=#249 id=249 data-nosnippet>249</a>        <span class="kw">let </span>prev = row[i.saturating_sub(<span class="number">1</span>)];
+<a href=#250 id=250 data-nosnippet>250</a>        <span class="kw">let </span>next = row[(i + <span class="number">1</span>).min(len - <span class="number">1</span>)];
+<a href=#251 id=251 data-nosnippet>251</a>        row[i] &gt; prev &amp;&amp; row[i] &gt; next
+<a href=#252 id=252 data-nosnippet>252</a>    };
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">let </span>max_cols: Vec&lt;Vec&lt;usize&gt;&gt; = cwt
+<a href=#254 id=254 data-nosnippet>254</a>        .iter()
+<a href=#255 id=255 data-nosnippet>255</a>        .map(|row| (<span class="number">0</span>..len).filter(|<span class="kw-2">&amp;</span>i| is_max(row, i)).collect())
+<a href=#256 id=256 data-nosnippet>256</a>        .collect();
+<a href=#257 id=257 data-nosnippet>257</a>
+<a href=#258 id=258 data-nosnippet>258</a>    <span class="comment">// _identify_ridge_lines(cwt, widths / 4, gap_thresh = ceil(widths[0]))
+<a href=#259 id=259 data-nosnippet>259</a>    </span><span class="kw">let </span><span class="prelude-val">Some</span>(start_row) = (<span class="number">0</span>..n).rev().find(|<span class="kw-2">&amp;</span>r| !max_cols[r].is_empty()) <span class="kw">else </span>{
+<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#261 id=261 data-nosnippet>261</a>    };
+<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">let </span>gap_thresh = <span class="number">1</span>; <span class="comment">// ceil(widths[0])
+<a href=#263 id=263 data-nosnippet>263</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>ridge_lines: Vec&lt;RidgeLine&gt; = max_cols[start_row]
+<a href=#264 id=264 data-nosnippet>264</a>        .iter()
+<a href=#265 id=265 data-nosnippet>265</a>        .map(|<span class="kw-2">&amp;</span>col| RidgeLine {
+<a href=#266 id=266 data-nosnippet>266</a>            rows: <span class="macro">vec!</span>[start_row],
+<a href=#267 id=267 data-nosnippet>267</a>            cols: <span class="macro">vec!</span>[col],
+<a href=#268 id=268 data-nosnippet>268</a>            gap: <span class="number">0</span>,
+<a href=#269 id=269 data-nosnippet>269</a>        })
+<a href=#270 id=270 data-nosnippet>270</a>        .collect();
+<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">let </span><span class="kw-2">mut </span>final_lines = Vec::new();
+<a href=#272 id=272 data-nosnippet>272</a>    <span class="kw">for </span>row <span class="kw">in </span>(<span class="number">0</span>..start_row).rev() {
+<a href=#273 id=273 data-nosnippet>273</a>        <span class="kw">let </span>max_distance = widths[row] <span class="kw">as </span>f64 / <span class="number">4.0</span>;
+<a href=#274 id=274 data-nosnippet>274</a>        <span class="kw">for </span>line <span class="kw">in </span>ridge_lines.iter_mut() {
+<a href=#275 id=275 data-nosnippet>275</a>            line.gap += <span class="number">1</span>;
+<a href=#276 id=276 data-nosnippet>276</a>        }
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="comment">// The lines' last columns at the start of the row, sorted, keeping
+<a href=#278 id=278 data-nosnippet>278</a>        // the first line at each column (np.argmin picks the first closest)
+<a href=#279 id=279 data-nosnippet>279</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>ends: Vec&lt;(usize, usize)&gt; = ridge_lines
+<a href=#280 id=280 data-nosnippet>280</a>            .iter()
+<a href=#281 id=281 data-nosnippet>281</a>            .enumerate()
+<a href=#282 id=282 data-nosnippet>282</a>            .map(|(i, l)| (<span class="kw-2">*</span>l.cols.last().unwrap(), i))
+<a href=#283 id=283 data-nosnippet>283</a>            .collect();
+<a href=#284 id=284 data-nosnippet>284</a>        ends.sort_unstable();
+<a href=#285 id=285 data-nosnippet>285</a>        ends.dedup_by_key(|e| e.<span class="number">0</span>);
+<a href=#286 id=286 data-nosnippet>286</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>col <span class="kw">in </span><span class="kw-2">&amp;</span>max_cols[row] {
+<a href=#287 id=287 data-nosnippet>287</a>            <span class="comment">// The closest line is at the nearest end column on either side;
+<a href=#288 id=288 data-nosnippet>288</a>            // on a tie in distance, the first line wins
+<a href=#289 id=289 data-nosnippet>289</a>            </span><span class="kw">let </span>p = ends.partition_point(|<span class="kw-2">&amp;</span>(c, <span class="kw">_</span>)| c &lt; col);
+<a href=#290 id=290 data-nosnippet>290</a>            <span class="kw">let </span>left = p.checked_sub(<span class="number">1</span>).map(|j| ends[j]);
+<a href=#291 id=291 data-nosnippet>291</a>            <span class="kw">let </span>right = ends.get(p).copied();
+<a href=#292 id=292 data-nosnippet>292</a>            <span class="kw">let </span>closest = [left, right]
+<a href=#293 id=293 data-nosnippet>293</a>                .into_iter()
+<a href=#294 id=294 data-nosnippet>294</a>                .flatten()
+<a href=#295 id=295 data-nosnippet>295</a>                .min_by_key(|<span class="kw-2">&amp;</span>(c, i)| (c.abs_diff(col), i))
+<a href=#296 id=296 data-nosnippet>296</a>                .filter(|<span class="kw-2">&amp;</span>(c, <span class="kw">_</span>)| c.abs_diff(col) <span class="kw">as </span>f64 &lt;= max_distance)
+<a href=#297 id=297 data-nosnippet>297</a>                .map(|(<span class="kw">_</span>, i)| i);
+<a href=#298 id=298 data-nosnippet>298</a>            <span class="kw">match </span>closest {
+<a href=#299 id=299 data-nosnippet>299</a>                <span class="prelude-val">Some</span>(i) =&gt; {
+<a href=#300 id=300 data-nosnippet>300</a>                    <span class="kw">let </span>line = <span class="kw-2">&amp;mut </span>ridge_lines[i];
+<a href=#301 id=301 data-nosnippet>301</a>                    line.cols.push(col);
+<a href=#302 id=302 data-nosnippet>302</a>                    line.rows.push(row);
+<a href=#303 id=303 data-nosnippet>303</a>                    line.gap = <span class="number">0</span>;
+<a href=#304 id=304 data-nosnippet>304</a>                }
+<a href=#305 id=305 data-nosnippet>305</a>                <span class="prelude-val">None </span>=&gt; ridge_lines.push(RidgeLine {
+<a href=#306 id=306 data-nosnippet>306</a>                    rows: <span class="macro">vec!</span>[row],
+<a href=#307 id=307 data-nosnippet>307</a>                    cols: <span class="macro">vec!</span>[col],
+<a href=#308 id=308 data-nosnippet>308</a>                    gap: <span class="number">0</span>,
+<a href=#309 id=309 data-nosnippet>309</a>                }),
+<a href=#310 id=310 data-nosnippet>310</a>            }
+<a href=#311 id=311 data-nosnippet>311</a>        }
+<a href=#312 id=312 data-nosnippet>312</a>        <span class="comment">// End lines that skipped too many rows, keeping the others in order
+<a href=#313 id=313 data-nosnippet>313</a>        </span><span class="kw">let </span>(ended, alive): (Vec&lt;<span class="kw">_</span>&gt;, Vec&lt;<span class="kw">_</span>&gt;) = std::mem::take(<span class="kw-2">&amp;mut </span>ridge_lines)
+<a href=#314 id=314 data-nosnippet>314</a>            .into_iter()
+<a href=#315 id=315 data-nosnippet>315</a>            .partition(|line| line.gap &gt; gap_thresh);
+<a href=#316 id=316 data-nosnippet>316</a>        final_lines.extend(ended);
+<a href=#317 id=317 data-nosnippet>317</a>        ridge_lines = alive;
+<a href=#318 id=318 data-nosnippet>318</a>    }
+<a href=#319 id=319 data-nosnippet>319</a>
+<a href=#320 id=320 data-nosnippet>320</a>    <span class="comment">// _filter_ridge_lines(cwt, lines, min_length = ceil(n / 4),
+<a href=#321 id=321 data-nosnippet>321</a>    // window_size = ceil(len / 20), min_snr = 1, noise_perc = 10)
+<a href=#322 id=322 data-nosnippet>322</a>    </span><span class="kw">let </span>min_length = (n <span class="kw">as </span>f64 / <span class="number">4.0</span>).ceil();
+<a href=#323 id=323 data-nosnippet>323</a>    <span class="kw">let </span>window_size = (len <span class="kw">as </span>f64 / <span class="number">20.0</span>).ceil() <span class="kw">as </span>usize;
+<a href=#324 id=324 data-nosnippet>324</a>    <span class="kw">let </span>(hf_window, odd) = (window_size / <span class="number">2</span>, window_size % <span class="number">2</span>);
+<a href=#325 id=325 data-nosnippet>325</a>    <span class="kw">let </span>row_one = <span class="kw-2">&amp;</span>cwt[<span class="number">0</span>];
+<a href=#326 id=326 data-nosnippet>326</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = Vec::new();
+<a href=#327 id=327 data-nosnippet>327</a>    <span class="kw">let </span><span class="kw-2">mut </span>noise = |ind: usize| {
+<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">let </span>start = ind.saturating_sub(hf_window);
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="kw">let </span>end = (ind + hf_window + odd).min(len);
+<a href=#330 id=330 data-nosnippet>330</a>        score_at_percentile(<span class="kw-2">&amp;</span>row_one[start..end], <span class="number">10.0</span>, <span class="kw-2">&amp;mut </span>buf)
+<a href=#331 id=331 data-nosnippet>331</a>    };
+<a href=#332 id=332 data-nosnippet>332</a>    final_lines
+<a href=#333 id=333 data-nosnippet>333</a>        .iter()
+<a href=#334 id=334 data-nosnippet>334</a>        .chain(ridge_lines.iter())
+<a href=#335 id=335 data-nosnippet>335</a>        .filter(|line| {
+<a href=#336 id=336 data-nosnippet>336</a>            <span class="kw">if </span>(line.rows.len() <span class="kw">as </span>f64) &lt; min_length {
+<a href=#337 id=337 data-nosnippet>337</a>                <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#338 id=338 data-nosnippet>338</a>            }
+<a href=#339 id=339 data-nosnippet>339</a>            <span class="comment">// scipy (&gt;= 1.18) sorts each line's points by row and tests the
+<a href=#340 id=340 data-nosnippet>340</a>            // first, a point in the line's lowest row. If two maxima of that
+<a href=#341 id=341 data-nosnippet>341</a>            // row joined the line, numpy's default argsort decides which,
+<a href=#342 id=342 data-nosnippet>342</a>            // and it is unstable on SIMD CPUs; tsfx takes the first found, as
+<a href=#343 id=343 data-nosnippet>343</a>            // a stable sort does. (scipy 1.17 tested the last point found.)
+<a href=#344 id=344 data-nosnippet>344</a>            </span><span class="kw">let </span>row = <span class="kw-2">*</span>line.rows.last().unwrap();
+<a href=#345 id=345 data-nosnippet>345</a>            <span class="kw">let </span>first = line.rows.iter().position(|<span class="kw-2">&amp;</span>r| r == row).unwrap();
+<a href=#346 id=346 data-nosnippet>346</a>            <span class="kw">let </span>col = line.cols[first];
+<a href=#347 id=347 data-nosnippet>347</a>            <span class="kw">let </span>snr = (cwt[row][col] / noise(col)).abs();
+<a href=#348 id=348 data-nosnippet>348</a>            <span class="comment">// NaN compares False, so a NaN SNR keeps the line
+<a href=#349 id=349 data-nosnippet>349</a>            </span>snr &gt;= <span class="number">1.0 </span>|| snr.is_nan()
+<a href=#350 id=350 data-nosnippet>350</a>        })
+<a href=#351 id=351 data-nosnippet>351</a>        .count()
+<a href=#352 id=352 data-nosnippet>352</a>}
+<a href=#353 id=353 data-nosnippet>353</a>
+<a href=#354 id=354 data-nosnippet>354</a><span class="doccomment">/// Number of CWT peaks feature.
+<a href=#355 id=355 data-nosnippet>355</a>///
+<a href=#356 id=356 data-nosnippet>356</a>/// The number of peaks of the series that are visible in its continuous
+<a href=#357 id=357 data-nosnippet>357</a>/// wavelet transform with the Ricker wavelet at widths $1, \dots, n$ and
+<a href=#358 id=358 data-nosnippet>358</a>/// have a high enough signal-to-noise ratio, as found by
+<a href=#359 id=359 data-nosnippet>359</a>/// `scipy.signal.find_peaks_cwt` with its defaults: local maxima of each
+<a href=#360 id=360 data-nosnippet>360</a>/// width's transform are joined into ridge lines across widths (from the
+<a href=#361 id=361 data-nosnippet>361</a>/// largest width with a maximum down to width 1, joining a maximum to the
+<a href=#362 id=362 data-nosnippet>362</a>/// closest line within $w / 4$ columns and ending lines that skip more than
+<a href=#363 id=363 data-nosnippet>363</a>/// one width); a line counts if it spans at least $\lceil n / 4 \rceil$
+<a href=#364 id=364 data-nosnippet>364</a>/// widths and its width-1 coefficient is at least the 10th percentile of
+<a href=#365 id=365 data-nosnippet>365</a>/// the width-1 coefficients in a window of $\lceil \text{len} / 20 \rceil$
+<a href=#366 id=366 data-nosnippet>366</a>/// around it (in absolute ratio).
+<a href=#367 id=367 data-nosnippet>367</a>///
+<a href=#368 id=368 data-nosnippet>368</a>/// # Parameters
+<a href=#369 id=369 data-nosnippet>369</a>/// - `n`: the largest width. Config:
+<a href=#370 id=370 data-nosnippet>370</a>///   `[number_cwt_peaks] parameters = [{ n = 1 }, ...]`; one column per entry.
+<a href=#371 id=371 data-nosnippet>371</a>///
+<a href=#372 id=372 data-nosnippet>372</a>/// # Output column
+<a href=#373 id=373 data-nosnippet>373</a>/// `{name}__number_cwt_peaks__n_{n}`
+<a href=#374 id=374 data-nosnippet>374</a>///
+<a href=#375 id=375 data-nosnippet>375</a>/// # Edge cases
+<a href=#376 id=376 data-nosnippet>376</a>/// - Nulls are dropped first; a group with no non-null values gives NaN.
+<a href=#377 id=377 data-nosnippet>377</a>/// - A series with fewer than 3 values gives 0 (no interior maxima).
+<a href=#378 id=378 data-nosnippet>378</a>/// - NaN and $\pm\infty$ spread to the transform coefficients whose window
+<a href=#379 id=379 data-nosnippet>379</a>///   covers them; NaN coefficients are never maxima, and a NaN
+<a href=#380 id=380 data-nosnippet>380</a>///   signal-to-noise ratio keeps a line, as in scipy.
+<a href=#381 id=381 data-nosnippet>381</a>/// - scipy picks direct or FFT convolution by an operation-count heuristic.
+<a href=#382 id=382 data-nosnippet>382</a>///   tsfx always convolves directly, which is what scipy picks unless the
+<a href=#383 id=383 data-nosnippet>383</a>///   wavelet is very long (widths of roughly 30 and more on long series);
+<a href=#384 id=384 data-nosnippet>384</a>///   there, scipy's FFT rounding noise (and its spreading of NaN or
+<a href=#385 id=385 data-nosnippet>385</a>///   $\pm\infty$ over the whole row) can change the count.
+<a href=#386 id=386 data-nosnippet>386</a>/// - **Deliberate deviation from tsfresh:** where two neighbouring
+<a href=#387 id=387 data-nosnippet>387</a>///   coefficients are tied in real arithmetic, rounding decides which is the
+<a href=#388 id=388 data-nosnippet>388</a>///   maximum. tsfx uses one portable convolution and the standard `exp`, so
+<a href=#389 id=389 data-nosnippet>389</a>///   its counts are the same on every platform, while numpy's rounding (and
+<a href=#390 id=390 data-nosnippet>390</a>///   so tsfresh's count) depends on its BLAS and CPU. Ties are common for
+<a href=#391 id=391 data-nosnippet>391</a>///   smooth series symmetric about a point between two samples: a Gaussian
+<a href=#392 id=392 data-nosnippet>392</a>///   bump centred on a sample counts 2 peaks with `n = 5`, tsfresh 1.
+<a href=#393 id=393 data-nosnippet>393</a>///   Irregular series are not affected.
 <a href=#394 id=394 data-nosnippet>394</a>///
-<a href=#395 id=395 data-nosnippet>395</a>/// # tsfresh
-<a href=#396 id=396 data-nosnippet>396</a>/// `feature_calculators.number_cwt_peaks` (v0.21.2).
-<a href=#397 id=397 data-nosnippet>397</a></span><span class="kw">pub struct </span>NumberCwtPeaks {
-<a href=#398 id=398 data-nosnippet>398</a>    <span class="kw">pub </span>ns: Vec&lt;usize&gt;,
-<a href=#399 id=399 data-nosnippet>399</a>}
-<a href=#400 id=400 data-nosnippet>400</a>
-<a href=#401 id=401 data-nosnippet>401</a><span class="kw">impl </span>Kernel <span class="kw">for </span>NumberCwtPeaks {
-<a href=#402 id=402 data-nosnippet>402</a>    <span class="kw">fn </span>names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="self">self</span>.ns
-<a href=#404 id=404 data-nosnippet>404</a>            .iter()
-<a href=#405 id=405 data-nosnippet>405</a>            .map(|n| <span class="macro">format!</span>(<span class="string">"number_cwt_peaks__n_{n}"</span>))
-<a href=#406 id=406 data-nosnippet>406</a>            .collect()
-<a href=#407 id=407 data-nosnippet>407</a>    }
-<a href=#408 id=408 data-nosnippet>408</a>
-<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">fn </span>compute(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>GroupContext, out: <span class="kw-2">&amp;mut </span>Vec&lt;f64&gt;) {
-<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">let </span>x = ctx.values();
-<a href=#411 id=411 data-nosnippet>411</a>        out.extend(<span class="self">self</span>.ns.iter().map(|<span class="kw-2">&amp;</span>n| count_cwt_peaks(x, n) <span class="kw">as </span>f64));
-<a href=#412 id=412 data-nosnippet>412</a>    }
-<a href=#413 id=413 data-nosnippet>413</a>}
+<a href=#395 id=395 data-nosnippet>395</a>/// # Cost
+<a href=#396 id=396 data-nosnippet>396</a>/// $O(\text{len} \cdot n^2)$ for the transform and $O(n \cdot \text{len}
+<a href=#397 id=397 data-nosnippet>397</a>/// \log \text{len})$ to join ridge lines, plus a selection over a window of
+<a href=#398 id=398 data-nosnippet>398</a>/// $\lceil \text{len} / 20 \rceil$ for each ridge line's noise: up to
+<a href=#399 id=399 data-nosnippet>399</a>/// $O(\text{len}^2)$ in all, which dominates on long series.
+<a href=#400 id=400 data-nosnippet>400</a>///
+<a href=#401 id=401 data-nosnippet>401</a>/// # tsfresh
+<a href=#402 id=402 data-nosnippet>402</a>/// `feature_calculators.number_cwt_peaks` (v0.21.2).
+<a href=#403 id=403 data-nosnippet>403</a></span><span class="kw">pub struct </span>NumberCwtPeaks {
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">pub </span>ns: Vec&lt;usize&gt;,
+<a href=#405 id=405 data-nosnippet>405</a>}
+<a href=#406 id=406 data-nosnippet>406</a>
+<a href=#407 id=407 data-nosnippet>407</a><span class="kw">impl </span>Kernel <span class="kw">for </span>NumberCwtPeaks {
+<a href=#408 id=408 data-nosnippet>408</a>    <span class="kw">fn </span>names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;String&gt; {
+<a href=#409 id=409 data-nosnippet>409</a>        <span class="self">self</span>.ns
+<a href=#410 id=410 data-nosnippet>410</a>            .iter()
+<a href=#411 id=411 data-nosnippet>411</a>            .map(|n| <span class="macro">format!</span>(<span class="string">"number_cwt_peaks__n_{n}"</span>))
+<a href=#412 id=412 data-nosnippet>412</a>            .collect()
+<a href=#413 id=413 data-nosnippet>413</a>    }
 <a href=#414 id=414 data-nosnippet>414</a>
-<a href=#415 id=415 data-nosnippet>415</a><span class="attr">#[cfg(test)]
-<a href=#416 id=416 data-nosnippet>416</a></span><span class="kw">mod </span>tests {
-<a href=#417 id=417 data-nosnippet>417</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#418 id=418 data-nosnippet>418</a>
-<a href=#419 id=419 data-nosnippet>419</a>    <span class="attr">#[test]
-<a href=#420 id=420 data-nosnippet>420</a>    </span><span class="kw">fn </span>test_np_convolve_same_length() {
-<a href=#421 id=421 data-nosnippet>421</a>        <span class="kw">let </span>a = [<span class="number">1.0</span>, <span class="number">2.0</span>, <span class="number">3.0</span>, <span class="number">4.0</span>, <span class="number">5.0</span>];
-<a href=#422 id=422 data-nosnippet>422</a>        <span class="kw">let </span>v = [<span class="number">1.0</span>, <span class="number">0.0</span>, -<span class="number">1.0</span>];
-<a href=#423 id=423 data-nosnippet>423</a>        <span class="macro">assert_eq!</span>(
-<a href=#424 id=424 data-nosnippet>424</a>            np_convolve(<span class="kw-2">&amp;</span>a, <span class="kw-2">&amp;</span>v, <span class="bool-val">true</span>),
-<a href=#425 id=425 data-nosnippet>425</a>            <span class="macro">vec!</span>[<span class="number">1.0</span>, <span class="number">2.0</span>, <span class="number">2.0</span>, <span class="number">2.0</span>, <span class="number">2.0</span>, -<span class="number">4.0</span>, -<span class="number">5.0</span>]
-<a href=#426 id=426 data-nosnippet>426</a>        );
-<a href=#427 id=427 data-nosnippet>427</a>        <span class="macro">assert_eq!</span>(np_convolve(<span class="kw-2">&amp;</span>a, <span class="kw-2">&amp;</span>v, <span class="bool-val">false</span>), <span class="macro">vec!</span>[<span class="number">2.0</span>, <span class="number">2.0</span>, <span class="number">2.0</span>, <span class="number">2.0</span>, -<span class="number">4.0</span>]);
-<a href=#428 id=428 data-nosnippet>428</a>        <span class="comment">// longer kernel: inputs are swapped
-<a href=#429 id=429 data-nosnippet>429</a>        </span><span class="macro">assert_eq!</span>(np_convolve(<span class="kw-2">&amp;</span>v, <span class="kw-2">&amp;</span>a, <span class="bool-val">true</span>), np_convolve(<span class="kw-2">&amp;</span>a, <span class="kw-2">&amp;</span>v, <span class="bool-val">true</span>));
-<a href=#430 id=430 data-nosnippet>430</a>    }
-<a href=#431 id=431 data-nosnippet>431</a>
-<a href=#432 id=432 data-nosnippet>432</a>    <span class="attr">#[test]
-<a href=#433 id=433 data-nosnippet>433</a>    </span><span class="kw">fn </span>test_cwt_peaks_of_bump() {
-<a href=#434 id=434 data-nosnippet>434</a>        <span class="comment">// Off-centre, so no two neighbouring coefficients are tied
-<a href=#435 id=435 data-nosnippet>435</a>        </span><span class="kw">let </span>x: Vec&lt;f64&gt; = (<span class="number">0</span>..<span class="number">50</span>)
-<a href=#436 id=436 data-nosnippet>436</a>            .map(|i| (-((i <span class="kw">as </span>f64 - <span class="number">25.3</span>).powi(<span class="number">2</span>)) / <span class="number">20.0</span>).exp())
-<a href=#437 id=437 data-nosnippet>437</a>            .collect();
-<a href=#438 id=438 data-nosnippet>438</a>        <span class="macro">assert_eq!</span>(count_cwt_peaks(<span class="kw-2">&amp;</span>x, <span class="number">1</span>), <span class="number">1</span>);
-<a href=#439 id=439 data-nosnippet>439</a>        <span class="macro">assert_eq!</span>(count_cwt_peaks(<span class="kw-2">&amp;</span>x, <span class="number">5</span>), <span class="number">1</span>);
-<a href=#440 id=440 data-nosnippet>440</a>        <span class="macro">assert_eq!</span>(count_cwt_peaks(<span class="kw-2">&amp;</span>[<span class="number">1.0</span>, <span class="number">2.0</span>], <span class="number">5</span>), <span class="number">0</span>);
-<a href=#441 id=441 data-nosnippet>441</a>    }
-<a href=#442 id=442 data-nosnippet>442</a>}
+<a href=#415 id=415 data-nosnippet>415</a>    <span class="kw">fn </span>compute(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>GroupContext, out: <span class="kw-2">&amp;mut </span>Vec&lt;f64&gt;) {
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">let </span>x = ctx.values();
+<a href=#417 id=417 data-nosnippet>417</a>        out.extend(<span class="self">self</span>.ns.iter().map(|<span class="kw-2">&amp;</span>n| count_cwt_peaks(x, n) <span class="kw">as </span>f64));
+<a href=#418 id=418 data-nosnippet>418</a>    }
+<a href=#419 id=419 data-nosnippet>419</a>}
+<a href=#420 id=420 data-nosnippet>420</a>
+<a href=#421 id=421 data-nosnippet>421</a><span class="attr">#[cfg(test)]
+<a href=#422 id=422 data-nosnippet>422</a></span><span class="kw">mod </span>tests {
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#424 id=424 data-nosnippet>424</a>
+<a href=#425 id=425 data-nosnippet>425</a>    <span class="attr">#[test]
+<a href=#426 id=426 data-nosnippet>426</a>    </span><span class="kw">fn </span>test_np_convolve_same_length() {
+<a href=#427 id=427 data-nosnippet>427</a>        <span class="kw">let </span>a = [<span class="number">1.0</span>, <span class="number">2.0</span>, <span class="number">3.0</span>, <span class="number">4.0</span>, <span class="number">5.0</span>];
+<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">let </span>v = [<span class="number">1.0</span>, <span class="number">0.0</span>, -<span class="number">1.0</span>];
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="macro">assert_eq!</span>(
+<a href=#430 id=430 data-nosnippet>430</a>            np_convolve(<span class="kw-2">&amp;</span>a, <span class="kw-2">&amp;</span>v, <span class="bool-val">true</span>),
+<a href=#431 id=431 data-nosnippet>431</a>            <span class="macro">vec!</span>[<span class="number">1.0</span>, <span class="number">2.0</span>, <span class="number">2.0</span>, <span class="number">2.0</span>, <span class="number">2.0</span>, -<span class="number">4.0</span>, -<span class="number">5.0</span>]
+<a href=#432 id=432 data-nosnippet>432</a>        );
+<a href=#433 id=433 data-nosnippet>433</a>        <span class="macro">assert_eq!</span>(np_convolve(<span class="kw-2">&amp;</span>a, <span class="kw-2">&amp;</span>v, <span class="bool-val">false</span>), <span class="macro">vec!</span>[<span class="number">2.0</span>, <span class="number">2.0</span>, <span class="number">2.0</span>, <span class="number">2.0</span>, -<span class="number">4.0</span>]);
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="comment">// longer kernel: inputs are swapped
+<a href=#435 id=435 data-nosnippet>435</a>        </span><span class="macro">assert_eq!</span>(np_convolve(<span class="kw-2">&amp;</span>v, <span class="kw-2">&amp;</span>a, <span class="bool-val">true</span>), np_convolve(<span class="kw-2">&amp;</span>a, <span class="kw-2">&amp;</span>v, <span class="bool-val">true</span>));
+<a href=#436 id=436 data-nosnippet>436</a>    }
+<a href=#437 id=437 data-nosnippet>437</a>
+<a href=#438 id=438 data-nosnippet>438</a>    <span class="attr">#[test]
+<a href=#439 id=439 data-nosnippet>439</a>    </span><span class="kw">fn </span>test_cwt_peaks_of_bump() {
+<a href=#440 id=440 data-nosnippet>440</a>        <span class="comment">// Off-centre, so no two neighbouring coefficients are tied
+<a href=#441 id=441 data-nosnippet>441</a>        </span><span class="kw">let </span>x: Vec&lt;f64&gt; = (<span class="number">0</span>..<span class="number">50</span>)
+<a href=#442 id=442 data-nosnippet>442</a>            .map(|i| (-((i <span class="kw">as </span>f64 - <span class="number">25.3</span>).powi(<span class="number">2</span>)) / <span class="number">20.0</span>).exp())
+<a href=#443 id=443 data-nosnippet>443</a>            .collect();
+<a href=#444 id=444 data-nosnippet>444</a>        <span class="macro">assert_eq!</span>(count_cwt_peaks(<span class="kw-2">&amp;</span>x, <span class="number">1</span>), <span class="number">1</span>);
+<a href=#445 id=445 data-nosnippet>445</a>        <span class="macro">assert_eq!</span>(count_cwt_peaks(<span class="kw-2">&amp;</span>x, <span class="number">5</span>), <span class="number">1</span>);
+<a href=#446 id=446 data-nosnippet>446</a>        <span class="macro">assert_eq!</span>(count_cwt_peaks(<span class="kw-2">&amp;</span>[<span class="number">1.0</span>, <span class="number">2.0</span>], <span class="number">5</span>), <span class="number">0</span>);
+<a href=#447 id=447 data-nosnippet>447</a>    }
+<a href=#448 id=448 data-nosnippet>448</a>
+<a href=#449 id=449 data-nosnippet>449</a>    <span class="attr">#[test]
+<a href=#450 id=450 data-nosnippet>450</a>    </span><span class="kw">fn </span>test_cwt_peaks_two_maxima_join_one_line() {
+<a href=#451 id=451 data-nosnippet>451</a>        <span class="comment">// Width 4's maxima at columns 3 and 5 both join the line from
+<a href=#452 id=452 data-nosnippet>452</a>        // (width 5, column 4). scipy &gt;= 1.18 sorts the line's points by width
+<a href=#453 id=453 data-nosnippet>453</a>        // and tests the signal-to-noise ratio at column 3, which drops the
+<a href=#454 id=454 data-nosnippet>454</a>        // line; scipy 1.17 tested column 5 and kept it (3 peaks)
+<a href=#455 id=455 data-nosnippet>455</a>        </span><span class="kw">let </span>x = [<span class="number">0.0</span>, <span class="number">1.0</span>, <span class="number">0.0</span>, <span class="number">0.0</span>, <span class="number">0.0</span>, <span class="number">0.0</span>, <span class="number">0.0</span>, <span class="number">1.0</span>, <span class="number">0.0</span>, <span class="number">0.0</span>, <span class="number">0.0</span>];
+<a href=#456 id=456 data-nosnippet>456</a>        <span class="macro">assert_eq!</span>(count_cwt_peaks(<span class="kw-2">&amp;</span>x, <span class="number">5</span>), <span class="number">2</span>);
+<a href=#457 id=457 data-nosnippet>457</a>        <span class="macro">assert_eq!</span>(count_cwt_peaks(<span class="kw-2">&amp;</span>x, <span class="number">10</span>), <span class="number">2</span>);
+<a href=#458 id=458 data-nosnippet>458</a>    }
+<a href=#459 id=459 data-nosnippet>459</a>}
 </code></pre></div></section></main></body></html>
