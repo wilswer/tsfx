@@ -22,6 +22,9 @@ permissions:
 # 3.15.0's Windows x86 build failed to start in the toolcache (abi3 wheels do
 # not depend on the build interpreter)
 
+# astral-sh/setup-uv publishes no major (@v10) or minor tags since v8, only
+# immutable full-version tags: bump it by its full version
+
 jobs:
   test:
     name: Test
@@ -30,21 +33,21 @@ jobs:
     # the same commit, so skip the redundant branch run for it.
     if: ${{ startsWith(github.ref, 'refs/tags/') || !startsWith(github.event.head_commit.message, 'Bump version') }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
       - uses: Swatinem/rust-cache@v2
       - name: Run cargo test
         run: cargo test --release
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.3.3
       # Built on the runner rather than in a manylinux container, so it reuses
       # the cached target directory; this wheel is only tested, not released
       - name: Build wheel
         run: uvx maturin build --release --out dist
       - name: Upload test wheel
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: test-wheel
           path: dist
@@ -66,13 +69,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
-      - uses: actions/download-artifact@v7
+        uses: astral-sh/setup-uv@v10.3.3
+      - uses: actions/download-artifact@v8
         with:
           name: test-wheel
           path: dist
@@ -88,8 +91,8 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.ref, 'refs/tags/') || !startsWith(github.event.head_commit.message, 'Bump version') }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
       - name: Install rustfmt and clippy
@@ -100,13 +103,13 @@ jobs:
       - name: clippy
         run: cargo clippy -- -D warnings
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.3.3
       - name: ruff
         run: |
-          uvx ruff@0.15.18 check python
-          uvx ruff@0.15.18 format --check .
+          uvx ruff@0.17.4 check python
+          uvx ruff@0.17.4 format --check .
       - name: mypy
-        run: uv run --no-project --with mypy==2.1.0 --with polars==2.1.0 mypy python/tsfx
+        run: uv run --no-project --with mypy==2.4.1 --with polars==2.1.0 mypy python/tsfx
 
   # Built on every run so broken docs fail the pull request; deployed by
   # deploy-docs after a release
@@ -115,8 +118,8 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.ref, 'refs/tags/') || !startsWith(github.event.head_commit.message, 'Bump version') }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
       - uses: Swatinem/rust-cache@v2
@@ -139,7 +142,7 @@ jobs:
           mkdir -p site/rust
           cp -r target/doc/* site/rust/
       - name: Upload site
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: docs-site
           path: site
@@ -156,8 +159,8 @@ jobs:
           - runner: ubuntu-22.04
             target: aarch64
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
       - name: Build wheels
@@ -172,7 +175,7 @@ jobs:
           sccache: false
           manylinux: auto
       - name: Upload wheels
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-linux-${{ matrix.platform.target }}
           path: dist
@@ -189,8 +192,8 @@ jobs:
           - runner: ubuntu-22.04
             target: aarch64
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
       - name: Build wheels
@@ -204,7 +207,7 @@ jobs:
           sccache: false
           manylinux: musllinux_1_2
       - name: Upload wheels
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-musllinux-${{ matrix.platform.target }}
           path: dist
@@ -223,8 +226,8 @@ jobs:
             target: aarch64
             python_arch: arm64
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           architecture: ${{ matrix.platform.python_arch }}
@@ -235,7 +238,7 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Upload wheels
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-windows-${{ matrix.platform.target }}
           path: dist
@@ -252,8 +255,8 @@ jobs:
           - runner: macos-latest
             target: aarch64
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
       - name: Build wheels
@@ -263,7 +266,7 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
       - name: Upload wheels
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-macos-${{ matrix.platform.target }}
           path: dist
@@ -273,14 +276,14 @@ jobs:
     needs: test
     if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
           args: --out dist
       - name: Upload sdist
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: dist
@@ -301,16 +304,16 @@ jobs:
       # Used to generate artifact attestation
       attestations: write
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest@v4
         with:
           subject-path: 'wheels-*/*'
       - name: Install uv
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.3.3
       - name: Publish to PyPI
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         run: uv publish --trusted-publishing always 'wheels-*/*'
@@ -323,7 +326,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: docs-site
           path: site
