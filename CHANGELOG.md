@@ -12,8 +12,10 @@ All notable changes to TSFX are documented here.
   may affect your own polars code.
 - Feature extraction still runs on polars' in-memory engine. Polars 2 made the
   streaming engine the default for lazy queries, which made tsfx 6-28% slower
-  on the stocks benchmarks; collecting in memory keeps it about as fast as with
-  polars 1.44. Very small inputs (a few rows) take 2-3 ms longer per call.
+  on the stocks benchmarks; collecting in memory recovers part of that. From
+  Python, extraction is still 12-22% slower than with polars 1.44 on the stocks
+  benchmarks (about 20 ms of it is a slower `import polars`), and very small
+  inputs (a few rows) take 2-3 ms longer per call.
 
 ### Fixed
 
