@@ -5,7 +5,7 @@ use polars::prelude::*;
 use tsfx::extract::{DynamicGroupBySettings, ExtractionSettings, FeatureSetting, lazy_feature_df};
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let df = LazyCsvReader::new("test_data/all_stocks_5yr.csv".into())
+    let df = LazyCsvReader::new("test_dataset/all_stocks_5yr.csv".into())
         .finish()
         .unwrap()
         .drop_nulls(None);
@@ -28,14 +28,14 @@ fn criterion_benchmark(c: &mut Criterion) {
                         time_col: "date".to_string(),
                         every: "1y".to_string(),
                         period: "1y".to_string(),
-                        offset: "0".to_string(),
+                        offset: "0y".to_string(),
                         datetime_format: Some("%Y-%m-%d".to_string()),
                     }),
                     scaling: None,
                 },
             )
             .unwrap()
-            .collect()
+            .collect_with_engine(Engine::InMemory)
             .unwrap()
         })
     });

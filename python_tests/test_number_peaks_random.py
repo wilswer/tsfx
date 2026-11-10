@@ -12,7 +12,7 @@ tsfresh_fc = pytest.importorskip("tsfresh.feature_extraction.feature_calculators
 np = pytest.importorskip("numpy")
 
 NS = [1, 3, 5, 10, 50]
-CONFIG = "./python_tests/data/.tsfx-config-number-peaks.toml"
+CONFIG = "./python_tests/fixtures/.tsfx-config-number-peaks.toml"
 
 
 def _series(rng: random.Random) -> list[float]:

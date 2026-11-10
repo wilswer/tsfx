@@ -21,7 +21,7 @@ pyo3 = { version = "0.29", features = ["abi3-py311"] }
 chrono = "0.4.42"
 csv = "1.3"
 ndarray = "0.17"
-polars = { git = "https://github.com/pola-rs/polars.git", rev = "1bd8ec12f42d40fcec62badf32ef2177d2377d8d", features = [
+polars = { git = "https://github.com/pola-rs/polars.git", rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92", features = [
   "polars-io",
   "lazy",
   "csv",
@@ -37,8 +37,8 @@ polars = { git = "https://github.com/pola-rs/polars.git", rev = "1bd8ec12f42d40f
   "abs",
   "object",
 ] }
-pyo3-polars = { git = "https://github.com/pola-rs/polars.git", rev = "1bd8ec12f42d40fcec62badf32ef2177d2377d8d", features = ["lazy", "dtype-struct"] }
-itertools = "0.14"
+pyo3-polars = { git = "https://github.com/pola-rs/polars.git", rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92", features = ["lazy", "dtype-struct"] }
+itertools = "0.15"
 thiserror = "2"
 anyhow = "1"
 rustfft = "6.4.1"
@@ -63,3 +63,10 @@ strip = true
 # Benches inherit the release profile; keep their symbols for profiling
 [profile.bench]
 strip = false
+
+# Polars >= 2.0 builds against pola-rs's hashbrown fork (HashTable::prefetch_*,
+# rust-lang/hashbrown#727) through its own [patch.crates-io]. Cargo applies
+# [patch] only in the root workspace, so a git dependent of polars has to repeat
+# it. Keep the rev in step with polars' Cargo.toml when bumping the polars rev.
+[patch.crates-io]
+hashbrown = { git = "https://github.com/pola-rs/hashbrown", rev = "d76a6f81abd8f388676aff15068236a8d21c7e1a" }

@@ -137,6 +137,7 @@ from tsfx import (
     FeatureSetting,
     extract_features,
 )
+
 tdf = pl.DataFrame(
     {
         "id": ["a", "a", "a", "b", "b", "b", "c", "c", "c"],

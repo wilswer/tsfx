@@ -178,7 +178,7 @@ tolkai_stuff
 *.bak
 pyrightconfig.json
 .zed/
-test_data/measurements.txt
+test_dataset/measurements.txt
 
 # Local tooling state
 .vibe-wise/

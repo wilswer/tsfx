@@ -2,6 +2,42 @@
 
 All notable changes to TSFX are documented here.
 
+## Unreleased
+
+### Changed
+
+- **Built on polars 2.1** (was 1.44.2): the package now requires
+  `polars==2.1.0`, so installing this tsfx upgrades polars. See polars'
+  [upgrade guide](https://docs.pola.rs/releases/upgrade/2/) for changes that
+  may affect your own polars code.
+- Feature extraction still runs on polars' in-memory engine. Polars 2 made the
+  streaming engine the default for lazy queries, which made tsfx 6-28% slower
+  on the stocks benchmarks; collecting in memory recovers part of that. From
+  Python, extraction is still 12-22% slower than with polars 1.44 on the stocks
+  benchmarks (about 20 ms of it is a slower `import polars`), and very small
+  inputs (a few rows) take 2-3 ms longer per call.
+- **`skewness` and `kurtosis` follow pandas 3.1**, as tsfresh does with it: a
+  constant series gives NaN instead of 0, and a series that differs from a
+  constant only in its last bits gets its value instead of 0 (pandas 3.0
+  treated such rounding noise as 0). tsfx now computes the moments as pandas
+  3.1 does, so both features match it bit for bit on x86_64. If your models
+  need 0 for constant series, fill the NaN (`fill_nan(0)`).
+- **`number_cwt_peaks` follows scipy 1.18**, which fixed how
+  `find_peaks_cwt` sorts the points of a ridge line. When two maxima of one
+  width join the same line, its signal-to-noise test now uses the first of
+  them, so such series can count one peak fewer. (scipy's own choice there
+  depends on numpy's sort order on the CPU; tsfx takes the first point found.)
+  The tsfresh fuzz tests in CI now pin numpy 2.5.4, pandas 3.1.1, scipy 1.18.1
+  and scikit-learn 1.9.1.
+
+### Fixed
+
+- **An invalid `every`, `period` or `offset` in `DynamicGroupBySettings`
+  raises `ValueError`** naming the field and the string (for example
+  `offset="0"`, which lacks a unit), instead of a Rust panic that reached
+  Python as `PanicException`, a `BaseException` that `except Exception` does
+  not catch.
+
 ## 0.8.0 (2026-10-16)
 
 ### Added

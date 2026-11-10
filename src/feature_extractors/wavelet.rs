@@ -221,7 +221,8 @@ fn score_at_percentile(values: &[f64], per: f64, buf: &mut Vec<f64>) -> f64 {
 }
 
 /// One ridge line of `_identify_ridge_lines`: its rows and columns in the
-/// order found (rows descending) and the number of rows since it last grew.
+/// order found and the number of rows since it last grew. Rows never
+/// increase, but can repeat: two maxima of one row can join the same line.
 struct RidgeLine {
     rows: Vec<usize>,
     cols: Vec<usize>,
@@ -335,9 +336,14 @@ fn count_cwt_peaks(x: &[f64], n: usize) -> usize {
             if (line.rows.len() as f64) < min_length {
                 return false;
             }
-            // scipy reorders each line's points by row; the first point is
-            // then the last one found (the line's lowest row)
-            let (row, col) = (*line.rows.last().unwrap(), *line.cols.last().unwrap());
+            // scipy (>= 1.18) sorts each line's points by row and tests the
+            // first, a point in the line's lowest row. If two maxima of that
+            // row joined the line, numpy's default argsort decides which,
+            // and it is unstable on SIMD CPUs; tsfx takes the first found, as
+            // a stable sort does. (scipy 1.17 tested the last point found.)
+            let row = *line.rows.last().unwrap();
+            let first = line.rows.iter().position(|&r| r == row).unwrap();
+            let col = line.cols[first];
             let snr = (cwt[row][col] / noise(col)).abs();
             // NaN compares False, so a NaN SNR keeps the line
             snr >= 1.0 || snr.is_nan()
@@ -438,5 +444,16 @@ mod tests {
         assert_eq!(count_cwt_peaks(&x, 1), 1);
         assert_eq!(count_cwt_peaks(&x, 5), 1);
         assert_eq!(count_cwt_peaks(&[1.0, 2.0], 5), 0);
+    }
+
+    #[test]
+    fn test_cwt_peaks_two_maxima_join_one_line() {
+        // Width 4's maxima at columns 3 and 5 both join the line from
+        // (width 5, column 4). scipy >= 1.18 sorts the line's points by width
+        // and tests the signal-to-noise ratio at column 3, which drops the
+        // line; scipy 1.17 tested column 5 and kept it (3 peaks)
+        let x = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0];
+        assert_eq!(count_cwt_peaks(&x, 5), 2);
+        assert_eq!(count_cwt_peaks(&x, 10), 2);
     }
 }

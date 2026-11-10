@@ -5,7 +5,9 @@ pub mod scaling;
 pub mod utils;
 
 use error::ExtractionError;
-use extract::{DynamicGroupBySettings, ExtractionSettings, FeatureSetting, lazy_feature_df};
+use extract::{
+    DynamicGroupBySettings, ExtractionSettings, FeatureSetting, collect_in_memory, lazy_feature_df,
+};
 use polars::prelude::IntoLazy;
 use pyo3::prelude::*;
 use pyo3::types::PyType;
@@ -230,9 +232,7 @@ fn extract_features(
     let lf = lf.into();
     let settings = settings.into();
     let lf = if !streaming {
-        lazy_feature_df(lf, settings)?
-            .collect()
-            .map_err(ExtractionError::PolarsError)?
+        collect_in_memory(lazy_feature_df(lf, settings)?).map_err(ExtractionError::PolarsError)?
     } else {
         lazy_feature_df(lf, settings)?
             .with_streaming(true)
@@ -250,8 +250,7 @@ fn extract_features(
 #[pyfunction]
 #[pyo3(signature = (df, settings))]
 fn extract_features_df(df: PyDataFrame, settings: PyExtractionSettings) -> PyResult<PyDataFrame> {
-    let df = lazy_feature_df(df.0.lazy(), settings.into())?
-        .collect()
+    let df = collect_in_memory(lazy_feature_df(df.0.lazy(), settings.into())?)
         .map_err(ExtractionError::PolarsError)?;
     Ok(PyDataFrame(df))
 }

@@ -33,6 +33,22 @@ pub struct ExtractionSettings {
     pub scaling: Option<Scaling>,
 }
 
+/// Collect `lf` on the in-memory engine, as `collect()` did before polars 2.0.
+/// Since 2.0 a plain `collect()` runs lazy queries on the streaming engine,
+/// which costs tsfx more per query and per group.
+pub fn collect_in_memory(lf: LazyFrame) -> PolarsResult<DataFrame> {
+    Ok(lf.collect_with_engine(Engine::InMemory)?.unwrap_single())
+}
+
+/// Parse the `field` duration of the dynamic group-by settings. An invalid
+/// string is a settings error (a ValueError in Python) rather than the panic
+/// of `Duration::parse`.
+fn parse_window_duration(field: &str, value: &str) -> Result<Duration, ExtractionError> {
+    Duration::try_parse(value).map_err(|e| {
+        ExtractionError::InvalidSettings(format!("invalid {field} duration {value:?}: {e}"))
+    })
+}
+
 pub fn lazy_feature_df(
     df: LazyFrame,
     opts: ExtractionSettings,
@@ -67,28 +83,36 @@ pub fn lazy_feature_df(
             &grouping_cols,
             DynamicGroupOptions {
                 index_column: dynamic_settings.time_col.into(),
-                every: Duration::parse(&dynamic_settings.every),
-                period: Duration::parse(&dynamic_settings.period),
-                offset: Duration::parse(&dynamic_settings.offset),
+                every: parse_window_duration("every", &dynamic_settings.every)?,
+                period: parse_window_duration("period", &dynamic_settings.period)?,
+                offset: parse_window_duration("offset", &dynamic_settings.offset)?,
                 ..Default::default()
             },
         )
     } else {
         df.select(&selected_cols).group_by(&grouping_cols)
     };
-    let mut fdf = gdf.agg(features.aggregations).collect()?;
+    let mut fdf = collect_in_memory(gdf.agg(features.aggregations))?;
     for (column, plan) in &features.kernels {
         plan.unpack(&mut fdf, column)?;
     }
+    // Scale in memory too, whatever engine collects the result: the streaming
+    // engine merges a column's partial means and variances in thread order, so
+    // its scaled features differ in the last bits from run to run
     Ok(match &opts.scaling {
-        Some(scaling) => scale_features(fdf, scaling, &key_cols),
+        Some(scaling) => collect_in_memory(scale_features(fdf, scaling, &key_cols))?.lazy(),
         None => fdf.lazy(),
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ExtractionSettings, FeatureSetting, lazy_feature_df};
+    use super::{
+        DynamicGroupBySettings, ExtractionSettings, FeatureSetting, collect_in_memory,
+        lazy_feature_df,
+    };
+    use crate::error::ExtractionError;
+    use crate::scaling::Scaling;
     use polars::prelude::*;
 
     #[test]
@@ -232,5 +256,95 @@ mod tests {
                 .unwrap(),
             df!["value__standard_deviation" => [0.0, 0.0, 0.0]].unwrap()
         );
+    }
+
+    #[test]
+    fn test_invalid_window_duration_is_an_error() {
+        // Regression: Duration::parse panicked on a duration without a unit
+        for field in ["every", "period", "offset"] {
+            let mut dynamic = DynamicGroupBySettings {
+                time_col: "time".to_string(),
+                every: "1y".to_string(),
+                period: "1y".to_string(),
+                offset: "0y".to_string(),
+                datetime_format: Some("%Y-%m-%d".to_string()),
+            };
+            let target = match field {
+                "every" => &mut dynamic.every,
+                "period" => &mut dynamic.period,
+                _ => &mut dynamic.offset,
+            };
+            *target = "0".to_string();
+            let df = df![
+                "id" => ["a", "a"],
+                "time" => ["2001-01-01", "2002-01-01"],
+                "value" => [1.0, 2.0],
+            ]
+            .unwrap()
+            .lazy();
+            let opts = ExtractionSettings {
+                grouping_cols: vec!["id".to_string()],
+                value_cols: vec!["value".to_string()],
+                feature_setting: FeatureSetting::Minimal,
+                config_path: None,
+                dynamic_settings: Some(dynamic),
+                scaling: None,
+            };
+            let Err(err) = lazy_feature_df(df, opts) else {
+                panic!("{field} = \"0\" was accepted");
+            };
+            assert!(matches!(err, ExtractionError::InvalidSettings(_)), "{err}");
+            let expected = format!("invalid {field} duration \"0\"");
+            assert!(err.to_string().contains(&expected), "{err}");
+        }
+    }
+
+    /// The float columns of `df` sorted by `id`, as bit patterns (any NaN as
+    /// one value), so that equal means bit-for-bit equal.
+    fn float_bits(df: DataFrame) -> Vec<(String, Vec<Option<u64>>)> {
+        let df = df.sort(["id"], SortMultipleOptions::default()).unwrap();
+        df.columns()
+            .iter()
+            .filter(|c| c.dtype() == &DataType::Float64)
+            .map(|c| {
+                let values = c.f64().unwrap().to_vec();
+                let bits = values.into_iter();
+                let bits = bits.map(|v| v.map(|x| if x.is_nan() { u64::MAX } else { x.to_bits() }));
+                (c.name().to_string(), bits.collect())
+            })
+            .collect()
+    }
+
+    /// Scaled features do not depend on the engine that collects the result.
+    /// Polars 2's streaming engine reduces a column's mean and standard
+    /// deviation in parallel and merges the partial results in whatever order
+    /// its threads finish, so a scaling run there differed in the last bits
+    /// from run to run.
+    #[test]
+    fn test_scaling_does_not_depend_on_engine() {
+        let df = df![
+            "id" => ["a", "b", "c", "d"],
+            "value" => [1.0, 2.0, 3.0, 4.0],
+        ]
+        .unwrap()
+        .lazy();
+        let opts = || ExtractionSettings {
+            grouping_cols: vec!["id".to_string()],
+            value_cols: vec!["value".to_string()],
+            feature_setting: FeatureSetting::Minimal,
+            config_path: None,
+            dynamic_settings: None,
+            scaling: Some(Scaling::Standard),
+        };
+        let expected = collect_in_memory(lazy_feature_df(df.clone(), opts()).unwrap()).unwrap();
+        let expected = float_bits(expected);
+        for _ in 0..100 {
+            let lf = lazy_feature_df(df.clone(), opts()).unwrap();
+            let streamed = lf
+                .collect_with_engine(Engine::Streaming)
+                .unwrap()
+                .unwrap_single();
+            assert_eq!(float_bits(streamed), expected);
+        }
     }
 }

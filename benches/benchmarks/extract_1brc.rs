@@ -8,7 +8,7 @@ use tsfx::extract::{ExtractionSettings, FeatureSetting, lazy_feature_df};
 
 /// The 1BRC measurements, generated with `python_benchmarks/1brc/generate_data.py`
 /// (not in git: about 16 GB for the full billion rows).
-const PATH: &str = "test_data/measurements.txt";
+const PATH: &str = "test_dataset/measurements.txt";
 /// 100M rows: about 10,000 stations with about 10,000 values each, so long
 /// series where per-value cost dominates (stocks has short ones).
 const ROWS: usize = 100_000_000;
@@ -48,7 +48,7 @@ fn bench_tier(c: &mut Criterion, df: &DataFrame, name: &str, tier: FeatureSettin
                 },
             )
             .unwrap()
-            .collect()
+            .collect_with_engine(Engine::InMemory)
             .unwrap()
         })
     });

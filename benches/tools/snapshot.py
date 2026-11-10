@@ -29,8 +29,8 @@ from tsfx import (
 
 CONFIGS = {
     "default": None,
-    "parity": "python_tests/data/.tsfx-config-tsfresh-parity.toml",
-    "test": "python_tests/data/.tsfx-config-test.toml",
+    "parity": "python_tests/fixtures/.tsfx-config-tsfresh-parity.toml",
+    "test": "python_tests/fixtures/.tsfx-config-test.toml",
 }
 TIERS = ("Minimal", "Efficient", "Comprehensive")
 

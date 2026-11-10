@@ -49,7 +49,7 @@ import polars as pl
 import pytest
 from tsfx import ExtractionSettings, FeatureSetting, extract_features
 
-CONFIG_PATH = "./python_tests/data/.tsfx-config-tsfresh-parity.toml"
+CONFIG_PATH = "./python_tests/fixtures/.tsfx-config-tsfresh-parity.toml"
 
 
 def _bug(*case: object, reason: str):
@@ -153,12 +153,14 @@ def test_large_standard_deviation(values, r, expected):
     _assert_feature(values, f"val__large_standard_deviation__r_{r}", expected)
 
 
+# tsfresh's tests expect 0 for a constant series, which pandas gave before 3.1;
+# tsfresh 0.21.2 with pandas 3.1 gives NaN (0 / 0), and so does TSFX.
 @pytest.mark.parametrize(
     ("values", "expected"),
     [
         ([1, 1, 1, 2, 2, 2], 0),
         ([1, 1, 1, 2, 2], 0.6085806194501855),
-        ([1, 1, 1], 0),
+        ([1, 1, 1], math.nan),
         ([1, 1], math.nan),
     ],
 )
@@ -170,7 +172,7 @@ def test_skewness(values, expected):
     ("values", "expected"),
     [
         ([1, 1, 1, 2, 2], -3.333333333333333),
-        ([1, 1, 1, 1], 0),
+        ([1, 1, 1, 1], math.nan),  # 0 in tsfresh's tests, as for skewness
         ([1, 1, 1], math.nan),
     ],
 )
@@ -466,14 +468,33 @@ def test_sample_entropy_generated(values, expected):
     _assert_feature(values, "val__sample_entropy", expected)
 
 
-# skewness(np.array([0.1, 0.1, 0.1])) with pandas 3.0.2: m2 is ~6e-34 from
-# rounding, which pandas' tolerance treats as 0.
+# skewness(np.array(x)) with pandas 3.1.1. A constant series gives NaN: pandas'
+# corrected two-pass moments make m2 exactly 0, also for [0.1, 0.1, 0.1], whose
+# mean is not exactly 0.1. A series that differs only in its last bit gets its
+# real value; pandas 3.0 treated it as constant and gave 0 (as tsfx did).
 @pytest.mark.parametrize(
     ("values", "expected"),
-    [([0.1, 0.1, 0.1], 0.0)],
+    [
+        ([0.1, 0.1, 0.1], math.nan),
+        ([5, 5, 5, 5], math.nan),
+        ([2, 2, 2, 2 + 2**-51], 1.9999999999999998),
+    ],
 )
 def test_skewness_near_constant_generated(values, expected):
     _assert_feature(values, "val__skewness", expected)
+
+
+# 601 values: pandas' pairwise sums (split above 256 values) and the odd value
+# it adds separately. skewness / kurtosis(np.array(x)) with pandas 3.1.1; the
+# kurtosis also with every 37th value NaN, which skipna=True leaves in place
+_MOMENTS_601 = [math.sin(i) * 100 for i in range(601)]
+_MOMENTS_601_NAN = [math.nan if i % 37 == 0 else x for i, x in enumerate(_MOMENTS_601)]
+
+
+def test_moments_long_series_generated():
+    _assert_feature(_MOMENTS_601, "val__skewness", -0.006708521056586975)
+    _assert_feature(_MOMENTS_601, "val__kurtosis", -1.4999466633558334)
+    _assert_feature(_MOMENTS_601_NAN, "val__kurtosis", -1.5003475379194016)
 
 
 # has_duplicate(np.array(x)) with numpy 2.4.4; np.unique merges all NaNs into
@@ -589,14 +610,18 @@ def test_symmetry_looking_nan_generated(values, r, expected):
     _assert_feature(values, f"val__symmetry_looking__r_{r}", expected)
 
 
-# kurtosis(np.array(x)) with pandas 3.0.2: NaN values are skipped
-# (skipna=True), so the n >= 4 rule applies to the non-NaN values.
+# kurtosis(np.array(x)) with pandas 3.1.1: NaN values are skipped
+# (skipna=True), so the n >= 4 rule applies to the non-NaN values. A constant
+# series gives NaN, as for skewness.
 @pytest.mark.parametrize(
     ("values", "expected"),
     [
-        ([1, math.nan, 3, -4, 2, 6], 1.6264345073209352),
-        ([1, math.nan, 2, math.nan, 3, 4], -1.2),
+        ([1, math.nan, 3, -4, 2, 6], 1.6264345073209334),
+        ([1, math.nan, 2, math.nan, 3, 4], -1.200000000000001),
         ([1, math.nan, 2, 3], math.nan),
+        ([5, 5, 5, 5], math.nan),
+        ([1, 1, math.nan, 1, 1], math.nan),
+        ([2, 2, 2, 2 + 2**-51], 4.000000000000002),
     ],
 )
 def test_kurtosis_nan_generated(values, expected):
@@ -1475,7 +1500,9 @@ _SINE_60 = [math.sin(i / 2) for i in range(60)]
 
 
 # number_cwt_peaks(np.array(x, dtype=float), n) with tsfresh 0.21.2 /
-# numpy 2.4.4 / scipy 1.17.1 (generated)
+# numpy 2.5.4 / scipy 1.18.1 (generated). In the last two, both maxima of one
+# width join the same ridge line, and scipy >= 1.18 tests that line's
+# signal-to-noise ratio at the first of them (scipy 1.17: the second, 3 peaks).
 @pytest.mark.parametrize(
     ("values", "n", "expected"),
     [
@@ -1488,6 +1515,8 @@ _SINE_60 = [math.sin(i / 2) for i in range(60)]
         ([1, 2], 5, 0),
         ([0, 1, 0], 1, 1),
         ([1, math.nan, 1, 5, 1, 1], 1, 0),
+        ([0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0], 5, 2),
+        ([0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0], 10, 2),
     ],
 )
 def test_number_cwt_peaks_generated(values, n, expected):

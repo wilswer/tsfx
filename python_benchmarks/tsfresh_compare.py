@@ -116,7 +116,7 @@ def load_stocks() -> tuple[pl.DataFrame, str, list[str]]:
     """Kaggle S&P 500 daily prices: one series per ticker."""
     value_cols = ["open", "high", "low", "close", "volume"]
     df = (
-        pl.read_csv(ROOT / "test_data/all_stocks_5yr.csv")
+        pl.read_csv(ROOT / "test_dataset/all_stocks_5yr.csv")
         .drop_nulls()
         .with_columns(pl.col(value_cols).cast(pl.Float64))
         .sort("Name", "date", maintain_order=True)
@@ -131,7 +131,7 @@ def load_1brc(rows: int | None) -> tuple[pl.DataFrame, str, list[str]]:
     # sort by station keeps
     df = (
         pl.read_csv(
-            ROOT / "test_data/measurements.txt",
+            ROOT / "test_dataset/measurements.txt",
             separator=";",
             has_header=False,
             new_columns=["location", "temperature"],

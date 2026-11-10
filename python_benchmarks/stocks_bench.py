@@ -20,7 +20,7 @@ TIERS = {"minimal": FeatureSetting.Minimal, "efficient": FeatureSetting.Efficien
 
 def main(tier: str, source: str) -> None:
     lf = (
-        pl.scan_csv("test_data/all_stocks_5yr.csv")
+        pl.scan_csv("test_dataset/all_stocks_5yr.csv")
         .drop_nulls()
         .with_columns([pl.col(c).cast(pl.Float64) for c in VALUE_COLS])
     )
