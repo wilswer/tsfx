@@ -16,6 +16,12 @@ All notable changes to TSFX are documented here.
   Python, extraction is still 12-22% slower than with polars 1.44 on the stocks
   benchmarks (about 20 ms of it is a slower `import polars`), and very small
   inputs (a few rows) take 2-3 ms longer per call.
+- **`skewness` and `kurtosis` follow pandas 3.1**, as tsfresh does with it: a
+  constant series gives NaN instead of 0, and a series that differs from a
+  constant only in its last bits gets its value instead of 0 (pandas 3.0
+  treated such rounding noise as 0). tsfx now computes the moments as pandas
+  3.1 does, so both features match it bit for bit on x86_64. If your models
+  need 0 for constant series, fill the NaN (`fill_nan(0)`).
 
 ### Fixed
 

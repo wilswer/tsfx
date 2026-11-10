@@ -1,6 +1,5 @@
 //! Summaries of the value distribution, independent of order.
 
-use ndarray::Array1;
 use polars::lazy::dsl::*;
 
 use super::kernel::{GroupContext, Kernel, extremes, scalar_kernel};
@@ -178,11 +177,12 @@ scalar_kernel! {
 /// - Nulls are dropped first; a group with no non-null values gives NaN.
 /// - NaN values are kept and make the result NaN.
 /// - Fewer than 3 values give NaN.
-/// - A constant series gives 0. Near-constant series are treated as constant
-///   using pandas 3's floating-point tolerance.
+/// - A constant series gives NaN ($0 / 0$), as with pandas 3.1. A series that
+///   is not constant, even only in its last bit, gets its value.
 ///
 /// # tsfresh
-/// `feature_calculators.skewness` (v0.21.2), i.e. `pandas.Series.skew`.
+/// `feature_calculators.skewness` (v0.21.2), i.e. `pandas.Series.skew`,
+/// bit for bit with pandas 3.1 on x86_64.
     Skewness, "skewness", |ctx| sample_skewness(ctx.x())
 }
 
@@ -222,16 +222,13 @@ scalar_kernel! {
 /// - Nulls are dropped first; a group with no non-null values gives NaN.
 /// - NaN values are skipped, like pandas' `skipna=True`.
 /// - Fewer than 4 (non-NaN) values give NaN.
-/// - A constant series gives 0. Near-constant series are treated as constant
-///   using pandas 3's floating-point tolerance.
+/// - A constant series gives NaN ($0 / 0$), as with pandas 3.1. A series that
+///   is not constant, even only in its last bit, gets its value.
 ///
 /// # tsfresh
-/// `feature_calculators.kurtosis` (v0.21.2), i.e. `pandas.Series.kurtosis`.
-    Kurtosis, "kurtosis", |ctx| {
-        // tsfresh calls pandas' kurtosis with skipna=True
-        let x = Array1::from_iter(ctx.x().iter().copied().filter(|x| !x.is_nan()));
-        sample_excess_kurtosis(&x.view())
-    }
+/// `feature_calculators.kurtosis` (v0.21.2), i.e. `pandas.Series.kurtosis`,
+/// bit for bit with pandas 3.1 on x86_64.
+    Kurtosis, "kurtosis", |ctx| sample_excess_kurtosis(ctx.x())
 }
 
 scalar_kernel! {

@@ -43,11 +43,10 @@ pytestmark = pytest.mark.fuzz
 
 CONFIG = "./python_tests/fixtures/.tsfx-config-tsfresh-parity.toml"
 
-# tsfresh computes these with pandas (skew, kurtosis, chunk aggregates),
-# scipy (linregress), BLAS (np.dot) or a long chain of numpy operations
+# tsfresh computes these with pandas (chunk aggregates), scipy (linregress),
+# BLAS (np.dot) or a long chain of numpy operations. Skewness and kurtosis
+# reproduce pandas 3.1's moments (x86_64 build), so they match bit for bit
 TOLERANT = {
-    "skewness",
-    "kurtosis",
     "linear_trend",
     "agg_linear_trend",
     "absolute_energy",
