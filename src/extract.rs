@@ -96,16 +96,23 @@ pub fn lazy_feature_df(
     for (column, plan) in &features.kernels {
         plan.unpack(&mut fdf, column)?;
     }
+    // Scale in memory too, whatever engine collects the result: the streaming
+    // engine merges a column's partial means and variances in thread order, so
+    // its scaled features differ in the last bits from run to run
     Ok(match &opts.scaling {
-        Some(scaling) => scale_features(fdf, scaling, &key_cols),
+        Some(scaling) => collect_in_memory(scale_features(fdf, scaling, &key_cols))?.lazy(),
         None => fdf.lazy(),
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{DynamicGroupBySettings, ExtractionSettings, FeatureSetting, lazy_feature_df};
+    use super::{
+        DynamicGroupBySettings, ExtractionSettings, FeatureSetting, collect_in_memory,
+        lazy_feature_df,
+    };
     use crate::error::ExtractionError;
+    use crate::scaling::Scaling;
     use polars::prelude::*;
 
     #[test]
@@ -289,6 +296,55 @@ mod tests {
             assert!(matches!(err, ExtractionError::InvalidSettings(_)), "{err}");
             let expected = format!("invalid {field} duration \"0\"");
             assert!(err.to_string().contains(&expected), "{err}");
+        }
+    }
+
+    /// The float columns of `df` sorted by `id`, as bit patterns (any NaN as
+    /// one value), so that equal means bit-for-bit equal.
+    fn float_bits(df: DataFrame) -> Vec<(String, Vec<Option<u64>>)> {
+        let df = df.sort(["id"], SortMultipleOptions::default()).unwrap();
+        df.columns()
+            .iter()
+            .filter(|c| c.dtype() == &DataType::Float64)
+            .map(|c| {
+                let values = c.f64().unwrap().to_vec();
+                let bits = values.into_iter();
+                let bits = bits.map(|v| v.map(|x| if x.is_nan() { u64::MAX } else { x.to_bits() }));
+                (c.name().to_string(), bits.collect())
+            })
+            .collect()
+    }
+
+    /// Scaled features do not depend on the engine that collects the result.
+    /// Polars 2's streaming engine reduces a column's mean and standard
+    /// deviation in parallel and merges the partial results in whatever order
+    /// its threads finish, so a scaling run there differed in the last bits
+    /// from run to run.
+    #[test]
+    fn test_scaling_does_not_depend_on_engine() {
+        let df = df![
+            "id" => ["a", "b", "c", "d"],
+            "value" => [1.0, 2.0, 3.0, 4.0],
+        ]
+        .unwrap()
+        .lazy();
+        let opts = || ExtractionSettings {
+            grouping_cols: vec!["id".to_string()],
+            value_cols: vec!["value".to_string()],
+            feature_setting: FeatureSetting::Minimal,
+            config_path: None,
+            dynamic_settings: None,
+            scaling: Some(Scaling::Standard),
+        };
+        let expected = collect_in_memory(lazy_feature_df(df.clone(), opts()).unwrap()).unwrap();
+        let expected = float_bits(expected);
+        for _ in 0..100 {
+            let lf = lazy_feature_df(df.clone(), opts()).unwrap();
+            let streamed = lf
+                .collect_with_engine(Engine::Streaming)
+                .unwrap()
+                .unwrap_single();
+            assert_eq!(float_bits(streamed), expected);
         }
     }
 }
