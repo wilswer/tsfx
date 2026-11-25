@@ -30,6 +30,18 @@ def extract_features(
     pl.DataFrame
         Flattened DataFrame with extracted features.
 
+    Raises
+    ------
+    ValueError
+        If the settings are invalid, or `settings.reduction` cannot be fitted
+        (fewer groups or windows than it needs).
+
+    Warns
+    -----
+    UserWarning
+        If the reduction's noise step runs on fewer than 50 features or rows:
+        it may then drop real features as noise.
+
     Example
     -------
     ```python
@@ -92,7 +104,8 @@ def reduction_report(
     - `dropped_by`: the step that dropped it (`"missing"`, `"one_value"`,
       `"duplicate"` or `"noise"`), null if kept;
     - `missing_share`: its share of missing values (null, NaN, ±inf);
-    - `top_share`: the share of its most frequent value among the others;
+    - `top_share`: the share of its most frequent value among its non-missing
+      values;
     - `duplicate_of` and `correlation`: the kept feature it copies, and their
       Spearman correlation;
     - `noise_score` and `noise_cutoff`: its Laplacian score and the best

@@ -33,7 +33,7 @@ def _value(g: int, t: int) -> float:
 
 
 def _series(
-    n_groups: int = 40,
+    n_groups: int = 60,
     length: int = 100,
     value_cols: Sequence[str] = ("v",),
     short_groups: int = 0,
@@ -99,6 +99,7 @@ def test_setting_defaults() -> None:
         {"max_top_share": 1.0},
         {"max_correlation": 0.0},
         {"noise_sensitivity": 0.9995},
+        {"noise_sensitivity": 0.4},
         {"noise_sensitivity": math.nan},
         {"noise_neighbors": 0},
         {"max_samples": 10},
@@ -181,6 +182,12 @@ def test_warning_with_few_features() -> None:
         extract_features(_series(), settings)
     with pytest.warns(UserWarning, match="noise_sensitivity"):
         reduction_report(_series(), settings)
+
+
+def test_warning_with_few_rows() -> None:
+    settings = _settings(reduction=ReductionSetting())
+    with pytest.warns(UserWarning, match="rows"):
+        extract_features(_series(n_groups=20), settings)
 
 
 def test_no_warning_with_many_features() -> None:

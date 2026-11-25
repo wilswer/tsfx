@@ -69,6 +69,29 @@ mod tests {
         assert_eq!(g.next_u64(), 0xe220a8397b1dcdaf);
     }
 
+    /// Pinned outputs (from an independent port): a change to any method
+    /// would silently change every seed's row sample, tie-breaking and
+    /// shadows.
+    #[test]
+    fn test_golden_outputs() {
+        let mut g = SplitMix64::new(42);
+        let first: Vec<u64> = (0..3).map(|_| g.next_u64()).collect();
+        assert_eq!(
+            first,
+            [0xbdd732262feb6e95, 0x28efe333b266f103, 0x47526757130f9f52]
+        );
+        let mut g = SplitMix64::new(7);
+        let below: Vec<usize> = (0..8).map(|_| g.below(10)).collect();
+        assert_eq!(below, [7, 4, 6, 3, 4, 5, 8, 2]);
+        let mut xs: Vec<usize> = (0..10).collect();
+        SplitMix64::new(3).shuffle(&mut xs);
+        assert_eq!(xs, [2, 8, 7, 4, 5, 6, 0, 1, 9, 3]);
+        assert_eq!(
+            SplitMix64::new(1).sample_sorted(100, 8),
+            [18, 40, 43, 53, 56, 61, 65, 66]
+        );
+    }
+
     #[test]
     fn test_sample_sorted() {
         let s = SplitMix64::new(1).sample_sorted(100, 10);

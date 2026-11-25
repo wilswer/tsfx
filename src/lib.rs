@@ -68,9 +68,9 @@ enum PyScalerSetting {
 ///     max_correlation: Drop a feature whose |Spearman correlation| with an
 ///         earlier kept feature is above this, in (0, 1).
 ///     noise_sensitivity: About this share of pure-noise features is dropped
-///         (0.99 lets about 1 in 100 through), in (0, 0.999]. Higher is
+///         (0.99 lets about 1 in 100 through), in [0.5, 0.999]. Higher is
 ///         stricter and slower and, with few features left, drops more real
-///         features by mistake (a warning says so below 50 features).
+///         features by mistake (a warning says so below 50 features or rows).
 ///         `None` turns the step off.
 ///     noise_neighbors: Nearest rows per row in the noise step, at least 1.
 ///     max_samples: Row cap for the correlation and noise steps (a seeded
@@ -330,7 +330,13 @@ impl From<PyExtractionSettings> for ExtractionSettings {
 ///     polars.DataFrame: A new DataFrame containing the grouped IDs and their extracted features.
 ///
 /// Raises:
+///     ValueError: If the settings are invalid, or the reduction cannot be fitted
+///         (fewer groups or windows than it needs).
 ///     Exception: If an underlying Polars error occurs during collection.
+///
+/// Warns:
+///     UserWarning: If the reduction's noise step runs on fewer than 50
+///         features or rows: it may then drop real features as noise.
 #[pyfunction]
 #[pyo3(signature = (lf, settings, streaming=false))]
 fn extract_features(

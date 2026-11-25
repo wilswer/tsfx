@@ -2,25 +2,19 @@
 //! and the share of the most frequent value.
 
 use polars::prelude::*;
-use rayon::prelude::*;
 
-/// The values of the columns `names` of `df` as f64, one `Vec` per column,
-/// with null, NaN and ±inf (missing values) as NaN. Converted in parallel.
-pub(crate) fn feature_values(df: &DataFrame, names: &[String]) -> PolarsResult<Vec<Vec<f64>>> {
-    names
-        .par_iter()
-        .map(|name| {
-            let column = df.column(name)?.cast(&DataType::Float64)?;
-            Ok(column
-                .f64()?
-                .iter()
-                .map(|v| match v {
-                    Some(x) if x.is_finite() => x,
-                    _ => f64::NAN,
-                })
-                .collect())
+/// The values of column `name` of `df` as f64, with null, NaN and ±inf
+/// (missing values) as NaN.
+pub(crate) fn column_values(df: &DataFrame, name: &str) -> PolarsResult<Vec<f64>> {
+    let column = df.column(name)?.cast(&DataType::Float64)?;
+    Ok(column
+        .f64()?
+        .iter()
+        .map(|v| match v {
+            Some(x) if x.is_finite() => x,
+            _ => f64::NAN,
         })
-        .collect()
+        .collect())
 }
 
 /// The share of missing values (NaN) in `xs`.
@@ -58,7 +52,7 @@ pub(crate) fn top_share(xs: &[f64]) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{feature_values, missing_share, top_share};
+    use super::{column_values, missing_share, top_share};
     use polars::prelude::*;
 
     #[test]
@@ -82,7 +76,10 @@ mod tests {
             "n" => [Some(1u32), Some(2), None, Some(4), Some(5)],
         ]
         .unwrap();
-        let v = feature_values(&df, &["x".into(), "n".into()]).unwrap();
+        let v = [
+            column_values(&df, "x").unwrap(),
+            column_values(&df, "n").unwrap(),
+        ];
         assert_eq!(v[0][0], 1.0);
         assert!(v[0][1..].iter().all(|x| x.is_nan()));
         assert_eq!(v[1][..2], [1.0, 2.0]);

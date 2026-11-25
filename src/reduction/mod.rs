@@ -13,8 +13,6 @@ mod noise;
 mod rng;
 mod shares;
 
-use std::collections::HashSet;
-
 use polars::prelude::*;
 use rayon::prelude::*;
 
@@ -22,7 +20,7 @@ use self::duplicates::{correlation_matrix, greedy_duplicates};
 use self::matrix::{rank_matrix, tie_broken_rank_matrix};
 use self::noise::noise_scores;
 use self::rng::SplitMix64;
-use self::shares::{feature_values, missing_share, top_share};
+use self::shares::{column_values, missing_share, top_share};
 use crate::error::ExtractionError;
 
 /// With fewer features than this reaching the noise step, the fit warns: the
@@ -30,8 +28,16 @@ use crate::error::ExtractionError;
 /// step drops real features by mistake.
 pub const NOISE_WARN_MIN_FEATURES: usize = 50;
 
+/// With fewer rows than this in the noise step, the fit warns: the neighbor
+/// graph is then coarse, and the step drops many real features as noise (in
+/// tests, features of medium strength: 45% at 20 rows, 6% at 40, 2% at 60).
+pub const NOISE_WARN_MIN_ROWS: usize = 50;
+
 /// Fewest rows (groups or windows) any reduction is fitted on.
 const MIN_ROWS: usize = 10;
+
+/// Smallest `noise_sensitivity`: 1 shadow feature.
+const MIN_NOISE_SENSITIVITY: f64 = 0.5;
 
 /// Largest `noise_sensitivity`: 999 shadow features.
 const MAX_NOISE_SENSITIVITY: f64 = 0.999;
@@ -48,7 +54,7 @@ pub struct Reduction {
     /// feature is above this, in (0, 1).
     pub max_correlation: Option<f64>,
     /// About this share of pure-noise features is dropped by the noise step,
-    /// in (0, 0.999].
+    /// in [0.5, 0.999].
     pub noise_sensitivity: Option<f64>,
     /// Nearest rows per row in the noise step's neighbor graph, at least 1.
     pub noise_neighbors: usize,
@@ -96,8 +102,8 @@ impl Reduction {
             _ => {}
         }
         match self.noise_sensitivity {
-            Some(v) if !(v > 0.0 && v <= MAX_NOISE_SENSITIVITY) => {
-                return invalid("noise_sensitivity", "(0, 0.999]", v);
+            Some(v) if !(MIN_NOISE_SENSITIVITY..=MAX_NOISE_SENSITIVITY).contains(&v) => {
+                return invalid("noise_sensitivity", "[0.5, 0.999]", v);
             }
             _ => {}
         }
@@ -135,11 +141,13 @@ impl Reduction {
     }
 
     /// Decides which feature columns of `features` to keep: every column not
-    /// in `key_cols` (the grouping and time columns) is a feature. The rows
-    /// are sorted by `key_cols` first, so the decision does not depend on
-    /// their order as long as the keys identify the rows, as they do for
-    /// extracted features (one row per group or window). Errors on invalid
-    /// settings and on fewer rows than
+    /// in `key_cols` (the grouping and time columns) is a feature. Steps 3
+    /// and 4 read the rows in the order of `key_cols`, so the decision does
+    /// not depend on the input row order as long as the keys identify the
+    /// rows, as they do for extracted features (one row per group or window).
+    /// Memory: the shares of steps 1 and 2 are computed column by column, and
+    /// steps 3 and 4 hold only the sampled rows (at most `max_samples`) of the
+    /// features left. Errors on invalid settings and on fewer rows than
     /// [`Reduction::min_rows`]: the reduction is fitted across the rows.
     pub fn fit(
         &self,
@@ -162,62 +170,84 @@ impl Reduction {
             .filter(|name| !key_cols.iter().any(|key| key == name.as_str()))
             .map(|name| name.to_string())
             .collect();
-        // The sorted copy lives only until the values are read
-        let values = if key_cols.is_empty() {
-            feature_values(features, &names)?
-        } else {
-            let sorted = features.sort(
-                key_cols,
-                SortMultipleOptions::default()
-                    .with_nulls_last(true)
-                    .with_maintain_order(true),
-            )?;
-            feature_values(&sorted, &names)?
-        };
         let d = names.len();
         let mut dropped: Vec<Option<Dropped>> = vec![None; d];
 
-        // Step 1: mostly missing, on all rows
-        let missing: Option<Vec<f64>> = self.max_missing.map(|max| {
-            let shares: Vec<f64> = values.par_iter().map(|v| missing_share(v)).collect();
-            for (drop, &share) in dropped.iter_mut().zip(&shares) {
-                if share > max {
+        // Steps 1 and 2 do not depend on the row order: per column, on all
+        // rows, in parallel, keeping only the shares (not the values)
+        let shares: Vec<(f64, Option<f64>)> = names
+            .par_iter()
+            .map(|name| {
+                let values = column_values(features, name)?;
+                let missing = missing_share(&values);
+                let reaches_step_2 = self.max_missing.is_none_or(|max| missing <= max);
+                let top =
+                    (self.max_top_share.is_some() && reaches_step_2).then(|| top_share(&values));
+                Ok((missing, top))
+            })
+            .collect::<PolarsResult<_>>()?;
+        // Step 1: mostly missing
+        if let Some(max) = self.max_missing {
+            for (drop, (missing, _)) in dropped.iter_mut().zip(&shares) {
+                if *missing > max {
                     *drop = Some(Dropped::Missing);
                 }
             }
-            shares
-        });
-
-        // Step 2: almost one value, on all rows
-        let mut top: Vec<Option<f64>> = vec![None; d];
+        }
+        // Step 2: almost one value
         if let Some(max) = self.max_top_share {
-            let alive = remaining(&dropped);
-            let shares: Vec<f64> = alive.par_iter().map(|&j| top_share(&values[j])).collect();
-            for (&j, &share) in alive.iter().zip(&shares) {
-                top[j] = Some(share);
-                if share > max {
-                    dropped[j] = Some(Dropped::OneValue);
+            for (drop, (_, top)) in dropped.iter_mut().zip(&shares) {
+                if top.is_some_and(|share| share > max) {
+                    *drop = Some(Dropped::OneValue);
                 }
             }
         }
 
-        // Steps 3 and 4 run on at most max_samples rows; the generator draws
-        // the sample first, then the noise step's tie-breaking seeds and
-        // shadows
+        // Steps 3 and 4 run on at most max_samples rows, in the order of the
+        // key columns; the generator draws the sample first, then the noise
+        // step's tie-breaking seeds and shadows
+        let order = key_order(features, key_cols)?;
         let mut rng = SplitMix64::new(self.seed);
         let rows: Vec<usize> = if n > self.max_samples {
             rng.sample_sorted(n, self.max_samples)
+                .into_iter()
+                .map(|position| order[position])
+                .collect()
         } else {
-            (0..n).collect()
+            order
         };
+        // Only the sampled rows of the features left after step 2 are read
+        let candidates = remaining(&dropped);
+        let sampled: Vec<Vec<f64>> =
+            if self.max_correlation.is_some() || self.noise_sensitivity.is_some() {
+                candidates
+                    .par_iter()
+                    .map(|&j| {
+                        let values = column_values(features, &names[j])?;
+                        Ok(rows.iter().map(|&i| values[i]).collect())
+                    })
+                    .collect::<PolarsResult<_>>()?
+            } else {
+                Vec::new()
+            };
+        let mut position: Vec<Option<usize>> = vec![None; d];
+        for (k, &j) in candidates.iter().enumerate() {
+            position[j] = Some(k);
+        }
+        let sampled_columns = |subset: &[usize]| -> Vec<&[f64]> {
+            subset
+                .iter()
+                .map(|&j| sampled[position[j].expect("read after step 2")].as_slice())
+                .collect()
+        };
+        let sample_rows: Vec<usize> = (0..rows.len()).collect();
 
         // Step 3: near-duplicates
         let mut duplicate_of: Vec<Option<(usize, f64)>> = vec![None; d];
         if let Some(max) = self.max_correlation {
             let alive = remaining(&dropped);
             if !alive.is_empty() {
-                let columns: Vec<&[f64]> = alive.iter().map(|&j| values[j].as_slice()).collect();
-                let corr = correlation_matrix(&rank_matrix(&columns, &rows));
+                let corr = correlation_matrix(&rank_matrix(&sampled_columns(&alive), &sample_rows));
                 // Extraction order decides who is kept (the follow-up with an
                 // outcome label orders by relevance instead)
                 let order: Vec<usize> = (0..alive.len()).collect();
@@ -247,14 +277,22 @@ impl Reduction {
                         alive.len()
                     ));
                 }
-                let columns: Vec<&[f64]> = alive.iter().map(|&j| values[j].as_slice()).collect();
+                if rows.len() < NOISE_WARN_MIN_ROWS {
+                    warnings.push(format!(
+                        "the noise step ran on {} rows (fewer than {NOISE_WARN_MIN_ROWS}): with \
+                         few rows it drops many real features as noise; consider more groups \
+                         or windows, a lower noise_sensitivity, or noise_sensitivity=None",
+                        rows.len()
+                    ));
+                }
+                let columns = sampled_columns(&alive);
                 // Ties broken at random, one seed per column, drawn after the
                 // row sample and before the shadows: a discrete noise feature
                 // is then as random as a shadow (with average ranks, its tie
                 // blocks let it beat the shadows far more often)
                 let seeds: Vec<u64> = columns.iter().map(|_| rng.next_u64()).collect();
                 let result = noise_scores(
-                    &tie_broken_rank_matrix(&columns, &rows, &seeds),
+                    &tie_broken_rank_matrix(&columns, &sample_rows, &seeds),
                     n_shadows,
                     self.noise_neighbors,
                     &mut rng,
@@ -280,10 +318,11 @@ impl Reduction {
         let kept_flags: Vec<bool> = dropped.iter().map(Option::is_none).collect();
         let dropped_by: Vec<Option<&str>> =
             dropped.iter().map(|drop| drop.map(Dropped::name)).collect();
-        let missing_share: Vec<Option<f64>> = match missing {
-            Some(shares) => shares.into_iter().map(Some).collect(),
-            None => vec![None; d],
-        };
+        let missing_share: Vec<Option<f64>> = shares
+            .iter()
+            .map(|&(missing, _)| self.max_missing.map(|_| missing))
+            .collect();
+        let top: Vec<Option<f64>> = shares.iter().map(|&(_, top)| top).collect();
         let duplicate_names: Vec<Option<&str>> = duplicate_of
             .iter()
             .map(|dup| dup.map(|(k, _)| names[k].as_str()))
@@ -334,6 +373,30 @@ impl Dropped {
     }
 }
 
+/// Positions of the rows of `features` in the order of `key_cols` (nulls
+/// last; the input order without key columns).
+fn key_order(features: &DataFrame, key_cols: &[String]) -> PolarsResult<Vec<usize>> {
+    if key_cols.is_empty() {
+        return Ok((0..features.height()).collect());
+    }
+    const ROW: &str = "__tsfx_row";
+    let keys = features
+        .select(key_cols.iter().map(String::as_str))?
+        .with_row_index(ROW.into(), None)?
+        .sort(
+            key_cols,
+            SortMultipleOptions::default()
+                .with_nulls_last(true)
+                .with_maintain_order(true),
+        )?;
+    Ok(keys
+        .column(ROW)?
+        .idx()?
+        .into_no_null_iter()
+        .map(|i| i as usize)
+        .collect())
+}
+
 /// Indices of the features no step has dropped yet.
 fn remaining(dropped: &[Option<Dropped>]) -> Vec<usize> {
     (0..dropped.len())
@@ -354,26 +417,16 @@ pub struct ReductionFit {
     /// `noise_cutoff`. A step that is turned off, or that a feature did not
     /// reach, leaves its columns null.
     pub report: DataFrame,
-    /// Warnings of the fit, e.g. too few features for the noise step.
+    /// Warnings of the fit: too few features or rows for the noise step.
     pub warnings: Vec<String>,
 }
 
 impl ReductionFit {
-    /// `features` with only the `key_cols` and the kept feature columns, in
-    /// the frame's column order and with their dtypes unchanged.
+    /// `features` with only the `key_cols`, then the kept feature columns (in
+    /// the order they were fitted), dtypes unchanged. A missing column is an
+    /// error.
     pub fn apply(&self, features: DataFrame, key_cols: &[String]) -> PolarsResult<DataFrame> {
-        let wanted: HashSet<&str> = key_cols
-            .iter()
-            .chain(&self.kept)
-            .map(String::as_str)
-            .collect();
-        let selected: Vec<PlSmallStr> = features
-            .get_column_names()
-            .into_iter()
-            .filter(|name| wanted.contains(name.as_str()))
-            .cloned()
-            .collect();
-        features.select(selected)
+        features.select(key_cols.iter().chain(&self.kept).map(String::as_str))
     }
 }
 
@@ -384,7 +437,7 @@ mod tests {
 
     #[test]
     fn test_shadow_count() {
-        for (s, n) in [(0.99, 99), (0.95, 19), (0.5, 1), (0.2, 1), (0.999, 999)] {
+        for (s, n) in [(0.99, 99), (0.95, 19), (0.5, 1), (0.6, 1), (0.999, 999)] {
             let r = Reduction {
                 noise_sensitivity: Some(s),
                 ..Default::default()
@@ -424,6 +477,10 @@ mod tests {
             },
             Reduction {
                 noise_sensitivity: Some(0.0),
+                ..Default::default()
+            },
+            Reduction {
+                noise_sensitivity: Some(0.49),
                 ..Default::default()
             },
             Reduction {
@@ -515,10 +572,10 @@ mod fit_tests {
         vec!["id".to_string()]
     }
 
-    /// 40 rows: "miss" 10% NaN, "const", "a", "a_sq" (monotone in a), "b".
+    /// 60 rows: "miss" 10% NaN, "const", "a", "a_sq" (monotone in a), "b".
     fn crafted() -> DataFrame {
         let mut g = SplitMix64::new(7);
-        let n = 40;
+        let n = 60;
         let a: Vec<f64> = (0..n).map(|_| uniform(&mut g)).collect();
         let b: Vec<f64> = (0..n).map(|_| uniform(&mut g)).collect();
         let miss: Vec<f64> = (0..n)
@@ -811,5 +868,95 @@ mod fit_tests {
             assert_eq!(dropped_by[i].as_deref(), Some("noise"), "row {i}");
             assert!(scores.get(i).unwrap().is_nan(), "row {i}");
         }
+    }
+
+    /// Equal to a threshold is kept: 1 missing of 20 is 0.05, one value on
+    /// 19 of 20 is 0.95; one more of either is dropped.
+    #[test]
+    fn test_thresholds_are_strict() {
+        // distinct values, the first `k` of them missing
+        let missing_first = |k: usize| -> Vec<f64> {
+            (0..20)
+                .map(|i| if i < k { f64::NAN } else { i as f64 })
+                .collect()
+        };
+        // all 0.0 but the first `k`, which are distinct
+        let zeros_but = |k: usize| -> Vec<f64> {
+            (0..20)
+                .map(|i| if i < k { 1.0 + i as f64 } else { 0.0 })
+                .collect()
+        };
+        let df = df![
+            "id" => (0..20i64).collect::<Vec<_>>(),
+            "missing_1" => missing_first(1),
+            "missing_2" => missing_first(2),
+            "top_19" => zeros_but(1),
+            "top_20" => zeros_but(0),
+            "spread" => (0..20).map(|i| 1.5 * i as f64).collect::<Vec<_>>(),
+        ]
+        .unwrap();
+        let r = Reduction {
+            max_correlation: None,
+            noise_sensitivity: None,
+            ..Default::default()
+        };
+        let fit = r.fit(&df, &keys()).unwrap();
+        assert_eq!(
+            strs(&fit.report, "dropped_by"),
+            [
+                None,
+                Some("missing".to_string()),
+                None,
+                Some("one_value".to_string()),
+                None
+            ]
+        );
+    }
+
+    /// The fit's warnings for `rows` rows and `features` features that all
+    /// reach the noise step (steps 1 to 3 off).
+    fn noise_warnings(rows: usize, features: usize) -> Vec<String> {
+        let mut g = SplitMix64::new(13);
+        let mut columns = vec![Column::new(
+            "id".into(),
+            (0..rows as i64).collect::<Vec<_>>(),
+        )];
+        for j in 0..features {
+            let values: Vec<f64> = (0..rows).map(|_| uniform(&mut g)).collect();
+            columns.push(Column::new(format!("f{j}").into(), values));
+        }
+        let df = DataFrame::new_infer_height(columns).unwrap();
+        let r = Reduction {
+            max_missing: None,
+            max_top_share: None,
+            max_correlation: None,
+            ..Default::default()
+        };
+        r.fit(&df, &keys()).unwrap().warnings
+    }
+
+    #[test]
+    fn test_noise_warning_edges() {
+        let features_49 = noise_warnings(60, 49);
+        assert_eq!(features_49.len(), 1);
+        assert!(features_49[0].contains("49 features"), "{}", features_49[0]);
+        assert!(noise_warnings(60, 50).is_empty());
+        let rows_49 = noise_warnings(49, 60);
+        assert_eq!(rows_49.len(), 1);
+        assert!(rows_49[0].contains("49 rows"), "{}", rows_49[0]);
+        assert!(noise_warnings(50, 60).is_empty());
+    }
+
+    /// Applying a fit to a frame without one of its kept columns is an error,
+    /// not a silently smaller frame.
+    #[test]
+    fn test_apply_errors_on_a_missing_column() {
+        let r = Reduction {
+            noise_sensitivity: None,
+            ..Default::default()
+        };
+        let fit = r.fit(&crafted(), &keys()).unwrap();
+        let without_b = crafted().drop("b").unwrap();
+        assert!(fit.apply(without_b, &keys()).is_err());
     }
 }
