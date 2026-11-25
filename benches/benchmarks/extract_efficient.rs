@@ -23,6 +23,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     config_path: None,
                     dynamic_settings: None,
                     scaling: None,
+                    reduction: None,
                 },
             )
             .unwrap()

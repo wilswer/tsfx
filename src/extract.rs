@@ -1,8 +1,11 @@
 use anyhow::Result;
 use polars::prelude::*;
 
+use polars_core::runtime::RAYON;
+
 use crate::error::ExtractionError;
 use crate::feature_extractors::aggregators;
+use crate::reduction::{Reduction, ReductionFit};
 use crate::scaling::{Scaling, scale_features};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -31,6 +34,25 @@ pub struct ExtractionSettings {
     /// Scale the features across groups after extraction; None leaves them
     /// as extracted.
     pub scaling: Option<Scaling>,
+    /// Drop redundant and uninformative features after extraction, before
+    /// scaling; None keeps them all.
+    pub reduction: Option<Reduction>,
+}
+
+/// The result of an extraction: the features, and the fitted reduction if
+/// one was set.
+pub struct Extraction {
+    /// The extracted features: reduced and scaled as the settings say.
+    pub features: LazyFrame,
+    /// The fitted reduction (what was kept and why), if one was set.
+    pub reduction: Option<ReductionFit>,
+}
+
+/// A step that runs on the extracted features. Each step works on whatever
+/// feature columns it is given; none assumes another ran before it.
+enum PostStep {
+    Reduce(Reduction),
+    Scale(Scaling),
 }
 
 /// Collect `lf` on the in-memory engine, as `collect()` did before polars 2.0.
@@ -49,12 +71,24 @@ fn parse_window_duration(field: &str, value: &str) -> Result<Duration, Extractio
     })
 }
 
+/// Extract the features of `df` as `opts` says, as a lazy frame.
 pub fn lazy_feature_df(
     df: LazyFrame,
     opts: ExtractionSettings,
 ) -> Result<LazyFrame, ExtractionError> {
+    Ok(extract(df, opts)?.features)
+}
+
+/// Extract the features of `df` as `opts` says: extraction, then the
+/// post-extraction steps in order (reduce if `opts.reduction` is set, then
+/// scale if `opts.scaling` is set), returning the reduction's fit with the
+/// features.
+pub fn extract(df: LazyFrame, opts: ExtractionSettings) -> Result<Extraction, ExtractionError> {
     if let Some(scaling) = &opts.scaling {
         scaling.validate()?;
+    }
+    if let Some(reduction) = &opts.reduction {
+        reduction.validate()?;
     }
     let features = aggregators(&opts)?;
     // Columns identifying a group (or window), which scaling leaves alone
@@ -96,22 +130,46 @@ pub fn lazy_feature_df(
     for (column, plan) in &features.kernels {
         plan.unpack(&mut fdf, column)?;
     }
-    // Scale in memory too, whatever engine collects the result: the streaming
-    // engine merges a column's partial means and variances in thread order, so
-    // its scaled features differ in the last bits from run to run
-    Ok(match &opts.scaling {
-        Some(scaling) => collect_in_memory(scale_features(fdf, scaling, &key_cols))?.lazy(),
-        None => fdf.lazy(),
+    let mut steps = Vec::new();
+    if let Some(reduction) = opts.reduction {
+        steps.push(PostStep::Reduce(reduction));
+    }
+    if let Some(scaling) = opts.scaling {
+        steps.push(PostStep::Scale(scaling));
+    }
+    let mut reduction_fit = None;
+    for step in steps {
+        fdf = match step {
+            PostStep::Reduce(reduction) => {
+                // In polars' pool, so POLARS_MAX_THREADS caps it too
+                let fit = RAYON.install(|| reduction.fit(&fdf, &key_cols))?;
+                let reduced = fit.apply(fdf, &key_cols)?;
+                reduction_fit = Some(fit);
+                reduced
+            }
+            // Scale in memory too, whatever engine collects the result: the
+            // streaming engine merges a column's partial means and variances
+            // in thread order, so its scaled features differ in the last bits
+            // from run to run
+            PostStep::Scale(scaling) => {
+                collect_in_memory(scale_features(fdf, &scaling, &key_cols))?
+            }
+        };
+    }
+    Ok(Extraction {
+        features: fdf.lazy(),
+        reduction: reduction_fit,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        DynamicGroupBySettings, ExtractionSettings, FeatureSetting, collect_in_memory,
+        DynamicGroupBySettings, ExtractionSettings, FeatureSetting, collect_in_memory, extract,
         lazy_feature_df,
     };
     use crate::error::ExtractionError;
+    use crate::reduction::Reduction;
     use crate::scaling::Scaling;
     use polars::prelude::*;
 
@@ -130,6 +188,7 @@ mod tests {
             config_path: None,
             dynamic_settings: None,
             scaling: None,
+            reduction: None,
         };
         let gdf = lazy_feature_df(df, opts).unwrap();
 
@@ -183,6 +242,7 @@ mod tests {
             config_path: None,
             dynamic_settings: None,
             scaling: None,
+            reduction: None,
         };
         let gdf = lazy_feature_df(df, opts).unwrap();
         println!("{}", gdf.clone().collect().unwrap());
@@ -289,6 +349,7 @@ mod tests {
                 config_path: None,
                 dynamic_settings: Some(dynamic),
                 scaling: None,
+                reduction: None,
             };
             let Err(err) = lazy_feature_df(df, opts) else {
                 panic!("{field} = \"0\" was accepted");
@@ -335,6 +396,7 @@ mod tests {
             config_path: None,
             dynamic_settings: None,
             scaling: Some(Scaling::Standard),
+            reduction: None,
         };
         let expected = collect_in_memory(lazy_feature_df(df.clone(), opts()).unwrap()).unwrap();
         let expected = float_bits(expected);
@@ -346,5 +408,141 @@ mod tests {
                 .unwrap_single();
             assert_eq!(float_bits(streamed), expected);
         }
+    }
+
+    /// 30 groups of different lengths (5 + g values for group g).
+    fn varied() -> LazyFrame {
+        let (mut ids, mut values) = (Vec::new(), Vec::new());
+        for g in 0..30usize {
+            for t in 0..5 + g {
+                ids.push(format!("g{g:02}"));
+                values.push((0.3 * t as f64 + g as f64).sin() * (1 + g % 4) as f64);
+            }
+        }
+        df!["id" => ids, "value" => values].unwrap().lazy()
+    }
+
+    fn minimal(reduction: Option<Reduction>, scaling: Option<Scaling>) -> ExtractionSettings {
+        ExtractionSettings {
+            grouping_cols: vec!["id".to_string()],
+            value_cols: vec!["value".to_string()],
+            feature_setting: FeatureSetting::Minimal,
+            config_path: None,
+            dynamic_settings: None,
+            scaling,
+            reduction,
+        }
+    }
+
+    fn without_noise() -> Reduction {
+        Reduction {
+            noise_sensitivity: None,
+            ..Default::default()
+        }
+    }
+
+    fn names(df: &DataFrame) -> Vec<String> {
+        df.get_column_names()
+            .into_iter()
+            .map(|name| name.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn test_extract_with_reduction() {
+        let ex = extract(varied(), minimal(Some(without_noise()), None)).unwrap();
+        let fit = ex.reduction.unwrap();
+        let df = collect_in_memory(ex.features).unwrap();
+        let mut expected = vec!["id".to_string()];
+        expected.extend(fit.kept.iter().cloned());
+        assert_eq!(names(&df), expected);
+        // the variance copies the standard deviation (a monotone map)
+        assert!(fit.kept.len() < fit.report.height());
+        // lengths vary, so `length` is kept, with its dtype
+        assert!(fit.kept.contains(&"length".to_string()));
+        assert_eq!(df.column("length").unwrap().dtype(), &DataType::UInt32);
+    }
+
+    #[test]
+    fn test_no_reduction_returns_no_fit() {
+        let ex = extract(varied(), minimal(None, None)).unwrap();
+        assert!(ex.reduction.is_none());
+    }
+
+    #[test]
+    fn test_reduction_then_scaling() {
+        let reduced = collect_in_memory(
+            lazy_feature_df(varied(), minimal(Some(without_noise()), None)).unwrap(),
+        )
+        .unwrap();
+        let both = collect_in_memory(
+            lazy_feature_df(
+                varied(),
+                minimal(Some(without_noise()), Some(Scaling::Standard)),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(names(&reduced), names(&both));
+        for column in both.columns().iter().skip(1) {
+            let finite: Vec<f64> = column
+                .f64()
+                .unwrap()
+                .iter()
+                .flatten()
+                .filter(|x| x.is_finite())
+                .collect();
+            let mean = finite.iter().sum::<f64>() / finite.len() as f64;
+            assert!(mean.abs() < 1e-9, "{}: {mean}", column.name());
+        }
+    }
+
+    #[test]
+    fn test_reduction_with_time_windows() {
+        // 15 groups, monthly values over 3 years: 3 yearly windows each
+        let (mut ids, mut times, mut values) = (Vec::new(), Vec::new(), Vec::new());
+        for g in 0..15usize {
+            for y in 0..3usize {
+                for m in 1..=12usize {
+                    ids.push(format!("g{g:02}"));
+                    times.push(format!("{}-{m:02}-01", 2001 + y));
+                    values.push(((g * 12 + m) as f64 * 0.7).sin() * (1 + (g + y) % 5) as f64);
+                }
+            }
+        }
+        let lf = df!["id" => ids, "time" => times, "value" => values]
+            .unwrap()
+            .lazy();
+        let opts = |reduction: Option<Reduction>| ExtractionSettings {
+            grouping_cols: vec!["id".to_string()],
+            value_cols: vec!["value".to_string()],
+            feature_setting: FeatureSetting::Minimal,
+            config_path: None,
+            dynamic_settings: Some(DynamicGroupBySettings {
+                time_col: "time".to_string(),
+                every: "1y".to_string(),
+                period: "1y".to_string(),
+                offset: "0y".to_string(),
+                datetime_format: Some("%Y-%m-%d".to_string()),
+            }),
+            scaling: None,
+            reduction,
+        };
+        let full = collect_in_memory(lazy_feature_df(lf.clone(), opts(None)).unwrap()).unwrap();
+        let reduced =
+            collect_in_memory(lazy_feature_df(lf, opts(Some(without_noise()))).unwrap()).unwrap();
+        assert_eq!(names(&reduced)[..2], ["id", "time"]);
+        assert_eq!(reduced.height(), full.height());
+        let by_key = |df: DataFrame| {
+            df.sort(["id", "time"], SortMultipleOptions::default())
+                .unwrap()
+        };
+        let (full, reduced) = (by_key(full), by_key(reduced));
+        assert!(
+            full.column("time")
+                .unwrap()
+                .as_materialized_series()
+                .equals(reduced.column("time").unwrap().as_materialized_series())
+        );
     }
 }

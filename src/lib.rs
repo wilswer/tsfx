@@ -203,6 +203,8 @@ impl From<PyExtractionSettings> for ExtractionSettings {
                 .dynamic_settings
                 .map(|dyn_settings| dyn_settings.into()),
             scaling: opts.scaling.map(|scaling| scaling.into()),
+            // Exposed to Python in the next change
+            reduction: None,
         }
     }
 }
