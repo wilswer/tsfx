@@ -178,9 +178,9 @@ def test_warning_with_few_features() -> None:
         feature_setting=FeatureSetting.Minimal,
         reduction=ReductionSetting(),
     )
-    with pytest.warns(UserWarning, match="noise_sensitivity"):
+    with pytest.warns(UserWarning, match="features"):
         extract_features(_series(), settings)
-    with pytest.warns(UserWarning, match="noise_sensitivity"):
+    with pytest.warns(UserWarning, match="features"):
         reduction_report(_series(), settings)
 
 
@@ -214,7 +214,7 @@ def test_duplicates_across_value_columns() -> None:
 
 
 def test_short_series_nan_features_dropped_as_missing() -> None:
-    # 10 of the 40 groups have only 2 values, so some features are NaN there
+    # 10 of the 60 groups have only 2 values, so some features are NaN there
     report = reduction_report(
         _series(short_groups=10),
         _settings(reduction=ReductionSetting()),

@@ -147,7 +147,9 @@ impl Reduction {
     /// rows, as they do for extracted features (one row per group or window).
     /// Memory: the shares of steps 1 and 2 are computed column by column, and
     /// steps 3 and 4 hold only the sampled rows (at most `max_samples`) of the
-    /// features left. Errors on invalid settings and on fewer rows than
+    /// features left, plus step 3's correlation matrix: 8 · d² bytes for the d
+    /// features left after step 2 (about 1.8 GB at 15,000 features). Errors on
+    /// invalid settings and on fewer rows than
     /// [`Reduction::min_rows`]: the reduction is fitted across the rows.
     pub fn fit(
         &self,
@@ -281,7 +283,8 @@ impl Reduction {
                     warnings.push(format!(
                         "the noise step ran on {} rows (fewer than {NOISE_WARN_MIN_ROWS}): with \
                          few rows it drops many real features as noise; consider more groups \
-                         or windows, a lower noise_sensitivity, or noise_sensitivity=None",
+                         or windows (or a larger max_samples), a lower noise_sensitivity, or \
+                         noise_sensitivity=None",
                         rows.len()
                     ));
                 }
@@ -732,7 +735,7 @@ mod fit_tests {
         let fit = Reduction::default().fit(&crafted(), &keys()).unwrap();
         assert_eq!(fit.warnings.len(), 1);
         assert!(
-            fit.warnings[0].contains("noise_sensitivity"),
+            fit.warnings[0].contains("2 features"),
             "{}",
             fit.warnings[0]
         );

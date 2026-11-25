@@ -70,7 +70,7 @@ mod tests {
     }
 
     #[test]
-    fn test_feature_values_missing_as_nan() {
+    fn test_column_values_missing_as_nan() {
         let df = df![
             "x" => [Some(1.0), None, Some(f64::INFINITY), Some(f64::NAN), Some(f64::NEG_INFINITY)],
             "n" => [Some(1u32), Some(2), None, Some(4), Some(5)],

@@ -132,6 +132,12 @@ def reduction_report(
         If `settings` has no reduction, or the reduction cannot be fitted
         (e.g. too few groups or windows).
 
+    Warns
+    -----
+    UserWarning
+        If the noise step runs on fewer than 50 features or rows: it may then
+        drop real features as noise.
+
     """
     df = lf.select(settings._input_columns).collect()
     return tsfx.reduction_report_df(df=df, settings=settings)
