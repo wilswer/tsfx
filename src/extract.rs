@@ -141,7 +141,9 @@ pub fn extract(df: LazyFrame, opts: ExtractionSettings) -> Result<Extraction, Ex
     for step in steps {
         fdf = match step {
             PostStep::Reduce(reduction) => {
-                // In polars' pool, so POLARS_MAX_THREADS caps it too
+                // In polars' pool, so POLARS_MAX_THREADS caps it too (a rayon
+                // pool around the caller is not used: test thread counts on
+                // Reduction::fit directly)
                 let fit = RAYON.install(|| reduction.fit(&fdf, &key_cols))?;
                 let reduced = fit.apply(fdf, &key_cols)?;
                 reduction_fit = Some(fit);
@@ -533,16 +535,22 @@ mod tests {
             collect_in_memory(lazy_feature_df(lf, opts(Some(without_noise()))).unwrap()).unwrap();
         assert_eq!(names(&reduced)[..2], ["id", "time"]);
         assert_eq!(reduced.height(), full.height());
+        // something was dropped (`length` is 12 in every window)
+        assert!(reduced.width() < full.width());
+        assert!(!names(&reduced).contains(&"length".to_string()));
         let by_key = |df: DataFrame| {
             df.sort(["id", "time"], SortMultipleOptions::default())
                 .unwrap()
         };
         let (full, reduced) = (by_key(full), by_key(reduced));
-        assert!(
-            full.column("time")
-                .unwrap()
-                .as_materialized_series()
-                .equals(reduced.column("time").unwrap().as_materialized_series())
-        );
+        for key in ["id", "time"] {
+            assert!(
+                full.column(key)
+                    .unwrap()
+                    .as_materialized_series()
+                    .equals(reduced.column(key).unwrap().as_materialized_series()),
+                "{key}"
+            );
+        }
     }
 }

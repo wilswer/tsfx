@@ -61,6 +61,7 @@ fn stock_features() -> DataFrame {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "slow in debug builds: run with --release")]
 fn test_noise_step_on_stock_features() {
     let keys = vec!["Name".to_string(), "date".to_string()];
     let features = stock_features();
@@ -108,7 +109,16 @@ fn test_noise_step_on_stock_features() {
         let dropped_by = report.column("dropped_by").unwrap().str().unwrap();
         let (mut reached, mut dropped) = (0, 0);
         for i in 0..report.height() {
-            if feature.get(i).unwrap().starts_with("copy_") || score.get(i).is_none() {
+            if feature.get(i).unwrap().starts_with("copy_") {
+                // every copy reached the noise step, so the step decided
+                assert!(
+                    score.get(i).is_some(),
+                    "{} did not reach the noise step",
+                    feature.get(i).unwrap()
+                );
+                continue;
+            }
+            if score.get(i).is_none() {
                 continue;
             }
             reached += 1;
@@ -116,6 +126,15 @@ fn test_noise_step_on_stock_features() {
                 dropped += 1;
             }
         }
+        let copies = fit
+            .kept
+            .iter()
+            .filter(|name| name.starts_with("copy_"))
+            .count();
+        eprintln!(
+            "reduction_stocks margin: seed {seed}: {copies} of 20 copies kept, \
+             {dropped} of {reached} real features dropped as noise"
+        );
         assert!(
             dropped * 100 <= reached,
             "seed {seed}: {dropped} of {reached} real features dropped as noise"
