@@ -27,8 +27,10 @@ All notable changes to TSFX are documented here.
 ### Fixed
 
 - **`examples/vector_search.ipynb` runs again**: its window `offset="0"` lacked
-  a unit, which 0.9.0 rejects. It now uses `reduction` and `scaling` instead
-  of standardizing and dropping columns by hand.
+  a unit, which 0.9.0 rejects, and it searched with `QdrantClient.search`,
+  which current qdrant-client no longer has (now `query_points`). It now uses
+  `reduction` and `scaling` instead of standardizing and dropping columns by
+  hand.
 
 ## 0.9.0 (2026-11-10)
 

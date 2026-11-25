@@ -287,11 +287,11 @@ from tsfx import (
 
 df = pl.DataFrame(
     {
-        "id": [f"s{g:02}" for g in range(40) for _ in range(60)],
+        "id": [f"s{g:02}" for g in range(40) for _ in range(200)],
         "val": [
             math.sin(0.1 * (g % 8 + 1) * t) * (1 + g % 5) + 0.02 * g * t
             for g in range(40)
-            for t in range(60)
+            for t in range(200)
         ],
     },
 ).lazy()
