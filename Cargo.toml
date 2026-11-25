@@ -39,6 +39,8 @@ polars = { git = "https://github.com/pola-rs/polars.git", rev = "7f902bd3ffd27ff
 ] }
 pyo3-polars = { git = "https://github.com/pola-rs/polars.git", rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92", features = ["lazy", "dtype-struct"] }
 itertools = "0.15"
+# The version polars already pulls in; runs the reduction in polars' pool
+rayon = "1.12"
 thiserror = "2"
 anyhow = "1"
 rustfft = "6.4.1"

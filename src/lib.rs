@@ -1,6 +1,7 @@
 pub mod error;
 pub mod extract;
 pub mod feature_extractors;
+pub mod reduction;
 pub mod scaling;
 pub mod utils;
 
