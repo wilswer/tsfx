@@ -254,7 +254,7 @@ extraction and before scaling:
 1. features that are mostly missing: more than `max_missing` (0.05) of the
    values null, NaN or infinite;
 2. features that are almost always one value: one value covers more than
-   `max_top_share` (0.95) of the others;
+   `max_top_share` (0.95) of its non-missing values;
 3. near-duplicates: features whose Spearman correlation with an earlier, kept
    feature is above `max_correlation` (0.95) in absolute value, e.g. the
    variance of the standard deviation, or features of two value columns that
@@ -268,10 +268,10 @@ Each step is turned off with `None`, e.g.
 fewer. The reduction is fitted across the extracted groups (or windows), so it
 needs several of them (at least 11 with the defaults) and cannot be fitted on a
 single series. With fewer than 50 features left for the noise step, a
-`UserWarning` says it may drop real features as noise. The noise step works on
-at most `max_samples` (5000) rows, a sample drawn with `seed`, so its result is
-the same in every run. `reduction_report` shows what was kept, what was dropped
-and why.
+`UserWarning` says it may drop real features as noise. The correlation and
+noise steps work on at most `max_samples` (5000) rows, a sample drawn with
+`seed`, so the result is the same in every run. `reduction_report` shows what
+was kept, what was dropped and why (`dropped_by` is null for a kept feature).
 
 ```python
 import math
