@@ -1,17 +1,20 @@
 pub mod error;
 pub mod extract;
 pub mod feature_extractors;
+pub mod reduction;
 pub mod scaling;
 pub mod utils;
 
+use std::ffi::CString;
+
 use error::ExtractionError;
-use extract::{
-    DynamicGroupBySettings, ExtractionSettings, FeatureSetting, collect_in_memory, lazy_feature_df,
-};
+use extract::{DynamicGroupBySettings, ExtractionSettings, FeatureSetting, collect_in_memory};
 use polars::prelude::IntoLazy;
+use pyo3::exceptions::{PyUserWarning, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyType;
 use pyo3_polars::{PyDataFrame, PyLazyFrame};
+use reduction::Reduction;
 use scaling::Scaling;
 
 /// Defines the complexity level of the feature extraction process.
@@ -49,6 +52,93 @@ enum PyScalerSetting {
     },
 }
 
+/// How to drop redundant and uninformative features after extraction, before
+/// scaling: features that are mostly missing, almost always one value,
+/// near-duplicates of an earlier feature (Spearman correlation), or noise (no
+/// better than shuffled shadow features at respecting which rows are
+/// neighbors). Each step is turned off with `None`. The reduction is fitted
+/// across the extracted rows (groups or windows), so it needs several of
+/// them; it cannot be fitted on a single series.
+///
+/// Attributes:
+///     max_missing: Drop a feature whose share of missing values (null, NaN,
+///         ±inf) is above this, in [0, 1).
+///     max_top_share: Drop a feature whose most frequent value covers more
+///         than this share of its non-missing values, in (0, 1).
+///     max_correlation: Drop a feature whose |Spearman correlation| with an
+///         earlier kept feature is above this, in (0, 1).
+///     noise_sensitivity: About this share of pure-noise features is dropped
+///         (0.99 lets about 1 in 100 through), in [0.5, 0.999]. Higher is
+///         stricter and slower and, with few features left, drops more real
+///         features by mistake (a warning says so below 50 features or rows).
+///         `None` turns the step off.
+///     noise_neighbors: Nearest rows per row in the noise step, at least 1.
+///     max_samples: Row cap for the correlation and noise steps (a seeded
+///         sample above it), larger than `noise_neighbors`.
+///     seed: Seed of the row sample and the noise step.
+#[pyclass(from_py_object, name = "ReductionSetting", eq, get_all)]
+#[derive(Clone, Debug, PartialEq)]
+struct PyReductionSetting {
+    max_missing: Option<f64>,
+    max_top_share: Option<f64>,
+    max_correlation: Option<f64>,
+    noise_sensitivity: Option<f64>,
+    noise_neighbors: usize,
+    max_samples: usize,
+    seed: u64,
+}
+
+#[pymethods]
+impl PyReductionSetting {
+    /// Initialize the reduction settings; invalid values raise `ValueError`.
+    #[new]
+    #[pyo3(signature = (
+        max_missing=Some(0.05),
+        max_top_share=Some(0.95),
+        max_correlation=Some(0.95),
+        noise_sensitivity=Some(0.99),
+        noise_neighbors=10,
+        max_samples=5000,
+        seed=0,
+    ))]
+    fn new(
+        max_missing: Option<f64>,
+        max_top_share: Option<f64>,
+        max_correlation: Option<f64>,
+        noise_sensitivity: Option<f64>,
+        noise_neighbors: usize,
+        max_samples: usize,
+        seed: u64,
+    ) -> PyResult<Self> {
+        let setting = PyReductionSetting {
+            max_missing,
+            max_top_share,
+            max_correlation,
+            noise_sensitivity,
+            noise_neighbors,
+            max_samples,
+            seed,
+        };
+        Reduction::from(setting.clone()).validate()?;
+        Ok(setting)
+    }
+
+    fn __repr__(&self) -> String {
+        let opt = |v: Option<f64>| v.map_or("None".to_string(), |v| v.to_string());
+        format!(
+            "ReductionSetting(max_missing={}, max_top_share={}, max_correlation={}, \
+             noise_sensitivity={}, noise_neighbors={}, max_samples={}, seed={})",
+            opt(self.max_missing),
+            opt(self.max_top_share),
+            opt(self.max_correlation),
+            opt(self.noise_sensitivity),
+            self.noise_neighbors,
+            self.max_samples,
+            self.seed
+        )
+    }
+}
+
 /// Configuration settings for the feature extraction process.
 #[pyclass(from_py_object, name = "ExtractionSettings")]
 #[derive(Clone)]
@@ -59,6 +149,7 @@ struct PyExtractionSettings {
     config_path: Option<String>,
     dynamic_settings: Option<PyDynamicGroupBySettings>,
     scaling: Option<PyScalerSetting>,
+    reduction: Option<PyReductionSetting>,
 }
 
 /// Settings for performing dynamic, time-based group-by operations.
@@ -83,8 +174,9 @@ impl PyExtractionSettings {
     ///     config_path (str | None, optional): Path to a TOML feature config file, which must exist. Defaults to None: `.tsfx-config.toml` in the working directory if present, else the default config.
     ///     dynamic_settings (DynamicGroupBySettings | None, optional): Settings for rolling/dynamic time windows. Defaults to None.
     ///     scaling (ScalerSetting | None, optional): Scale the features across groups after extraction. Defaults to None: no scaling.
+    ///     reduction (ReductionSetting | None, optional): Drop redundant and uninformative features after extraction, before scaling. Defaults to None: no reduction.
     #[new]
-    #[pyo3(signature = (grouping_cols, value_cols, feature_setting, config_path=None, dynamic_settings=None, scaling=None))]
+    #[pyo3(signature = (grouping_cols, value_cols, feature_setting, config_path=None, dynamic_settings=None, scaling=None, reduction=None))]
     fn new(
         grouping_cols: Vec<String>,
         value_cols: Vec<String>,
@@ -92,6 +184,7 @@ impl PyExtractionSettings {
         config_path: Option<String>,
         dynamic_settings: Option<PyDynamicGroupBySettings>,
         scaling: Option<&Bound<PyAny>>,
+        reduction: Option<PyReductionSetting>,
     ) -> PyResult<Self> {
         let scaling = match scaling {
             // A variant class without arguments, e.g. `ScalerSetting.Standard`
@@ -114,6 +207,7 @@ impl PyExtractionSettings {
             config_path,
             dynamic_settings,
             scaling,
+            reduction,
         })
     }
 
@@ -179,6 +273,20 @@ impl From<PyScalerSetting> for Scaling {
     }
 }
 
+impl From<PyReductionSetting> for Reduction {
+    fn from(setting: PyReductionSetting) -> Self {
+        Reduction {
+            max_missing: setting.max_missing,
+            max_top_share: setting.max_top_share,
+            max_correlation: setting.max_correlation,
+            noise_sensitivity: setting.noise_sensitivity,
+            noise_neighbors: setting.noise_neighbors,
+            max_samples: setting.max_samples,
+            seed: setting.seed,
+        }
+    }
+}
+
 impl From<PyDynamicGroupBySettings> for DynamicGroupBySettings {
     fn from(opts: PyDynamicGroupBySettings) -> Self {
         DynamicGroupBySettings {
@@ -202,6 +310,7 @@ impl From<PyExtractionSettings> for ExtractionSettings {
                 .dynamic_settings
                 .map(|dyn_settings| dyn_settings.into()),
             scaling: opts.scaling.map(|scaling| scaling.into()),
+            reduction: opts.reduction.map(|reduction| reduction.into()),
         }
     }
 }
@@ -221,25 +330,33 @@ impl From<PyExtractionSettings> for ExtractionSettings {
 ///     polars.DataFrame: A new DataFrame containing the grouped IDs and their extracted features.
 ///
 /// Raises:
+///     ValueError: If the settings are invalid, or the reduction cannot be fitted
+///         (fewer groups or windows than it needs).
 ///     Exception: If an underlying Polars error occurs during collection.
+///
+/// Warns:
+///     UserWarning: If the reduction's noise step runs on fewer than 50
+///         features or rows: it may then drop real features as noise.
 #[pyfunction]
 #[pyo3(signature = (lf, settings, streaming=false))]
 fn extract_features(
+    py: Python<'_>,
     lf: PyLazyFrame,
     settings: PyExtractionSettings,
     streaming: bool,
 ) -> PyResult<PyDataFrame> {
-    let lf = lf.into();
-    let settings = settings.into();
-    let lf = if !streaming {
-        collect_in_memory(lazy_feature_df(lf, settings)?).map_err(ExtractionError::PolarsError)?
+    let extraction = extract::extract(lf.into(), settings.into())?;
+    warn_about(py, &extraction)?;
+    let df = if !streaming {
+        collect_in_memory(extraction.features).map_err(ExtractionError::PolarsError)?
     } else {
-        lazy_feature_df(lf, settings)?
+        extraction
+            .features
             .with_streaming(true)
             .collect()
             .map_err(ExtractionError::PolarsError)?
     };
-    Ok(PyDataFrame(lf))
+    Ok(PyDataFrame(df))
 }
 
 /// Extract features from an in-memory DataFrame.
@@ -249,10 +366,60 @@ fn extract_features(
 /// while a LazyFrame's plan (and any in-memory data in it) is serialised.
 #[pyfunction]
 #[pyo3(signature = (df, settings))]
-fn extract_features_df(df: PyDataFrame, settings: PyExtractionSettings) -> PyResult<PyDataFrame> {
-    let df = collect_in_memory(lazy_feature_df(df.0.lazy(), settings.into())?)
-        .map_err(ExtractionError::PolarsError)?;
+fn extract_features_df(
+    py: Python<'_>,
+    df: PyDataFrame,
+    settings: PyExtractionSettings,
+) -> PyResult<PyDataFrame> {
+    let extraction = extract::extract(df.0.lazy(), settings.into())?;
+    warn_about(py, &extraction)?;
+    let df = collect_in_memory(extraction.features).map_err(ExtractionError::PolarsError)?;
     Ok(PyDataFrame(df))
+}
+
+/// The reduction's report for an in-memory DataFrame.
+///
+/// Internal counterpart of `reduction_report`: extracts the features (without
+/// scaling, which the reduction does not depend on), fits the reduction and
+/// returns its report, one row per feature. Raises `ValueError` when the
+/// settings have no reduction.
+#[pyfunction]
+#[pyo3(signature = (df, settings))]
+fn reduction_report_df(
+    py: Python<'_>,
+    df: PyDataFrame,
+    settings: PyExtractionSettings,
+) -> PyResult<PyDataFrame> {
+    let mut settings: ExtractionSettings = settings.into();
+    if settings.reduction.is_none() {
+        return Err(PyValueError::new_err(
+            "reduction_report needs settings with a reduction: pass \
+             reduction=ReductionSetting(...) to ExtractionSettings",
+        ));
+    }
+    settings.scaling = None;
+    let extraction = extract::extract(df.0.lazy(), settings)?;
+    warn_about(py, &extraction)?;
+    let fit = extraction
+        .reduction
+        .ok_or_else(|| PyValueError::new_err("the reduction was not fitted"))?;
+    Ok(PyDataFrame(fit.report))
+}
+
+/// Emits the warnings of the extraction's reduction fit as Python
+/// `UserWarning`s, attributed to the caller of the Python wrapper.
+fn warn_about(py: Python<'_>, extraction: &extract::Extraction) -> PyResult<()> {
+    let Some(fit) = &extraction.reduction else {
+        return Ok(());
+    };
+    let category = py.get_type::<PyUserWarning>();
+    for warning in &fit.warnings {
+        let message =
+            CString::new(warning.as_str()).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        // 1 is the Python wrapper's line, 2 the user's call
+        PyErr::warn(py, category.as_any(), &message, 2)?;
+    }
+    Ok(())
 }
 
 /// Time Series Feature Extraction module.
@@ -265,7 +432,9 @@ fn tsfx(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyExtractionSettings>()?;
     m.add_class::<PyDynamicGroupBySettings>()?;
     m.add_class::<PyScalerSetting>()?;
+    m.add_class::<PyReductionSetting>()?;
     m.add_function(wrap_pyfunction!(extract_features, m)?)?;
     m.add_function(wrap_pyfunction!(extract_features_df, m)?)?;
+    m.add_function(wrap_pyfunction!(reduction_report_df, m)?)?;
     Ok(())
 }

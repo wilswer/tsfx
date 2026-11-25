@@ -243,6 +243,109 @@ shape: (3, 5)
 └─────┴────────┴───────────┴──────────────┴───────────────┘
 ```
 
+### Reducing redundant features
+
+Many extracted features say the same thing, or nothing. For similarity search in
+particular, every such feature is an extra dimension: near-copies make one
+property of the series count many times in a distance, and noise blurs the
+difference between near and far neighbors. Pass `reduction` to drop, after
+extraction and before scaling:
+
+1. features that are mostly missing: more than `max_missing` (0.05) of the
+   values null, NaN or infinite;
+2. features that are almost always one value: one value covers more than
+   `max_top_share` (0.95) of its non-missing values;
+3. near-duplicates: features whose Spearman correlation with an earlier, kept
+   feature is above `max_correlation` (0.95) in absolute value, e.g. the
+   variance and the standard deviation, or features of two value columns that
+   move together;
+4. noise: features that respect which rows are neighbors no better than shuffled
+   copies of the data (`noise_sensitivity`, 0.99: about 99% of pure-noise
+   features are dropped).
+
+Each step is turned off with `None`, e.g.
+`ReductionSetting(noise_sensitivity=None)`. The columns kept are unchanged, only
+fewer. The reduction is fitted across the extracted groups (or windows), so it
+needs several of them (at least 11 with the defaults) and cannot be fitted on a
+single series. With fewer than 50 features left for the noise step, a
+`UserWarning` says it may drop real features as noise, and so does a second one
+with fewer than 50 rows (groups or windows): the noise step needs enough rows to
+tell neighbors apart (in tests, it dropped 45% of medium-strength real features
+at 20 rows, 6% at 40, 2% at 60). The step is strict, keeping a feature only if
+it beats all 99 shuffled copies, so features with a weak signal and rare flags
+(a value on a few percent of the rows) are often dropped too; a lower
+`noise_sensitivity` (down to 0.5) keeps more of them. The correlation and
+noise steps work on at most `max_samples` (5000) rows, a sample drawn with
+`seed`, so the result is the same in every run. `reduction_report` shows what
+was kept, what was dropped and why (`dropped_by` is null for a kept feature).
+
+```python
+import math
+
+import polars as pl
+from tsfx import (
+    ExtractionSettings,
+    FeatureSetting,
+    ReductionSetting,
+    extract_features,
+    reduction_report,
+)
+
+df = pl.DataFrame(
+    {
+        "id": [f"s{g:02}" for g in range(60) for _ in range(200)],
+        "val": [
+            math.sin(0.1 * (g % 8 + 1) * t) * (1 + g % 5) + 0.02 * g * t
+            for g in range(60)
+            for t in range(200)
+        ],
+    },
+).lazy()
+settings = ExtractionSettings(
+    grouping_cols=["id"],
+    value_cols=["val"],
+    feature_setting=FeatureSetting.Efficient,
+    reduction=ReductionSetting(),
+)
+gdf = extract_features(df, settings)
+report = reduction_report(df, settings)
+print(f"{report.height} features extracted, {gdf.width - 1} kept")
+print(report.group_by("dropped_by").len().sort("len", descending=True))
+print(
+    report.filter(pl.col("dropped_by") == "duplicate")
+    .select("feature", "duplicate_of", "correlation")
+    .head(3),
+)
+```
+
+which produces the following output:
+
+```bash
+749 features extracted, 150 kept
+shape: (5, 2)
+┌────────────┬─────┐
+│ dropped_by ┆ len │
+│ ---        ┆ --- │
+│ str        ┆ u32 │
+╞════════════╪═════╡
+│ duplicate  ┆ 520 │
+│ null       ┆ 150 │
+│ one_value  ┆ 61  │
+│ noise      ┆ 17  │
+│ missing    ┆ 1   │
+└────────────┴─────┘
+shape: (3, 3)
+┌──────────────┬─────────────────┬─────────────┐
+│ feature      ┆ duplicate_of    ┆ correlation │
+│ ---          ┆ ---             ┆ ---         │
+│ str          ┆ str             ┆ f64         │
+╞══════════════╪═════════════════╪═════════════╡
+│ val__mean    ┆ val__sum_values ┆ 1.0         │
+│ val__median  ┆ val__sum_values ┆ 0.9995      │
+│ val__maximum ┆ val__sum_values ┆ 0.999833    │
+└──────────────┴─────────────────┴─────────────┘
+```
+
 For more examples, see the [examples](examples) directory.
 
 ## Contributing

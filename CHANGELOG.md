@@ -2,6 +2,39 @@
 
 All notable changes to TSFX are documented here.
 
+## Unreleased
+
+### Added
+
+- **Feature reduction**: `ExtractionSettings(..., reduction=ReductionSetting())`
+  drops redundant and uninformative features after extraction and before
+  scaling, in Rust: features that are mostly missing (`max_missing`, 0.05),
+  almost always one value (`max_top_share`, 0.95), near-duplicates of an
+  earlier feature by Spearman correlation (`max_correlation`, 0.95), or noise:
+  no better than shuffled shadow features at respecting which rows are
+  neighbors (Laplacian score; `noise_sensitivity`, 0.99, drops about 99% of
+  pure-noise features). Each step is turned off with `None`; the kept columns
+  are unchanged. The reduction is fitted across the extracted groups or
+  windows (at least 11 with the defaults), runs in polars' thread pool, and
+  gives the same result for any thread count and row order (`seed`, and at
+  most `max_samples` rows for the correlation and noise steps). With fewer
+  than 50 features or 50 rows (groups or windows) left for the noise step, a
+  `UserWarning` says it may drop real features; the step is strict, so weak
+  features and rare flags are often dropped too (a lower `noise_sensitivity`,
+  0.5 to 0.999, keeps more). `reduction_report(lf, settings)` lists every feature, whether
+  it was kept, and the numbers behind the decision. Defaults to `None`: no
+  reduction, as before. The first three steps are fuzzed against a
+  numpy/scipy reference.
+
+### Fixed
+
+- **`examples/vector_search.ipynb` runs again**: its window `offset="0"` lacked
+  a unit, which 0.9.0 rejects, and it searched with `QdrantClient.search`,
+  which current qdrant-client no longer has (now `query_points`). It now uses
+  `reduction` and `scaling` instead of standardizing and dropping columns by
+  hand. The `examples` extra now includes pandas and matplotlib, which the
+  notebook imports.
+
 ## 0.9.0 (2026-11-10)
 
 ### Changed

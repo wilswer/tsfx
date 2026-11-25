@@ -30,6 +30,18 @@ def extract_features(
     pl.DataFrame
         Flattened DataFrame with extracted features.
 
+    Raises
+    ------
+    ValueError
+        If the settings are invalid, or `settings.reduction` cannot be fitted
+        (fewer groups or windows than it needs).
+
+    Warns
+    -----
+    UserWarning
+        If the reduction's noise step runs on fewer than 50 features or rows:
+        it may then drop real features as noise.
+
     Example
     -------
     ```python
@@ -74,3 +86,58 @@ def extract_features(
             if dtype == pl.Struct
         ],
     )
+
+
+def reduction_report(
+    lf: pl.LazyFrame,
+    settings: tsfx.ExtractionSettings,
+) -> pl.DataFrame:
+    """Explain which features the reduction keeps and why.
+
+    Extracts the features of `lf` as `settings` say (without scaling, which
+    the reduction does not depend on), fits `settings.reduction` and returns
+    its report: one row per extracted feature, in extraction order, with the
+    columns
+
+    - `feature`: the feature's column name;
+    - `kept`: whether the reduction keeps it;
+    - `dropped_by`: the step that dropped it (`"missing"`, `"one_value"`,
+      `"duplicate"` or `"noise"`), null if kept;
+    - `missing_share`: its share of missing values (null, NaN, ±inf);
+    - `top_share`: the share of its most frequent value among its non-missing
+      values;
+    - `duplicate_of` and `correlation`: the kept feature it copies, and their
+      Spearman correlation;
+    - `noise_score` and `noise_cutoff`: its Laplacian score and the best
+      shadow feature's score; it is noise unless its score is below.
+
+    A step that is turned off, or that a feature did not reach, leaves its
+    columns null.
+
+    Parameters
+    ----------
+    lf : pl.LazyFrame
+        Input lazy frame.
+    settings : tsfx.ExtractionSettings
+        Extraction configuration with a `reduction`.
+
+    Returns
+    -------
+    pl.DataFrame
+        The report.
+
+    Raises
+    ------
+    ValueError
+        If `settings` has no reduction, or the reduction cannot be fitted
+        (e.g. too few groups or windows).
+
+    Warns
+    -----
+    UserWarning
+        If the noise step runs on fewer than 50 features or rows: it may then
+        drop real features as noise.
+
+    """
+    df = lf.select(settings._input_columns).collect()
+    return tsfx.reduction_report_df(df=df, settings=settings)

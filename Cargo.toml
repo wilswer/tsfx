@@ -21,6 +21,9 @@ pyo3 = { version = "0.29", features = ["abi3-py311"] }
 chrono = "0.4.42"
 csv = "1.3"
 ndarray = "0.17"
+# polars, pyo3-polars and polars-core share one git rev: bump them together
+# (a second polars-core would bring a second thread pool, outside
+# POLARS_MAX_THREADS)
 polars = { git = "https://github.com/pola-rs/polars.git", rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92", features = [
   "polars-io",
   "lazy",
@@ -38,7 +41,12 @@ polars = { git = "https://github.com/pola-rs/polars.git", rev = "7f902bd3ffd27ff
   "object",
 ] }
 pyo3-polars = { git = "https://github.com/pola-rs/polars.git", rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92", features = ["lazy", "dtype-struct"] }
+# For polars' rayon pool (polars_core::runtime::RAYON), which the polars crate
+# does not re-export; same rev as polars, no features of its own
+polars-core = { git = "https://github.com/pola-rs/polars.git", rev = "7f902bd3ffd27ff82d14278a09a295ff2f7aed92", default-features = false }
 itertools = "0.15"
+# The version polars already pulls in; runs the reduction in polars' pool
+rayon = "1.12"
 thiserror = "2"
 anyhow = "1"
 rustfft = "6.4.1"

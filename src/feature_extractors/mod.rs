@@ -471,6 +471,7 @@ mod tests {
             config_path: None,
             dynamic_settings: None,
             scaling: None,
+            reduction: None,
         };
 
         // Extract features
