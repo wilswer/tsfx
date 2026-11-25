@@ -9,6 +9,7 @@
 
 mod duplicates;
 mod matrix;
+mod noise;
 mod rng;
 mod shares;
 
