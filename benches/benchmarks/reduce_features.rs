@@ -25,8 +25,10 @@ fn extract(lf: LazyFrame, opts: ExtractionSettings) -> DataFrame {
     collect_in_memory(lazy_feature_df(lf, opts).unwrap()).unwrap()
 }
 
-/// Efficient features of the stocks in one-year windows.
-fn stock_features(value_cols: &[&str]) -> DataFrame {
+/// Efficient features of the stocks in windows of length `every` (one year:
+/// about 3,000 windows; half a year: about 5,500, more than `max_samples`, so
+/// the sampled path runs).
+fn stock_features(value_cols: &[&str], every: &str) -> DataFrame {
     let lf = LazyCsvReader::new(PlRefPath::new("test_dataset/all_stocks_5yr.csv"))
         .finish()
         .unwrap()
@@ -46,8 +48,8 @@ fn stock_features(value_cols: &[&str]) -> DataFrame {
             config_path: None,
             dynamic_settings: Some(DynamicGroupBySettings {
                 time_col: "date".to_string(),
-                every: "1y".to_string(),
-                period: "1y".to_string(),
+                every: every.to_string(),
+                period: every.to_string(),
                 offset: "0y".to_string(),
                 datetime_format: Some("%Y-%m-%d".to_string()),
             }),
@@ -106,13 +108,19 @@ fn criterion_benchmark(c: &mut Criterion) {
     bench_fit(
         c,
         "reduce_stocks_close",
-        &stock_features(&["close"]),
+        &stock_features(&["close"], "1y"),
         &stock_keys,
     );
     bench_fit(
         c,
         "reduce_stocks_all",
-        &stock_features(&STOCK_VALUE_COLS),
+        &stock_features(&STOCK_VALUE_COLS, "1y"),
+        &stock_keys,
+    );
+    bench_fit(
+        c,
+        "reduce_stocks_close_halfyear",
+        &stock_features(&["close"], "6mo"),
         &stock_keys,
     );
     if Path::new(BRC_PATH).exists() {

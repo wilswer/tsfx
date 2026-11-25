@@ -18,8 +18,10 @@ All notable changes to TSFX are documented here.
   windows (at least 11 with the defaults), runs in polars' thread pool, and
   gives the same result for any thread count and row order (`seed`, and at
   most `max_samples` rows for the correlation and noise steps). With fewer
-  than 50 features left for the noise step, a `UserWarning` says it may drop
-  real features. `reduction_report(lf, settings)` lists every feature, whether
+  than 50 features or 50 rows (groups or windows) left for the noise step, a
+  `UserWarning` says it may drop real features; the step is strict, so weak
+  features and rare flags are often dropped too (a lower `noise_sensitivity`,
+  0.5 to 0.999, keeps more). `reduction_report(lf, settings)` lists every feature, whether
   it was kept, and the numbers behind the decision. Defaults to `None`: no
   reduction, as before. The first three steps are fuzzed against a
   numpy/scipy reference.

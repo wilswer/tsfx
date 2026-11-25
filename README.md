@@ -257,7 +257,7 @@ extraction and before scaling:
    `max_top_share` (0.95) of its non-missing values;
 3. near-duplicates: features whose Spearman correlation with an earlier, kept
    feature is above `max_correlation` (0.95) in absolute value, e.g. the
-   variance of the standard deviation, or features of two value columns that
+   variance and the standard deviation, or features of two value columns that
    move together;
 4. noise: features that respect which rows are neighbors no better than shuffled
    copies of the data (`noise_sensitivity`, 0.99: about 99% of pure-noise
@@ -268,7 +268,13 @@ Each step is turned off with `None`, e.g.
 fewer. The reduction is fitted across the extracted groups (or windows), so it
 needs several of them (at least 11 with the defaults) and cannot be fitted on a
 single series. With fewer than 50 features left for the noise step, a
-`UserWarning` says it may drop real features as noise. The correlation and
+`UserWarning` says it may drop real features as noise, and so does a second one
+with fewer than 50 rows (groups or windows): the noise step needs enough rows to
+tell neighbors apart (in tests, it dropped 45% of medium-strength real features
+at 20 rows, 6% at 40, 2% at 60). The step is strict, keeping a feature only if
+it beats all 99 shuffled copies, so features with a weak signal and rare flags
+(a value on a few percent of the rows) are often dropped too; a lower
+`noise_sensitivity` (down to 0.5) keeps more of them. The correlation and
 noise steps work on at most `max_samples` (5000) rows, a sample drawn with
 `seed`, so the result is the same in every run. `reduction_report` shows what
 was kept, what was dropped and why (`dropped_by` is null for a kept feature).
@@ -287,10 +293,10 @@ from tsfx import (
 
 df = pl.DataFrame(
     {
-        "id": [f"s{g:02}" for g in range(40) for _ in range(200)],
+        "id": [f"s{g:02}" for g in range(60) for _ in range(200)],
         "val": [
             math.sin(0.1 * (g % 8 + 1) * t) * (1 + g % 5) + 0.02 * g * t
-            for g in range(40)
+            for g in range(60)
             for t in range(200)
         ],
     },
