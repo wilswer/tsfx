@@ -183,3 +183,6 @@ test_dataset/measurements.txt
 # Local tooling state
 .vibe-wise/
 .claude/settings.local.json
+
+# Design docs and implementation plans (local only)
+specs/
