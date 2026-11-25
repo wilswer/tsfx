@@ -71,6 +71,7 @@ enum PyScalerSetting {
 ///         (0.99 lets about 1 in 100 through), in (0, 0.999]. Higher is
 ///         stricter and slower and, with few features left, drops more real
 ///         features by mistake (a warning says so below 50 features).
+///         `None` turns the step off.
 ///     noise_neighbors: Nearest rows per row in the noise step, at least 1.
 ///     max_samples: Row cap for the correlation and noise steps (a seeded
 ///         sample above it), larger than `noise_neighbors`.
@@ -395,7 +396,7 @@ fn reduction_report_df(
     warn_about(py, &extraction)?;
     let fit = extraction
         .reduction
-        .expect("extract fits the reduction it is given");
+        .ok_or_else(|| PyValueError::new_err("the reduction was not fitted"))?;
     Ok(PyDataFrame(fit.report))
 }
 

@@ -154,7 +154,9 @@ def test_reduction_then_scaling() -> None:
     assert both.columns == reduced.columns
     for name in both.columns[1:]:
         finite = both[name].filter(both[name].is_finite())
-        assert abs(finite.mean()) < 1e-9, name  # type: ignore[arg-type]
+        mean = finite.mean()
+        assert isinstance(mean, float), name
+        assert abs(mean) < 1e-9, name
 
 
 def test_too_few_rows() -> None:
@@ -183,7 +185,7 @@ def test_warning_with_few_features() -> None:
 
 def test_no_warning_with_many_features() -> None:
     with warnings.catch_warnings():
-        warnings.simplefilter("error")
+        warnings.simplefilter("error", UserWarning)
         extract_features(_series(), _settings(reduction=ReductionSetting()))
 
 

@@ -69,7 +69,7 @@ class ReductionSetting:
         in 100 through), in (0, 0.999]. Higher is stricter and slower and,
         with few features left, drops more real features by mistake: with
         fewer than 50 features reaching the noise step, a `UserWarning` says
-        so.
+        so. `None` turns the step off.
     noise_neighbors:
         Nearest rows per row in the noise step, at least 1.
     max_samples:
