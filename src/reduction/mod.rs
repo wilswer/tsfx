@@ -7,7 +7,9 @@
 //! not changed. Missing means null, NaN or ±inf. Thresholds are strict: a
 //! feature is dropped when its value is above the threshold.
 
+mod matrix;
 mod rng;
+mod shares;
 
 use crate::error::ExtractionError;
 
