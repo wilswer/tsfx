@@ -85,7 +85,8 @@ fn brc_features() -> DataFrame {
     )
 }
 
-/// The default fit, in polars' pool and in a one-thread pool.
+/// The default fit, in polars' pool and with its rayon work in a one-thread
+/// pool (polars' own sort of the rows still uses polars' pool).
 fn bench_fit(c: &mut Criterion, name: &str, features: &DataFrame, keys: &[String]) {
     let reduction = Reduction::default();
     let one_thread = rayon::ThreadPoolBuilder::new()

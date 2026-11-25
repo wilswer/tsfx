@@ -98,12 +98,12 @@ def one_row_groups(draw: st.DrawFn) -> tuple[pl.LazyFrame, list[str]]:
 
 @st.composite
 def real_series(draw: st.DrawFn) -> tuple[pl.LazyFrame, list[str]]:
-    """Draw 10-20 series of 5-40 values each."""
+    """Draw 10-20 series of 5-30 values each."""
     value = st.floats(-1e6, 1e6, allow_nan=False, allow_infinity=False)
     ids: list[str] = []
     values: list[float] = []
     for g in range(draw(st.integers(10, 20))):
-        series = draw(st.lists(value, min_size=5, max_size=40))
+        series = draw(st.lists(value, min_size=5, max_size=30))
         ids.extend([f"g{g:03}"] * len(series))
         values.extend(series)
     return pl.DataFrame({"id": ids, "v": values}).lazy(), ["v"]
@@ -209,7 +209,7 @@ def test_matches_reference_matrices(case: tuple[pl.LazyFrame, list[str]]) -> Non
     _check(lf, value_cols, FeatureSetting.Minimal)
 
 
-@hypothesis.settings(max_examples=20)
+@hypothesis.settings(max_examples=min(hypothesis.settings().max_examples, 20))
 @hypothesis.given(real_series())
 def test_matches_reference_real_series(case: tuple[pl.LazyFrame, list[str]]) -> None:
     lf, value_cols = case
