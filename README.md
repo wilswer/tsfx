@@ -321,17 +321,17 @@ print(
 which produces the following output:
 
 ```bash
-749 features extracted, 146 kept
+749 features extracted, 150 kept
 shape: (5, 2)
 ┌────────────┬─────┐
 │ dropped_by ┆ len │
 │ ---        ┆ --- │
 │ str        ┆ u32 │
 ╞════════════╪═════╡
-│ duplicate  ┆ 515 │
-│ null       ┆ 146 │
+│ duplicate  ┆ 520 │
+│ null       ┆ 150 │
 │ one_value  ┆ 61  │
-│ noise      ┆ 26  │
+│ noise      ┆ 17  │
 │ missing    ┆ 1   │
 └────────────┴─────┘
 shape: (3, 3)
@@ -341,8 +341,8 @@ shape: (3, 3)
 │ str          ┆ str             ┆ f64         │
 ╞══════════════╪═════════════════╪═════════════╡
 │ val__mean    ┆ val__sum_values ┆ 1.0         │
-│ val__median  ┆ val__sum_values ┆ 0.99925     │
-│ val__maximum ┆ val__sum_values ┆ 0.999625    │
+│ val__median  ┆ val__sum_values ┆ 0.9995      │
+│ val__maximum ┆ val__sum_values ┆ 0.999833    │
 └──────────────┴─────────────────┴─────────────┘
 ```
 

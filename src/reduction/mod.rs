@@ -437,7 +437,7 @@ mod tests {
 
     #[test]
     fn test_shadow_count() {
-        for (s, n) in [(0.99, 99), (0.95, 19), (0.5, 1), (0.6, 1), (0.999, 999)] {
+        for (s, n) in [(0.99, 99), (0.95, 19), (0.5, 1), (0.7, 2), (0.999, 999)] {
             let r = Reduction {
                 noise_sensitivity: Some(s),
                 ..Default::default()
