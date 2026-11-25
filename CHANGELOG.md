@@ -30,7 +30,8 @@ All notable changes to TSFX are documented here.
   a unit, which 0.9.0 rejects, and it searched with `QdrantClient.search`,
   which current qdrant-client no longer has (now `query_points`). It now uses
   `reduction` and `scaling` instead of standardizing and dropping columns by
-  hand.
+  hand. The `examples` extra now includes pandas and matplotlib, which the
+  notebook imports.
 
 ## 0.9.0 (2026-11-10)
 

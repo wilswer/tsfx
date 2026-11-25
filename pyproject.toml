@@ -24,6 +24,8 @@ examples = [
   "notebook",
   "numpy",
   "scikit-learn",
+  "pandas",
+  "matplotlib",
 ]
 all = ["tsfx[dev,bench,examples]"]
 

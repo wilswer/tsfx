@@ -315,7 +315,29 @@ print(
 which produces the following output:
 
 ```bash
-README_REDUCTION_OUTPUT
+749 features extracted, 146 kept
+shape: (5, 2)
+┌────────────┬─────┐
+│ dropped_by ┆ len │
+│ ---        ┆ --- │
+│ str        ┆ u32 │
+╞════════════╪═════╡
+│ duplicate  ┆ 515 │
+│ null       ┆ 146 │
+│ one_value  ┆ 61  │
+│ noise      ┆ 26  │
+│ missing    ┆ 1   │
+└────────────┴─────┘
+shape: (3, 3)
+┌──────────────┬─────────────────┬─────────────┐
+│ feature      ┆ duplicate_of    ┆ correlation │
+│ ---          ┆ ---             ┆ ---         │
+│ str          ┆ str             ┆ f64         │
+╞══════════════╪═════════════════╪═════════════╡
+│ val__mean    ┆ val__sum_values ┆ 1.0         │
+│ val__median  ┆ val__sum_values ┆ 0.99925     │
+│ val__maximum ┆ val__sum_values ┆ 0.999625    │
+└──────────────┴─────────────────┴─────────────┘
 ```
 
 For more examples, see the [examples](examples) directory.
