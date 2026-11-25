@@ -115,8 +115,15 @@ fn median(xs: &mut [f64]) -> Option<f64> {
     Some(if n % 2 == 1 {
         xs[n / 2]
     } else {
-        // Halving first cannot overflow
-        xs[n / 2 - 1] / 2.0 + xs[n / 2] / 2.0
+        // As numpy: (a + b) / 2, halving first only where the sum overflows
+        // (halving first loses the last bit of subnormal values)
+        let (a, b) = (xs[n / 2 - 1], xs[n / 2]);
+        let sum = a + b;
+        if sum.is_finite() {
+            sum / 2.0
+        } else {
+            a / 2.0 + b / 2.0
+        }
     })
 }
 
@@ -154,6 +161,9 @@ mod tests {
         assert_eq!(median(&mut [3.0, 1.0, 2.0]), Some(2.0));
         assert_eq!(median(&mut [4.0, 1.0, 3.0, 2.0]), Some(2.5));
         assert_eq!(median(&mut [f64::MAX, f64::MAX]), Some(f64::MAX));
+        // subnormals: as numpy's (a + b) / 2, not a / 2 + b / 2 (which is 0)
+        let tiny = f64::from_bits(1);
+        assert_eq!(median(&mut [tiny, tiny]), Some(tiny));
         assert_eq!(median(&mut []), None);
     }
 
