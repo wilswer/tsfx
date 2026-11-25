@@ -42,6 +42,63 @@ class ScalerSetting:
 
         def __init__(self, feature_range: tuple[float, float] = (0.0, 1.0)) -> None: ...
 
+class ReductionSetting:
+    """How to drop redundant and uninformative features after extraction.
+
+    Runs after extraction and before scaling. Drops features that are mostly
+    missing, almost always one value, near-duplicates of an earlier feature
+    (Spearman correlation), or noise (no better than shuffled shadow features
+    at respecting which rows are neighbors). Each step is turned off with
+    `None`. The reduction is fitted across the extracted rows (groups or
+    windows), so it needs several of them and cannot be fitted on a single
+    series. `reduction_report` explains every decision.
+
+    Parameters
+    ----------
+    max_missing:
+        Drop a feature whose share of missing values (null, NaN, ±inf) is
+        above this, in [0, 1). `0.0` drops every feature with a missing value.
+    max_top_share:
+        Drop a feature whose most frequent value covers more than this share
+        of its non-missing values, in (0, 1).
+    max_correlation:
+        Drop a feature whose |Spearman correlation| with an earlier kept
+        feature is above this, in (0, 1).
+    noise_sensitivity:
+        About this share of pure-noise features is dropped (0.99 lets about 1
+        in 100 through), in (0, 0.999]. Higher is stricter and slower and,
+        with few features left, drops more real features by mistake: with
+        fewer than 50 features reaching the noise step, a `UserWarning` says
+        so.
+    noise_neighbors:
+        Nearest rows per row in the noise step, at least 1.
+    max_samples:
+        Row cap for the correlation and noise steps (a seeded sample above
+        it), larger than `noise_neighbors`.
+    seed:
+        Seed of the row sample and the noise step.
+
+    """
+
+    max_missing: float | None
+    max_top_share: float | None
+    max_correlation: float | None
+    noise_sensitivity: float | None
+    noise_neighbors: int
+    max_samples: int
+    seed: int
+
+    def __init__(
+        self,
+        max_missing: float | None = 0.05,
+        max_top_share: float | None = 0.95,
+        max_correlation: float | None = 0.95,
+        noise_sensitivity: float | None = 0.99,
+        noise_neighbors: int = 10,
+        max_samples: int = 5000,
+        seed: int = 0,
+    ) -> None: ...
+
 class DynamicGroupBySettings:
     r"""Settings for dynamic (time-windowed) group-by extraction.
 
@@ -100,6 +157,10 @@ class ExtractionSettings:
         arguments may be given without calling it (`ScalerSetting.Standard`).
         Defaults to None: no scaling. An invalid `feature_range` (not finite,
         or minimum not below maximum) raises `ValueError`.
+    reduction:
+        Optional `ReductionSetting` to drop redundant and uninformative
+        features after extraction, before scaling. Defaults to None: no
+        reduction.
 
     """
 
@@ -109,6 +170,7 @@ class ExtractionSettings:
     config_path: str | None
     dynamic_settings: DynamicGroupBySettings | None
     scaling: ScalerSetting | None
+    reduction: ReductionSetting | None
 
     @property
     def _input_columns(self) -> list[str]:
@@ -123,6 +185,7 @@ class ExtractionSettings:
         config_path: str | None = None,
         dynamic_settings: DynamicGroupBySettings | None = None,
         scaling: ScalerSetting | type[ScalerSetting] | None = None,
+        reduction: ReductionSetting | None = None,
     ) -> None: ...
 
 def extract_features_df(
@@ -130,6 +193,16 @@ def extract_features_df(
     settings: ExtractionSettings,
 ) -> pl.DataFrame:
     """Extract features from an in-memory DataFrame (used by the Python wrapper)."""
+    ...
+
+def reduction_report_df(
+    df: pl.DataFrame,
+    settings: ExtractionSettings,
+) -> pl.DataFrame:
+    """Return the reduction's report for an in-memory DataFrame.
+
+    Used by `reduction_report`.
+    """
     ...
 
 def extract_features(
