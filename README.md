@@ -243,6 +243,81 @@ shape: (3, 5)
 └─────┴────────┴───────────┴──────────────┴───────────────┘
 ```
 
+### Reducing redundant features
+
+Many extracted features say the same thing, or nothing. For similarity search in
+particular, every such feature is an extra dimension: near-copies make one
+property of the series count many times in a distance, and noise blurs the
+difference between near and far neighbors. Pass `reduction` to drop, after
+extraction and before scaling:
+
+1. features that are mostly missing: more than `max_missing` (0.05) of the
+   values null, NaN or infinite;
+2. features that are almost always one value: one value covers more than
+   `max_top_share` (0.95) of the others;
+3. near-duplicates: features whose Spearman correlation with an earlier, kept
+   feature is above `max_correlation` (0.95) in absolute value, e.g. the
+   variance of the standard deviation, or features of two value columns that
+   move together;
+4. noise: features that respect which rows are neighbors no better than shuffled
+   copies of the data (`noise_sensitivity`, 0.99: about 99% of pure-noise
+   features are dropped).
+
+Each step is turned off with `None`, e.g.
+`ReductionSetting(noise_sensitivity=None)`. The columns kept are unchanged, only
+fewer. The reduction is fitted across the extracted groups (or windows), so it
+needs several of them (at least 11 with the defaults) and cannot be fitted on a
+single series. With fewer than 50 features left for the noise step, a
+`UserWarning` says it may drop real features as noise. The noise step works on
+at most `max_samples` (5000) rows, a sample drawn with `seed`, so its result is
+the same in every run. `reduction_report` shows what was kept, what was dropped
+and why.
+
+```python
+import math
+
+import polars as pl
+from tsfx import (
+    ExtractionSettings,
+    FeatureSetting,
+    ReductionSetting,
+    extract_features,
+    reduction_report,
+)
+
+df = pl.DataFrame(
+    {
+        "id": [f"s{g:02}" for g in range(40) for _ in range(60)],
+        "val": [
+            math.sin(0.1 * (g % 8 + 1) * t) * (1 + g % 5) + 0.02 * g * t
+            for g in range(40)
+            for t in range(60)
+        ],
+    },
+).lazy()
+settings = ExtractionSettings(
+    grouping_cols=["id"],
+    value_cols=["val"],
+    feature_setting=FeatureSetting.Efficient,
+    reduction=ReductionSetting(),
+)
+gdf = extract_features(df, settings)
+report = reduction_report(df, settings)
+print(f"{report.height} features extracted, {gdf.width - 1} kept")
+print(report.group_by("dropped_by").len().sort("len", descending=True))
+print(
+    report.filter(pl.col("dropped_by") == "duplicate")
+    .select("feature", "duplicate_of", "correlation")
+    .head(3),
+)
+```
+
+which produces the following output:
+
+```bash
+README_REDUCTION_OUTPUT
+```
+
 For more examples, see the [examples](examples) directory.
 
 ## Contributing
