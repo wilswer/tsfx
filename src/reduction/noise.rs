@@ -170,7 +170,7 @@ pub(crate) fn noise_scores(
 #[cfg(test)]
 mod tests {
     use super::{knn, laplacian_scores, noise_scores};
-    use crate::reduction::matrix::rank_matrix;
+    use crate::reduction::matrix::{rank_matrix, tie_broken_rank_matrix};
     use crate::reduction::rng::SplitMix64;
     use ndarray::{Array2, array};
 
@@ -199,10 +199,19 @@ mod tests {
     fn test_constant_column_scores_nan() {
         // Rows 0, 1, 3, 10, 11 with k = 1: unequal degrees, where a weighted
         // mean of a constant can be off by an ulp
-        let m = array![[0.0, 0.1], [1.0, 0.1], [3.0, 0.1], [10.0, 0.1], [11.0, 0.1]];
+        let constants = [0.1, 5.0, 0.3, 7.7, 1e-3, 123.456, -2.2];
+        let m = Array2::from_shape_fn((5, 1 + constants.len()), |(i, j)| {
+            if j == 0 {
+                [0.0, 1.0, 3.0, 10.0, 11.0][i]
+            } else {
+                constants[j - 1]
+            }
+        });
         let scores = laplacian_scores(&m, &knn(&m, 1));
-        assert!(scores[1].is_nan(), "{}", scores[1]);
         assert!(scores[0].is_finite());
+        for (c, score) in constants.iter().zip(&scores[1..]) {
+            assert!(score.is_nan(), "constant {c} scored {score}");
+        }
     }
 
     /// Informative columns (3 clusters) all beat the cutoff; pure-noise
@@ -334,5 +343,64 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Rare-flag noise (0/1 columns with about 10% ones) among informative
+    /// columns, with average ranks and with ties broken at random: how many
+    /// of 200 (20 columns, 10 seeds) beat every shadow, and whether a boolean
+    /// aligned with the clusters does in every seed.
+    fn rare_flag_noise_kept(tie_break: bool) -> (usize, bool) {
+        let (n, informative, flags) = (300, 40, 20);
+        let (mut kept, mut aligned_always) = (0, true);
+        for seed in 0..10 {
+            let mut g = SplitMix64::new(700 + seed);
+            let mut cols: Vec<Vec<f64>> = (0..informative)
+                .map(|_| {
+                    (0..n)
+                        .map(|i| (i % 3) as f64 + 0.3 * uniform(&mut g))
+                        .collect()
+                })
+                .collect();
+            cols.push((0..n).map(|i| f64::from(i % 3 == 0)).collect());
+            for _ in 0..flags {
+                cols.push((0..n).map(|_| f64::from(uniform(&mut g) < 0.1)).collect());
+            }
+            let refs: Vec<&[f64]> = cols.iter().map(|c| c.as_slice()).collect();
+            let rows: Vec<usize> = (0..n).collect();
+            let z = if tie_break {
+                let seeds: Vec<u64> = (0..refs.len() as u64).map(|j| 1000 * seed + j).collect();
+                tie_broken_rank_matrix(&refs, &rows, &seeds)
+            } else {
+                rank_matrix(&refs, &rows)
+            };
+            let r = noise_scores(&z, 99, 10, &mut SplitMix64::new(seed));
+            aligned_always &= r.scores[informative] < r.cutoff;
+            kept += r.scores[informative + 1..]
+                .iter()
+                .filter(|s| **s < r.cutoff)
+                .count();
+        }
+        (kept, aligned_always)
+    }
+
+    /// With ties broken at random, rare-flag noise gets through about as
+    /// rarely as continuous noise (1%, ~2 of 200); with average ranks its tie
+    /// blocks let it beat the shadows far more often (a numpy check of this
+    /// setup: 32 of 200), which this test also confirms, so that it detects a
+    /// return to average ranks. A cluster-aligned boolean is kept either way.
+    #[test]
+    fn test_discrete_noise_needs_tie_breaking() {
+        let (with_ties_broken, aligned) = rare_flag_noise_kept(true);
+        assert!(
+            with_ties_broken <= 8,
+            "{with_ties_broken} of 200 flags kept"
+        );
+        assert!(aligned, "the cluster-aligned boolean was dropped");
+        let (with_average_ranks, _) = rare_flag_noise_kept(false);
+        assert!(
+            with_average_ranks >= 16,
+            "only {with_average_ranks} of 200 flags kept with average ranks: \
+             the setup no longer shows why ties are broken"
+        );
     }
 }

@@ -54,7 +54,8 @@ pub struct Reduction {
     pub noise_neighbors: usize,
     /// Row cap for the correlation and noise steps, above `noise_neighbors`.
     pub max_samples: usize,
-    /// Seed of the row sample and the shadow features.
+    /// Seed of the row sample and of the noise step (its tie-breaking and
+    /// shadow features).
     pub seed: u64,
 }
 
@@ -740,7 +741,14 @@ mod fit_tests {
             let values: Vec<f64> = (0..n)
                 .map(|i| {
                     let u = uniform(&mut g);
-                    if j % 3 == 0 { (i % 4) as f64 + u } else { u }
+                    if j % 3 == 0 {
+                        (i % 4) as f64 + u
+                    } else if j % 7 == 1 {
+                        // discrete: the noise step breaks its ties at random
+                        f64::from(u < 0.3)
+                    } else {
+                        u
+                    }
                 })
                 .collect();
             columns.push(Column::new(format!("f{j}").into(), values));
@@ -771,52 +779,37 @@ mod fit_tests {
         assert_eq!(one.warnings, four.warnings);
     }
 
-    /// Discrete noise (random 0/1 columns, full of ties) gets through the
-    /// noise step about as rarely as continuous noise: 1 - noise_sensitivity.
-    /// With average ranks it got through far more often.
+    /// A constant and an all-missing feature that reach the noise step (the
+    /// earlier steps off) score NaN and are dropped as noise. Regression:
+    /// random tie-breaking turned them into random permutations, which got
+    /// through 1% of the time.
     #[test]
-    fn test_discrete_noise_is_dropped() {
-        let (n, informative, binary) = (300, 40, 20);
-        let mut kept_binary = 0;
-        for seed in 0..10 {
-            let mut g = SplitMix64::new(500 + seed);
-            let mut columns = vec![Column::new("id".into(), (0..n as i64).collect::<Vec<_>>())];
-            for j in 0..informative + binary {
-                let values: Vec<f64> = (0..n)
-                    .map(|i| {
-                        let u = uniform(&mut g);
-                        if j < informative {
-                            (i % 3) as f64 + 0.3 * u
-                        } else if u < 0.5 {
-                            0.0
-                        } else {
-                            1.0
-                        }
-                    })
-                    .collect();
-                columns.push(Column::new(format!("f{j}").into(), values));
-            }
-            let df = DataFrame::new_infer_height(columns).unwrap();
-            let r = Reduction {
-                max_top_share: None,
-                max_correlation: None,
-                seed,
-                ..Default::default()
-            };
-            let fit = r.fit(&df, &keys()).unwrap();
-            for j in 0..informative {
-                assert!(
-                    fit.kept.contains(&format!("f{j}")),
-                    "seed {seed}: f{j} dropped"
-                );
-            }
-            kept_binary += (informative..informative + binary)
-                .filter(|j| fit.kept.contains(&format!("f{j}")))
-                .count();
+    fn test_constant_features_are_noise() {
+        let n = 60;
+        let mut g = SplitMix64::new(11);
+        let mut columns = vec![Column::new("id".into(), (0..n as i64).collect::<Vec<_>>())];
+        for j in 0..50 {
+            let values: Vec<f64> = (0..n)
+                .map(|i| (i % 3) as f64 + 0.3 * uniform(&mut g) + j as f64)
+                .collect();
+            columns.push(Column::new(format!("f{j}").into(), values));
         }
-        assert!(
-            kept_binary <= 8,
-            "{kept_binary} of 200 binary noise columns kept"
-        );
+        columns.push(Column::new("constant".into(), vec![2.0; n]));
+        columns.push(Column::new("missing".into(), vec![f64::NAN; n]));
+        let df = DataFrame::new_infer_height(columns).unwrap();
+        let r = Reduction {
+            max_missing: None,
+            max_top_share: None,
+            max_correlation: None,
+            ..Default::default()
+        };
+        let fit = r.fit(&df, &keys()).unwrap();
+        let rep = &fit.report;
+        let dropped_by = strs(rep, "dropped_by");
+        let scores = rep.column("noise_score").unwrap().f64().unwrap();
+        for i in [50, 51] {
+            assert_eq!(dropped_by[i].as_deref(), Some("noise"), "row {i}");
+            assert!(scores.get(i).unwrap().is_nan(), "row {i}");
+        }
     }
 }

@@ -4,7 +4,11 @@
 //! extreme values from dominating. The correlation step uses average ranks
 //! (Spearman); the noise step breaks ties at random instead, so that every
 //! pure-noise feature, discrete or not, becomes a uniformly random permutation
-//! like the shadow features it is compared with.
+//! like the shadow features it is compared with. The cost: within a tie block
+//! the order is noise, so a discrete feature keeps only the structure of its
+//! blocks. A boolean that splits the rows evenly along their neighborhoods
+//! still scores far better than the shadows, but a rare flag (a few percent of
+//! ones) keeps little of its signal and is likely dropped as noise.
 
 use ndarray::{Array2, ArrayView1};
 use rayon::prelude::*;
@@ -53,7 +57,9 @@ pub(crate) fn rank_matrix(columns: &[&[f64]], rows: &[usize]) -> Array2<f64> {
 
 /// Like [`rank_matrix`], but ties are broken at random, from one seed per
 /// column (`seeds`, as many as `columns`): the ranks of every column are a
-/// permutation of 1..=n, standardized. The noise step works on this matrix.
+/// permutation of 1..=n, standardized. A column of equal values has no ties
+/// to break and stays all 0.0 (it then scores NaN: dropped as noise). The
+/// noise step works on this matrix.
 pub(crate) fn tie_broken_rank_matrix(
     columns: &[&[f64]],
     rows: &[usize],
@@ -64,7 +70,11 @@ pub(crate) fn tie_broken_rank_matrix(
         .par_iter()
         .zip(seeds.par_iter())
         .map(|(column, &seed)| {
-            let mut ranks = tie_broken_ranks(&filled(column, rows), &mut SplitMix64::new(seed));
+            let xs = filled(column, rows);
+            if xs.iter().all(|&x| x == xs[0]) {
+                return vec![0.0; xs.len()];
+            }
+            let mut ranks = tie_broken_ranks(&xs, &mut SplitMix64::new(seed));
             standardize(&mut ranks);
             ranks
         })
@@ -115,7 +125,8 @@ fn median(xs: &mut [f64]) -> Option<f64> {
     Some(if n % 2 == 1 {
         xs[n / 2]
     } else {
-        // As numpy: (a + b) / 2, halving first only where the sum overflows
+        // As numpy where the sum does not overflow (numpy then gives inf):
+        // (a + b) / 2, halving first only where the sum overflows
         // (halving first loses the last bit of subnormal values)
         let (a, b) = (xs[n / 2 - 1], xs[n / 2]);
         let sum = a + b;
@@ -207,5 +218,15 @@ mod tests {
             .map(|seed| tie_broken_rank_matrix(&[&xs], &rows, &[seed]))
             .collect();
         assert!(others.iter().any(|other| *other != z));
+        // -0.0 and 0.0 are a tie too: both orders occur
+        assert!(others.iter().any(|o| o[[5, 0]] < o[[6, 0]]));
+        assert!(others.iter().any(|o| o[[5, 0]] > o[[6, 0]]));
+    }
+
+    #[test]
+    fn test_tie_broken_constant_column_is_zero() {
+        let rows = [0, 1, 2, 3];
+        let z = tie_broken_rank_matrix(&[&[2.0, 2.0, 2.0, 2.0], &[f64::NAN; 4]], &rows, &[1, 2]);
+        assert!(z.iter().all(|&x| x == 0.0));
     }
 }
