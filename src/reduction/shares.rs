@@ -78,13 +78,15 @@ mod tests {
     #[test]
     fn test_feature_values_missing_as_nan() {
         let df = df![
-            "x" => [Some(1.0), None, Some(f64::INFINITY)],
-            "n" => [1u32, 2, 3],
+            "x" => [Some(1.0), None, Some(f64::INFINITY), Some(f64::NAN), Some(f64::NEG_INFINITY)],
+            "n" => [Some(1u32), Some(2), None, Some(4), Some(5)],
         ]
         .unwrap();
         let v = feature_values(&df, &["x".into(), "n".into()]).unwrap();
         assert_eq!(v[0][0], 1.0);
-        assert!(v[0][1].is_nan() && v[0][2].is_nan());
-        assert_eq!(v[1], vec![1.0, 2.0, 3.0]);
+        assert!(v[0][1..].iter().all(|x| x.is_nan()));
+        assert_eq!(v[1][..2], [1.0, 2.0]);
+        assert!(v[1][2].is_nan());
+        assert_eq!(v[1][3..], [4.0, 5.0]);
     }
 }

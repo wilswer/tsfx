@@ -45,7 +45,8 @@ pub(crate) struct Duplicate {
 /// an already kept feature is above `max_correlation`; then it is a
 /// [`Duplicate`] of the kept feature it correlates with most (the one kept
 /// first on ties). Indexed by feature; `None` means kept. `order` is the
-/// priority: earlier features win (extraction order in stage 1).
+/// priority, a permutation of the feature indices: earlier features win
+/// (extraction order in stage 1).
 pub(crate) fn greedy_duplicates(
     corr: &Array2<f64>,
     order: &[usize],

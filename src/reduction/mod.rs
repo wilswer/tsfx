@@ -136,7 +136,9 @@ impl Reduction {
     /// Decides which feature columns of `features` to keep: every column not
     /// in `key_cols` (the grouping and time columns) is a feature. The rows
     /// are sorted by `key_cols` first, so the decision does not depend on
-    /// their order. Errors on invalid settings and on fewer rows than
+    /// their order as long as the keys identify the rows, as they do for
+    /// extracted features (one row per group or window). Errors on invalid
+    /// settings and on fewer rows than
     /// [`Reduction::min_rows`]: the reduction is fitted across the rows.
     pub fn fit(
         &self,
@@ -159,17 +161,18 @@ impl Reduction {
             .filter(|name| !key_cols.iter().any(|key| key == name.as_str()))
             .map(|name| name.to_string())
             .collect();
-        let sorted = if key_cols.is_empty() {
-            features.clone()
+        // The sorted copy lives only until the values are read
+        let values = if key_cols.is_empty() {
+            feature_values(features, &names)?
         } else {
-            features.sort(
+            let sorted = features.sort(
                 key_cols,
                 SortMultipleOptions::default()
                     .with_nulls_last(true)
                     .with_maintain_order(true),
-            )?
+            )?;
+            feature_values(&sorted, &names)?
         };
-        let values = feature_values(&sorted, &names)?;
         let d = names.len();
         let mut dropped: Vec<Option<Dropped>> = vec![None; d];
 
@@ -616,10 +619,38 @@ mod fit_tests {
     }
 
     #[test]
+    fn test_only_key_columns() {
+        let df = df!["id" => (0..20i64).collect::<Vec<_>>()].unwrap();
+        let fit = Reduction::default().fit(&df, &keys()).unwrap();
+        assert!(fit.kept.is_empty());
+        assert_eq!(fit.report.height(), 0);
+        assert_eq!(fit.report.width(), 9);
+        let dtypes: Vec<DataType> = fit.report.dtypes();
+        assert_eq!(
+            dtypes,
+            [
+                DataType::String,
+                DataType::Boolean,
+                DataType::String,
+                DataType::Float64,
+                DataType::Float64,
+                DataType::String,
+                DataType::Float64,
+                DataType::Float64,
+                DataType::Float64,
+            ]
+        );
+    }
+
+    #[test]
     fn test_too_few_rows() {
         let df = df!["id" => [0i64, 1, 2, 3, 4], "x" => [1.0, 2.0, 3.0, 4.0, 5.0]].unwrap();
-        let err = Reduction::default().fit(&df, &keys()).unwrap_err();
-        assert!(err.to_string().contains("at least 11 rows"), "{err}");
+        let err = Reduction::default()
+            .fit(&df, &keys())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("at least 11 rows"), "{err}");
+        assert!(err.contains("got 5"), "{err}");
     }
 
     #[test]
@@ -727,6 +758,8 @@ mod fit_tests {
         };
         let one = fit_in(1, &df);
         let four = fit_in(4, &shuffled);
+        // Not vacuous: features reached the noise step
+        assert!(one.report.column("noise_score").unwrap().null_count() < d);
         assert_eq!(one.kept, four.kept);
         assert_eq!(report_bits(&one.report), report_bits(&four.report));
         assert_eq!(one.warnings, four.warnings);

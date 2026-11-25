@@ -32,7 +32,8 @@ pub(crate) fn average_ranks(xs: &[f64]) -> Vec<f64> {
 /// missing values (NaN) replaced by the median of the others (the mean of the
 /// two middle values for an even count; 0.0 if all are missing), then average
 /// ranks standardized to mean 0 and population variance 1. A column of equal
-/// values becomes all 0.0. Columns are processed in parallel.
+/// values becomes all 0.0. Every index in `rows` must be a row of every
+/// column. Columns are processed in parallel.
 pub(crate) fn rank_matrix(columns: &[&[f64]], rows: &[usize]) -> Array2<f64> {
     let ranked: Vec<Vec<f64>> = columns
         .par_iter()

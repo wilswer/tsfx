@@ -10,15 +10,19 @@ use rayon::prelude::*;
 use super::matrix::rank_matrix;
 use super::rng::SplitMix64;
 
-/// Rows per block in the parallel nearest-neighbor search.
-const ROW_BLOCK: usize = 256;
+/// Rows per block in the parallel nearest-neighbor search: each block holds a
+/// 64 × n matrix, so the memory in use is about threads · 64 · n floats.
+const ROW_BLOCK: usize = 64;
 
-/// For each row of `m`, its `k` nearest other rows with their squared
-/// Euclidean distances, sorted by (distance, index): equal distances go to the
-/// lower index. Parallel over blocks of 256 rows; each block's distances to all
-/// rows come from one single-threaded matrix product, so no n × n matrix is
-/// held and the result does not depend on the thread count.
+/// For each row of `m`, its `k` (at least 1) nearest other rows with their
+/// squared Euclidean distances, sorted by (distance, index): equal distances
+/// go to the lower index. Distances come from ‖a‖² + ‖b‖² − 2a·b; one at most
+/// 1e-12 · (‖a‖² + ‖b‖²) is rounding noise of (nearly) equal rows and counts
+/// as exactly 0. Parallel over blocks of 64 rows; each block's distances to
+/// all rows come from one single-threaded matrix product, so no n × n matrix
+/// is held and the result does not depend on the thread count.
 pub(crate) fn knn(m: &Array2<f64>, k: usize) -> Vec<Vec<(usize, f64)>> {
+    debug_assert!(k >= 1, "knn needs at least one neighbor");
     let n = m.nrows();
     let norms: Vec<f64> = m.rows().into_iter().map(|row| row.dot(&row)).collect();
     let starts: Vec<usize> = (0..n).step_by(ROW_BLOCK).collect();
@@ -43,8 +47,8 @@ fn nearest(i: usize, gram_row: ArrayView1<f64>, norms: &[f64], k: usize) -> Vec<
         .map(|j| {
             let scale = norms[i] + norms[j];
             let d2 = scale - 2.0 * gram_row[j];
-            // ‖a‖² + ‖b‖² − 2a·b leaves rounding noise where rows are (nearly)
-            // equal: snap it to 0, so equal rows tie exactly
+            // Rounding noise where rows are (nearly) equal, of either sign:
+            // snap it to 0, so equal rows tie exactly
             (j, if d2 <= 1e-12 * scale { 0.0 } else { d2 })
         })
         .collect();
@@ -61,8 +65,8 @@ fn nearest(i: usize, gram_row: ArrayView1<f64>, norms: &[f64], k: usize) -> Vec<
 /// weight `exp(-d² / t)`, `t` the lower median of all neighbor distances (1.0
 /// if that is 0). With degrees `D` and `L = D − W`, the score of a column `f`
 /// is `f̃ᵀ L f̃ / f̃ᵀ D f̃`, `f̃ = f − (fᵀD1 / 1ᵀD1) 1`: lower means the column
-/// varies less between neighbors. NaN for a column that is constant on the
-/// graph. Parallel over columns; every sum runs in a fixed order.
+/// varies less between neighbors. NaN for a constant column. Parallel over
+/// columns; every sum runs in a fixed order.
 pub(crate) fn laplacian_scores(m: &Array2<f64>, nn: &[Vec<(usize, f64)>]) -> Vec<f64> {
     let n = m.nrows();
     let mut distances: Vec<f64> = nn.iter().flatten().map(|&(_, d2)| d2).collect();
@@ -79,7 +83,7 @@ pub(crate) fn laplacian_scores(m: &Array2<f64>, nn: &[Vec<(usize, f64)>]) -> Vec
         .enumerate()
         .flat_map(|(i, row)| row.iter().map(move |&(j, d2)| (i.min(j), i.max(j), d2)))
         .collect();
-    edges.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+    edges.sort_by_key(|edge| (edge.0, edge.1));
     edges.dedup_by(|later, first| (later.0, later.1) == (first.0, first.1));
     for edge in edges.iter_mut() {
         edge.2 = (-edge.2 / t).exp();
@@ -94,8 +98,14 @@ pub(crate) fn laplacian_scores(m: &Array2<f64>, nn: &[Vec<(usize, f64)>]) -> Vec
     (0..m.ncols())
         .into_par_iter()
         .map(|c| {
-            let f = m.column(c);
-            let mean = degree.iter().zip(f.iter()).map(|(d, x)| d * x).sum::<f64>() / total_degree;
+            // A contiguous copy: the edge loop reads it in random order
+            let f = m.column(c).to_vec();
+            if f.iter().all(|&x| x == f[0]) {
+                // The weighted mean can miss a constant by an ulp, which
+                // would score it 0, the best score
+                return f64::NAN;
+            }
+            let mean = degree.iter().zip(&f).map(|(d, x)| d * x).sum::<f64>() / total_degree;
             // Centering cancels in the differences of the numerator
             let numerator: f64 = edges
                 .iter()
@@ -103,7 +113,7 @@ pub(crate) fn laplacian_scores(m: &Array2<f64>, nn: &[Vec<(usize, f64)>]) -> Vec
                 .sum();
             let denominator: f64 = degree
                 .iter()
-                .zip(f.iter())
+                .zip(&f)
                 .map(|(d, x)| d * (x - mean).powi(2))
                 .sum();
             if denominator > 0.0 {
@@ -187,8 +197,12 @@ mod tests {
 
     #[test]
     fn test_constant_column_scores_nan() {
-        let m = array![[0.0, 5.0], [1.0, 5.0], [10.0, 5.0], [11.0, 5.0]];
-        assert!(laplacian_scores(&m, &knn(&m, 1))[1].is_nan());
+        // Rows 0, 1, 3, 10, 11 with k = 1: unequal degrees, where a weighted
+        // mean of a constant can be off by an ulp
+        let m = array![[0.0, 0.1], [1.0, 0.1], [3.0, 0.1], [10.0, 0.1], [11.0, 0.1]];
+        let scores = laplacian_scores(&m, &knn(&m, 1));
+        assert!(scores[1].is_nan(), "{}", scores[1]);
+        assert!(scores[0].is_finite());
     }
 
     /// Informative columns (3 clusters) all beat the cutoff; pure-noise
@@ -286,7 +300,8 @@ mod tests {
     #[test]
     fn test_knn_and_scores_match_dense_reference() {
         let mut case = 0;
-        for n in [3, 11, 255, 256, 257, 300] {
+        // 63, 64, 65 and 300 rows cross the 64-row blocks of knn
+        for n in [3, 11, 63, 64, 65, 300] {
             for d in [1, 3, 5, 8, 2] {
                 case += 1;
                 let mut g = SplitMix64::new(1000 + case);
@@ -313,7 +328,7 @@ mod tests {
                 let dense = dense_scores(&m, &got);
                 for (a, b) in scores.iter().zip(&dense) {
                     assert!(
-                        (a.is_nan() && b.is_nan()) || (a - b).abs() <= 1e-10 * b.abs().max(1.0),
+                        (a.is_nan() && b.is_nan()) || (a - b).abs() <= 1e-10 * b.abs() + 1e-15,
                         "case {case}: {a} vs {b}"
                     );
                 }
