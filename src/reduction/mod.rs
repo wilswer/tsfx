@@ -19,7 +19,7 @@ use polars::prelude::*;
 use rayon::prelude::*;
 
 use self::duplicates::{correlation_matrix, greedy_duplicates};
-use self::matrix::rank_matrix;
+use self::matrix::{rank_matrix, tie_broken_rank_matrix};
 use self::noise::noise_scores;
 use self::rng::SplitMix64;
 use self::shares::{feature_values, missing_share, top_share};
@@ -201,7 +201,8 @@ impl Reduction {
         }
 
         // Steps 3 and 4 run on at most max_samples rows; the generator draws
-        // the sample first, then the shadows
+        // the sample first, then the noise step's tie-breaking seeds and
+        // shadows
         let mut rng = SplitMix64::new(self.seed);
         let rows: Vec<usize> = if n > self.max_samples {
             rng.sample_sorted(n, self.max_samples)
@@ -246,8 +247,13 @@ impl Reduction {
                     ));
                 }
                 let columns: Vec<&[f64]> = alive.iter().map(|&j| values[j].as_slice()).collect();
+                // Ties broken at random, one seed per column, drawn after the
+                // row sample and before the shadows: a discrete noise feature
+                // is then as random as a shadow (with average ranks, its tie
+                // blocks let it beat the shadows far more often)
+                let seeds: Vec<u64> = columns.iter().map(|_| rng.next_u64()).collect();
                 let result = noise_scores(
-                    &rank_matrix(&columns, &rows),
+                    &tie_broken_rank_matrix(&columns, &rows, &seeds),
                     n_shadows,
                     self.noise_neighbors,
                     &mut rng,
@@ -763,5 +769,54 @@ mod fit_tests {
         assert_eq!(one.kept, four.kept);
         assert_eq!(report_bits(&one.report), report_bits(&four.report));
         assert_eq!(one.warnings, four.warnings);
+    }
+
+    /// Discrete noise (random 0/1 columns, full of ties) gets through the
+    /// noise step about as rarely as continuous noise: 1 - noise_sensitivity.
+    /// With average ranks it got through far more often.
+    #[test]
+    fn test_discrete_noise_is_dropped() {
+        let (n, informative, binary) = (300, 40, 20);
+        let mut kept_binary = 0;
+        for seed in 0..10 {
+            let mut g = SplitMix64::new(500 + seed);
+            let mut columns = vec![Column::new("id".into(), (0..n as i64).collect::<Vec<_>>())];
+            for j in 0..informative + binary {
+                let values: Vec<f64> = (0..n)
+                    .map(|i| {
+                        let u = uniform(&mut g);
+                        if j < informative {
+                            (i % 3) as f64 + 0.3 * u
+                        } else if u < 0.5 {
+                            0.0
+                        } else {
+                            1.0
+                        }
+                    })
+                    .collect();
+                columns.push(Column::new(format!("f{j}").into(), values));
+            }
+            let df = DataFrame::new_infer_height(columns).unwrap();
+            let r = Reduction {
+                max_top_share: None,
+                max_correlation: None,
+                seed,
+                ..Default::default()
+            };
+            let fit = r.fit(&df, &keys()).unwrap();
+            for j in 0..informative {
+                assert!(
+                    fit.kept.contains(&format!("f{j}")),
+                    "seed {seed}: f{j} dropped"
+                );
+            }
+            kept_binary += (informative..informative + binary)
+                .filter(|j| fit.kept.contains(&format!("f{j}")))
+                .count();
+        }
+        assert!(
+            kept_binary <= 8,
+            "{kept_binary} of 200 binary noise columns kept"
+        );
     }
 }
