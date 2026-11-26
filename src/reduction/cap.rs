@@ -27,10 +27,10 @@ pub(crate) const EXPLAINED_TOLERANCE: f64 = 1e-9;
 /// left, and every remaining candidate explains all of it).
 pub(crate) const GAIN_TIE: f64 = 1e-6;
 
-/// When two or more candidates' running scores are within this relative
-/// distance of the best, those too uncertain (see [`UNCERTAIN`]) are
-/// recomputed exactly before the choice, so a tie at [`GAIN_TIE`] can be
-/// told. With a clear best there is no tie to tell.
+/// When two or more candidates' gains, give or take their error bounds, can
+/// come within this relative distance of the best, those too uncertain (see
+/// [`UNCERTAIN`]) are recomputed exactly before the choice, so a tie at
+/// [`GAIN_TIE`] can be told. With a clear best there is no tie to tell.
 const NEAR_TOP: f64 = 1e-3;
 
 /// The running score f changes by subtraction at every pick, and each
@@ -113,19 +113,36 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
                 .filter(|&i| open(i, &picked, &g))
                 .map(|i| (i, f[i] / g[i]))
                 .collect();
-            let Some(top) = options.iter().map(|&(_, gain)| gain).reduce(f64::max) else {
+            if options.is_empty() {
                 break CapStop::NothingLeft;
-            };
-            // A possible tie near the top: f exactly there where it is too
-            // uncertain, ‖G eᵢ‖² from C and the picked ω (O(d · picks) each,
-            // independent, in parallel; lines below the best whatever its sign)
-            let near_top = |gain: f64| gain >= top - NEAR_TOP * top.abs();
-            let possible_tie = options.iter().filter(|&&(_, gain)| near_top(gain)).count() > 1;
-            let redo: Vec<usize> = options
+            }
+            // Near the top, with each gain's error bound: a candidate is near
+            // when its gain plus its error can reach the lowest the best can
+            // be, less NEAR_TOP (lines below whatever the sign). A running
+            // score of a nearly explained candidate can be off by more than
+            // NEAR_TOP; judged on the score alone, the true best could lie
+            // outside the window and never be recomputed
+            let spread = |i: usize| err[i] / g[i];
+            let low_top = options
                 .iter()
-                .filter(|&&(i, gain)| possible_tie && near_top(gain) && uncertain(f[i], err[i]))
+                .map(|&(i, gain)| gain - spread(i))
+                .fold(f64::NEG_INFINITY, f64::max);
+            let line = low_top - NEAR_TOP * low_top.abs();
+            let near: Vec<usize> = options
+                .iter()
+                .filter(|&&(i, gain)| gain + spread(i) >= line)
                 .map(|&(i, _)| i)
                 .collect();
+            // A possible tie there: f exactly where it is too uncertain,
+            // ‖G eᵢ‖² from C and the picked ω (O(d · picks) each,
+            // independent, in parallel)
+            let redo: Vec<usize> = if near.len() > 1 {
+                near.into_iter()
+                    .filter(|&i| uncertain(f[i], err[i]))
+                    .collect()
+            } else {
+                Vec::new()
+            };
             let exact: Vec<f64> = redo
                 .par_iter()
                 .map(|&i| {
