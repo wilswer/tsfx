@@ -153,19 +153,29 @@ fn criterion_benchmark(c: &mut Criterion) {
         },
     );
     // Steps 1 to 4 off: the cap alone, about 2,999 picks
+    let cap_alone = Reduction {
+        max_missing: None,
+        max_top_share: None,
+        max_correlation: None,
+        noise_sensitivity: None,
+        cap: Some(Cap::default()),
+        ..Default::default()
+    };
     bench_cap(
         c,
         "cap_wide",
         &uniform_features(3000, 3000),
         &["id".to_string()],
-        Reduction {
-            max_missing: None,
-            max_top_share: None,
-            max_correlation: None,
-            noise_sensitivity: None,
-            cap: Some(Cap::default()),
-            ..Default::default()
-        },
+        cap_alone.clone(),
+    );
+    // Three times more candidates than rows, the shape of many value columns:
+    // at the rows limit every remaining candidate ties, about 3,000 of them
+    bench_cap(
+        c,
+        "cap_many_candidates",
+        &uniform_features(1500, 4500),
+        &["id".to_string()],
+        cap_alone,
     );
     bench_fit(
         c,
