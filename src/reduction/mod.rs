@@ -390,14 +390,17 @@ impl Reduction {
                 }
                 // The candidates' Spearman correlations: step 3's, or their own
                 let corr = match step_3_correlations.take() {
+                    // Nothing dropped since step 3: its matrix as is
+                    Some((alive, corr)) if alive == candidates => corr,
+                    // The candidates' rows and columns, in one copy
                     Some((alive, corr)) => {
                         let mut at = vec![0; d];
                         for (k, &j) in alive.iter().enumerate() {
                             at[j] = k;
                         }
                         let positions: Vec<usize> = candidates.iter().map(|&j| at[j]).collect();
-                        corr.select(ndarray::Axis(0), &positions)
-                            .select(ndarray::Axis(1), &positions)
+                        let p = positions.len();
+                        Array2::from_shape_fn((p, p), |(a, b)| corr[[positions[a], positions[b]]])
                     }
                     None => correlation_matrix(&rank_matrix(
                         &sampled_columns(&candidates),
