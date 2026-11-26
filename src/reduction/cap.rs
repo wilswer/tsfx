@@ -413,6 +413,117 @@ mod tests {
         }
     }
 
+    /// A reported gain, of a pick or of a candidate the cap dropped, comes
+    /// from the running score; where that score had shrunk far from its start
+    /// it was up to 2e-4 relative off in these cases (columns v and |v|, as
+    /// the fuzz test draws). Regression: every reported gain matches the
+    /// exact one (Gram-Schmidt on z) to a relative 1e-6, the most the
+    /// correlation matrix allows for nearly explained candidates. Found with
+    /// a numpy port of `greedy_subset`, after the fuzz test failed.
+    #[test]
+    fn reported_gains_are_accurate() {
+        let cases: [(&[&[f64]], usize); 3] = [
+            (
+                &[
+                    &[
+                        0.0, 3.0, 1.0, 3.0, 3.0, 0.0, -1.0, 1.0, 2.0, 1.0, 0.0, 0.5, 1.0,
+                    ],
+                    &[
+                        2.0, -1.0, 0.5, 2.0, 0.5, 2.0, 3.0, 0.0, 1.0, 3.0, -1.0, 0.5, 1.0,
+                    ],
+                    &[
+                        2.0, 2.0, -1.0, 1.0, -1.0, 3.0, 2.0, 1.0, 3.0, -1.0, -0.5, 0.0, -0.5,
+                    ],
+                    &[
+                        2.0, 0.5, 2.0, 3.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 2.0, -1.0,
+                    ],
+                    &[
+                        -1.0, 0.0, 1.0, 0.5, 3.0, -0.5, 1.0, -1.0, -0.5, -0.5, -0.5, 0.0, 3.0,
+                    ],
+                    &[
+                        -0.5, 3.0, 3.0, 3.0, -1.0, -0.5, 0.5, 3.0, 2.0, 1.0, 2.0, 2.0, 1.0,
+                    ],
+                ],
+                12,
+            ),
+            (
+                &[
+                    &[
+                        1.0, -0.5, 0.0, 0.5, 1.0, 3.0, 3.0, 2.0, -1.0, 0.5, 3.0, -1.0, -1.0,
+                    ],
+                    &[
+                        -0.5, 0.0, 0.5, 2.0, 1.0, -1.0, -1.0, 2.0, 0.0, 2.0, 2.0, 2.0, 2.0,
+                    ],
+                    &[
+                        1.0, -1.0, -1.0, 1.0, -0.5, 2.0, 0.0, -1.0, 0.0, -0.5, 3.0, 1.0, 0.5,
+                    ],
+                    &[
+                        1.0, 1.0, -1.0, 3.0, -0.5, -1.0, -1.0, 2.0, 0.5, 0.5, 2.0, 1.0, 0.0,
+                    ],
+                    &[
+                        -1.0, 2.0, -1.0, -1.0, -1.0, 0.0, -1.0, 3.0, 2.0, -1.0, 3.0, 1.0, 1.0,
+                    ],
+                    &[
+                        -1.0, 0.5, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 3.0, -1.0, 0.0, 3.0, 2.0,
+                    ],
+                ],
+                11,
+            ),
+            (
+                &[
+                    &[2.0, -1.0, 1.0, -1.0, -1.0, 3.0, -0.5, 3.0, 3.0, 0.0, 1.0],
+                    &[-1.0, 3.0, -1.0, 2.0, 0.0, 1.0, 2.0, 1.0, 0.0, 2.0, 0.0],
+                    &[2.0, -1.0, 3.0, 1.0, 0.5, 0.0, 0.0, 0.0, 3.0, 0.0, 0.5],
+                    &[-1.0, -1.0, -0.5, 0.5, 0.0, -1.0, 1.0, -0.5, 2.0, 1.0, -1.0],
+                    &[2.0, 1.0, 0.0, -1.0, -0.5, 0.0, -0.5, -0.5, 2.0, -0.5, 1.0],
+                ],
+                10,
+            ),
+        ];
+        for (case, (values, max_features)) in cases.into_iter().enumerate() {
+            // The candidates: v and |v| of each column
+            let columns: Vec<Vec<f64>> = values
+                .iter()
+                .flat_map(|v| [v.to_vec(), v.iter().map(|x| x.abs()).collect()])
+                .collect();
+            let refs: Vec<&[f64]> = columns.iter().map(Vec::as_slice).collect();
+            let rows: Vec<usize> = (0..values[0].len()).collect();
+            let z = rank_matrix(&refs, &rows);
+            let n = z.nrows() as f64;
+            let cap = Cap {
+                max_features: Some(max_features),
+                ..Default::default()
+            };
+            let r = greedy_subset(&correlation_matrix(&z), &cap);
+            let close = |got: f64, exact: f64| (got - exact).abs() <= 1e-9 + 1e-6 * exact.abs();
+            // The gain of q, a unit residual: the spread it captures
+            let gain_of = |q: &Array1<f64>| captured(&z, std::slice::from_ref(q)) / n;
+            let mut basis: Vec<Array1<f64>> = Vec::new();
+            for (&p, &gain) in r.picks.iter().zip(&r.gains) {
+                let res = residual(z.column(p), &basis);
+                let q = &res / res.dot(&res).sqrt();
+                let exact = gain_of(&q);
+                assert!(
+                    close(gain, exact),
+                    "case {case}, pick {p}: {gain} vs {exact}"
+                );
+                basis.push(q);
+            }
+            for (p, next) in r.next_gain.iter().enumerate() {
+                let res = residual(z.column(p), &basis);
+                // Fully explained (gain 0) or picked: nothing to compare
+                let (Some(gain), true) = (*next, res.dot(&res) / n > 1e-7) else {
+                    continue;
+                };
+                let exact = gain_of(&(&res / res.dot(&res).sqrt()));
+                assert!(
+                    close(gain, exact),
+                    "case {case}, candidate {p}: {gain} vs {exact}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn rows_limit() {
         let c = correlation_matrix(&ranked(12, 20, 7));
