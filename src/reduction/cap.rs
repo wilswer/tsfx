@@ -28,18 +28,18 @@ pub(crate) const EXPLAINED_TOLERANCE: f64 = 1e-9;
 pub(crate) const GAIN_TIE: f64 = 1e-6;
 
 /// When two or more candidates' running scores are within this relative
-/// distance of the best, those that have shrunk (see [`SHRUNK`]) are
+/// distance of the best, those too uncertain (see [`UNCERTAIN`]) are
 /// recomputed exactly before the choice, so a tie at [`GAIN_TIE`] can be
 /// told. With a clear best there is no tie to tell.
 const NEAR_TOP: f64 = 1e-3;
 
-/// The running score f shrinks by subtraction from its start f₀, with an
-/// absolute error of about ε · picks · f₀: once f < SHRUNK · f₀, its
-/// relative error can come near [`GAIN_TIE`] (ε · 5,000 picks / 1e-4 =
-/// 5e-9 at most above it), and it is recomputed where it may decide a tie
-/// or is reported as a dropped candidate's next gain. A pick's gain is
-/// always computed exactly.
-const SHRUNK: f64 = 1e-4;
+/// The running score f changes by subtraction at every pick, and each
+/// update adds rounding error of about ε times the size of its terms; each
+/// candidate's error bound sums those (times a safety factor of 4). Where
+/// the bound exceeds this share of [`GAIN_TIE`] relative to f, the score is
+/// recomputed exactly when it may decide a tie or is reported as a dropped
+/// candidate's next gain. A pick's gain is always computed exactly.
+const UNCERTAIN: f64 = 0.1;
 
 /// Why the cap stopped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,7 +93,9 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
         .into_iter()
         .map(|column| column.iter().map(|x| x * x).sum())
         .collect();
-    let f0 = f.clone();
+    // A bound on each running score's rounding error
+    let mut err: Vec<f64> = f.iter().map(|&fi| 4.0 * f64::EPSILON * fi).collect();
+    let uncertain = |fi: f64, ei: f64| ei > UNCERTAIN * GAIN_TIE * fi;
     let mut g: Vec<f64> = c.diag().to_vec();
     let trace: f64 = g.iter().sum();
     let mut picked = vec![false; d];
@@ -114,17 +116,29 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
             let Some(top) = options.iter().map(|&(_, gain)| gain).reduce(f64::max) else {
                 break CapStop::NothingLeft;
             };
-            // A possible tie near the top: f exactly there where it has
-            // shrunk, ‖G eᵢ‖² from C and the picked ω (O(d · picks) each)
-            // (lines below the best whatever its sign)
+            // A possible tie near the top: f exactly there where it is too
+            // uncertain, ‖G eᵢ‖² from C and the picked ω (O(d · picks) each,
+            // independent, in parallel; lines below the best whatever its sign)
             let near_top = |gain: f64| gain >= top - NEAR_TOP * top.abs();
             let possible_tie = options.iter().filter(|&&(_, gain)| near_top(gain)).count() > 1;
+            let redo: Vec<usize> = options
+                .iter()
+                .filter(|&&(i, gain)| possible_tie && near_top(gain) && uncertain(f[i], err[i]))
+                .map(|&(i, _)| i)
+                .collect();
+            let exact: Vec<f64> = redo
+                .par_iter()
+                .map(|&i| {
+                    let column = residual_column(c, &omegas, i);
+                    column.dot(&column)
+                })
+                .collect();
+            for (&i, &fi) in redo.iter().zip(&exact) {
+                f[i] = fi;
+                err[i] = 4.0 * f64::EPSILON * (omegas.len() as f64 + 1.0) * fi;
+            }
             for (i, gain) in options.iter_mut() {
-                if possible_tie && near_top(*gain) && f[*i] < SHRUNK * f0[*i] {
-                    let column = residual_column(c, &omegas, *i);
-                    f[*i] = column.dot(&column);
-                    *gain = f[*i] / g[*i];
-                }
+                *gain = f[*i] / g[*i];
             }
             let top = options
                 .iter()
@@ -158,12 +172,15 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
                 h.scaled_add(-w.dot(&omega), w);
             }
             let norm2 = omega.dot(&omega);
-            for ((fi, gi), (&o, &hi)) in f
+            for (((fi, gi), ei), (&o, &hi)) in f
                 .iter_mut()
                 .zip(g.iter_mut())
+                .zip(err.iter_mut())
                 .zip(omega.iter().zip(h.iter()))
             {
-                *fi += -2.0 * o * hi + norm2 * o * o;
+                let (cross, square) = (2.0 * o * hi, norm2 * o * o);
+                *ei += 4.0 * f64::EPSILON * (fi.abs() + cross.abs() + square);
+                *fi += square - cross;
                 *gi -= o * o;
                 // ‖Gᵢ‖² ≥ Gᵢᵢ²: rounding can take f below it, even below zero
                 *fi = fi.max(*gi * *gi);
@@ -181,7 +198,8 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
             }
         }
     };
-    // Reported: a shrunk running score exactly (each independent, in parallel)
+    // Reported: an uncertain running score exactly (each independent, in
+    // parallel)
     let next_gain = (0..d)
         .into_par_iter()
         .map(|i| {
@@ -189,7 +207,7 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
                 None
             } else if g[i] <= EXPLAINED_TOLERANCE {
                 Some(0.0)
-            } else if f[i] < SHRUNK * f0[i] {
+            } else if uncertain(f[i], err[i]) {
                 let column = residual_column(c, &omegas, i);
                 Some(column.dot(&column) / g[i])
             } else {
