@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["EXPLAINED_TOLERANCE","GAIN_TIE","NEAR_TOP","OMEGA_BLOCK","UNCERTAIN"],"enum":["CapStop"],"fn":["greedy_subset","residual_column","subtract_combination"],"struct":["CapResult"]};

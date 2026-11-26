@@ -305,6 +305,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#tsfx.CapSetting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CapSetting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tsfx.DynamicGroupBySettings" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -460,6 +471,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#tsfx.CapSetting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CapSetting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tsfx.DynamicGroupBySettings" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -591,6 +613,115 @@
 
 
 
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="tsfx.CapSetting" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">CapSetting</span><span class="p">(</span><span class="n">max_features</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">min_explained</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Caps the number of feature columns kept; never changes values.</p>
+<p>The cap is the reduction's last step: after the noise step it keeps the
+most informative of the remaining features, by greedy column subset
+selection. Each pick is the feature that explains the most of the
+remaining features' spread (Spearman, on ranks) not yet explained by the
+ones picked before it; its gain, in features' worth, is the information it
+adds per dimension (<code>cap_gain</code> in the reduction report, with the pick
+order in <code>cap_rank</code> and the share explained so far in <code>cap_explained</code>).</p>
+<p>It never keeps more features than the rows used minus one (all rows, or a
+sample of <code>max_samples</code> of them): past that, the kept features explain the
+others fully, and those are dropped as <code>explained</code>. <code>CapSetting()</code> keeps
+picking until nothing is left to explain, so it caps the features at the
+number of rows; <code>ReductionSetting(cap=None)</code> turns the cap off. Run it with
+the noise step on: it cannot tell noise from a feature unrelated to all
+the others.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_features</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Keep at most this many features, at least 1. <code>None</code> (the default): no
+count limit.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>min_explained</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Stop once the kept features explain this share of the spread of the
+features reaching the cap, in (0, 1]. 1.0 (the default): until
+nothing is left to explain.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.0</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-class">
 
@@ -869,7 +1000,7 @@ or minimum not below maximum) raises <code>ValueError</code>.</p>
                 <code>reduction</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="ReductionSetting(max_missing=0.05, max_top_share=0.95, max_correlation=0.95, noise_sensitivity=0.99, noise_neighbors=10, max_samples=5000, seed=0) (tsfx.tsfx.ReductionSetting)" href="#tsfx.ReductionSetting">ReductionSetting</a> | None</code>
+                  <code><a class="autorefs autorefs-internal" title="ReductionSetting(max_missing=0.05, max_top_share=0.95, max_correlation=0.95, noise_sensitivity=0.99, noise_neighbors=10, max_samples=5000, seed=0, cap=None) (tsfx.tsfx.ReductionSetting)" href="#tsfx.ReductionSetting">ReductionSetting</a> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -972,7 +1103,7 @@ reduction.</p>
 
 
 <h3 id="tsfx.ReductionSetting" class="doc doc-heading">
-              <code class="highlight language-python"><span class="n">ReductionSetting</span><span class="p">(</span><span class="n">max_missing</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">max_top_share</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">max_correlation</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">noise_sensitivity</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span> <span class="n">noise_neighbors</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">max_samples</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></code>
+              <code class="highlight language-python"><span class="n">ReductionSetting</span><span class="p">(</span><span class="n">max_missing</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">max_top_share</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">max_correlation</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">noise_sensitivity</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span> <span class="n">noise_neighbors</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">max_samples</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">cap</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h3>
 
@@ -1098,8 +1229,9 @@ fewer than 50 features or rows reaching the noise step, a
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Row cap for the correlation and noise steps (a seeded sample above
-it), larger than <code>noise_neighbors</code>.</p>
+                <p>Row cap for the correlation and noise steps and the cap (a seeded
+sample above it), larger than <code>noise_neighbors</code>; the cap then keeps at
+most <code>max_samples</code> - 1 features.</p>
               </div>
             </td>
             <td>
@@ -1120,6 +1252,23 @@ it), larger than <code>noise_neighbors</code>.</p>
             </td>
             <td>
                   <code>0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>cap</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="CapSetting(max_features=None, min_explained=1.0) (tsfx.tsfx.CapSetting)" href="#tsfx.CapSetting">CapSetting</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A <code>CapSetting</code> to keep only the most informative features after the
+noise step. <code>None</code> (the default): no cap.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
             </td>
           </tr>
       </tbody>
@@ -1410,14 +1559,19 @@ columns</p>
 <li><code>feature</code>: the feature's column name;</li>
 <li><code>kept</code>: whether the reduction keeps it;</li>
 <li><code>dropped_by</code>: the step that dropped it (<code>"missing"</code>, <code>"one_value"</code>,
-  <code>"duplicate"</code> or <code>"noise"</code>), null if kept;</li>
+  <code>"duplicate"</code>, <code>"noise"</code>, or the cap's <code>"cap"</code> and <code>"explained"</code>), null
+  if kept;</li>
 <li><code>missing_share</code>: its share of missing values (null, NaN, ±inf);</li>
 <li><code>top_share</code>: the share of its most frequent value among its non-missing
   values;</li>
 <li><code>duplicate_of</code> and <code>correlation</code>: the kept feature it copies, and their
   Spearman correlation;</li>
 <li><code>noise_score</code> and <code>noise_cutoff</code>: its Laplacian score and the best
-  shadow feature's score; it is noise unless its score is below.</li>
+  shadow feature's score; it is noise unless its score is below;</li>
+<li><code>cap_rank</code>, <code>cap_gain</code> and <code>cap_explained</code> (with a <code>CapSetting</code>): its
+  pick order (from 1), the information it added in features' worth (for
+  a feature the cap dropped: what it would have added next, 0 if
+  <code>"explained"</code>), and the share of the spread explained after its pick.</li>
 </ul>
 <p>A step that is turned off, or that a feature did not reach, leaves its
 columns null.</p>
@@ -1533,7 +1687,9 @@ columns null.</p>
             <td>
               <div class="doc-md-description">
                 <p>If the noise step runs on fewer than 50 features or rows: it may then
-drop real features as noise.</p>
+drop real features as noise. If the cap runs without the noise step,
+or the rows (or the <code>max_samples</code> sample) stop it before
+<code>max_features</code>.</p>
               </div>
             </td>
           </tr>

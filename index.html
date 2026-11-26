@@ -358,6 +358,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Reducing redundant features">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#capping-the-number-of-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Capping the number of features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
       </ul>
@@ -578,6 +595,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Reducing redundant features">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#capping-the-number-of-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Capping the number of features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -902,7 +936,9 @@ extraction and before scaling:</p>
    move together;</li>
 <li>noise: features that respect which rows are neighbors no better than shuffled
    copies of the data (<code>noise_sensitivity</code>, 0.99: about 99% of pure-noise
-   features are dropped).</li>
+   features are dropped);</li>
+<li>with a cap (<code>cap=CapSetting(...)</code>, off by default), all but the most
+   informative of the rest (see "Capping the number of features" below).</li>
 </ol>
 <p>Each step is turned off with <code>None</code>, e.g.
 <code>ReductionSetting(noise_sensitivity=None)</code>. The columns kept are unchanged, only
@@ -980,6 +1016,61 @@ shape: (3, 3)
 │ val__median  ┆ val__sum_values ┆ 0.9995      │
 │ val__maximum ┆ val__sum_values ┆ 0.999833    │
 └──────────────┴─────────────────┴─────────────┘
+</code></pre>
+<h4 id="capping-the-number-of-features">Capping the number of features</h4>
+<p>The four steps drop what is redundant or noise, but keep as many features as
+pass them. To keep the number of features from growing much larger than the
+number of rows (groups or windows), add a cap:
+<code>ReductionSetting(cap=CapSetting(max_features=..., min_explained=...))</code>. After
+the noise step it picks features one at a time, each time the one that explains
+the most of the remaining features' spread not yet explained by the ones picked
+before it (greedy column subset selection on the Spearman correlations). A
+pick's gain, in features' worth, is the information it adds per dimension. The
+report shows it in <code>cap_gain</code>, with the pick order in <code>cap_rank</code> and the share
+explained so far in <code>cap_explained</code>, so you can read off how many features carry
+most of the information.</p>
+<p>The cap stops at <code>max_features</code> features or once <code>min_explained</code> of the spread
+is explained, whichever comes first. It never keeps more features than the rows
+minus one: by then the kept features explain the others fully, and those are
+dropped as <code>explained</code>. So <code>CapSetting()</code>, with neither limit, caps the features
+at the number of rows, and keeps them all when there are fewer features than
+rows. A <code>UserWarning</code> says when the rows stop it before <code>max_features</code>. With
+more rows than <code>max_samples</code> (5000), the cap works on that sample and keeps at
+most 4999 features; a warning says so, and a larger <code>max_samples</code> keeps more, at
+the cost of a slower noise step. Run the cap with the noise step on: a
+pure-noise feature explains nothing but itself, just like a meaningful feature
+unrelated to all the others, so the cap cannot tell them apart. On thousands of
+features and rows, <code>CapSetting()</code> can take minutes.</p>
+<pre><code class="language-python">from tsfx import CapSetting
+
+settings = ExtractionSettings(
+    grouping_cols=[&quot;id&quot;],
+    value_cols=[&quot;val&quot;],
+    feature_setting=FeatureSetting.Efficient,
+    reduction=ReductionSetting(cap=CapSetting(max_features=20)),
+)
+report = reduction_report(df, settings)
+print(
+    report.filter(pl.col(&quot;cap_rank&quot;).is_not_null())
+    .sort(&quot;cap_rank&quot;)
+    .select(&quot;feature&quot;, &quot;cap_rank&quot;, &quot;cap_gain&quot;, &quot;cap_explained&quot;)
+    .head(5),
+)
+</code></pre>
+<p>which produces the following output (the gains fall quickly: a few
+features carry most of the spread):</p>
+<pre><code class="language-bash">shape: (5, 4)
+┌─────────────────────────────────┬──────────┬───────────┬───────────────┐
+│ feature                         ┆ cap_rank ┆ cap_gain  ┆ cap_explained │
+│ ---                             ┆ ---      ┆ ---       ┆ ---           │
+│ str                             ┆ i64      ┆ f64       ┆ f64           │
+╞═════════════════════════════════╪══════════╪═══════════╪═══════════════╡
+│ val__sum_values                 ┆ 1        ┆ 41.871614 ┆ 0.279144      │
+│ val__cwt_coefficients__coeff_2… ┆ 2        ┆ 28.541687 ┆ 0.469422      │
+│ val__cwt_coefficients__coeff_6… ┆ 3        ┆ 19.677955 ┆ 0.600608      │
+│ val__autocorrelation__lag_3     ┆ 4        ┆ 10.187262 ┆ 0.668523      │
+│ val__cwt_coefficients__coeff_1… ┆ 5        ┆ 8.484321  ┆ 0.725086      │
+└─────────────────────────────────┴──────────┴───────────┴───────────────┘
 </code></pre>
 <p>For more examples, see the <a href="examples">examples</a> directory.</p>
 <h2 id="contributing">Contributing</h2>
