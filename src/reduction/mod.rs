@@ -426,11 +426,14 @@ impl Reduction {
                 let rows_limited = result.stop == CapStop::NothingLeft && kept < candidates.len();
                 let r = rows.len();
                 if rows_limited && n <= self.max_samples {
+                    // The rows' limit, or candidates that copy the kept ones
+                    // (with step 3 off): either way, nothing left to explain
                     if let Some(max) = cap.max_features.filter(|&max| kept < max) {
                         warnings.push(format!(
-                            "the cap kept {kept} features, fewer than max_features={max}: {r} \
-                             rows span at most {} directions, and the kept features explain the \
-                             other candidates fully on them",
+                            "the cap kept {kept} features, fewer than max_features={max}: they \
+                             explain the other {} candidates fully on these {r} rows (on which at \
+                             most {} features can be kept)",
+                            candidates.len() - kept,
                             r - 1
                         ));
                     }
