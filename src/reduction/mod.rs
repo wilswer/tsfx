@@ -667,8 +667,8 @@ mod tests {
 
 #[cfg(test)]
 mod fit_tests {
-    use super::Reduction;
     use super::rng::SplitMix64;
+    use super::{Cap, Reduction, ReductionFit};
     use polars::prelude::*;
 
     fn uniform(g: &mut SplitMix64) -> f64 {
@@ -749,6 +749,9 @@ mod fit_tests {
         assert_eq!(top.get(1), Some(1.0));
         assert_eq!(rep.column("noise_score").unwrap().null_count(), 5);
         assert_eq!(rep.column("noise_cutoff").unwrap().null_count(), 5);
+        for name in ["cap_rank", "cap_gain", "cap_explained"] {
+            assert_eq!(rep.column(name).unwrap().null_count(), 5, "{name}");
+        }
         assert!(fit.warnings.is_empty());
         let kept = rep.column("kept").unwrap().bool().unwrap();
         assert_eq!(
@@ -795,7 +798,7 @@ mod fit_tests {
         let fit = Reduction::default().fit(&df, &keys()).unwrap();
         assert!(fit.kept.is_empty());
         assert_eq!(fit.report.height(), 0);
-        assert_eq!(fit.report.width(), 9);
+        assert_eq!(fit.report.width(), 12);
         let dtypes: Vec<DataType> = fit.report.dtypes();
         assert_eq!(
             dtypes,
@@ -807,6 +810,9 @@ mod fit_tests {
                 DataType::Float64,
                 DataType::String,
                 DataType::Float64,
+                DataType::Float64,
+                DataType::Float64,
+                DataType::Int64,
                 DataType::Float64,
                 DataType::Float64,
             ]
@@ -865,6 +871,9 @@ mod fit_tests {
             "correlation",
             "noise_score",
             "noise_cutoff",
+            "cap_rank",
+            "cap_gain",
+            "cap_explained",
         ] {
             assert_eq!(fit.report.column(name).unwrap().null_count(), 5, "{name}");
         }
@@ -927,6 +936,26 @@ mod fit_tests {
             max_samples: 50,
             ..Default::default()
         };
+        let one = assert_deterministic(&r, &df, &shuffled);
+        // Not vacuous: features reached the noise step
+        assert!(one.report.column("noise_score").unwrap().null_count() < d);
+
+        let capped = Reduction {
+            cap: Some(Cap {
+                max_features: Some(10),
+                min_explained: 0.9,
+            }),
+            ..r
+        };
+        let one = assert_deterministic(&capped, &df, &shuffled);
+        // Not vacuous: features reached the cap
+        assert!(one.report.column("cap_rank").unwrap().null_count() < d);
+    }
+
+    /// Fits `r` on `df` with 1 thread and on `shuffled` (the same rows in
+    /// another order) with 4, asserts the same kept columns, a bit-identical
+    /// report and the same warnings, and returns the first fit.
+    fn assert_deterministic(r: &Reduction, df: &DataFrame, shuffled: &DataFrame) -> ReductionFit {
         let fit_in = |threads: usize, frame: &DataFrame| {
             rayon::ThreadPoolBuilder::new()
                 .num_threads(threads)
@@ -934,13 +963,12 @@ mod fit_tests {
                 .unwrap()
                 .install(|| r.fit(frame, &keys()).unwrap())
         };
-        let one = fit_in(1, &df);
-        let four = fit_in(4, &shuffled);
-        // Not vacuous: features reached the noise step
-        assert!(one.report.column("noise_score").unwrap().null_count() < d);
+        let one = fit_in(1, df);
+        let four = fit_in(4, shuffled);
         assert_eq!(one.kept, four.kept);
         assert_eq!(report_bits(&one.report), report_bits(&four.report));
         assert_eq!(one.warnings, four.warnings);
+        one
     }
 
     /// A constant and an all-missing feature that reach the noise step (the
@@ -1065,5 +1093,264 @@ mod fit_tests {
         let fit = r.fit(&crafted(), &keys()).unwrap();
         let without_b = crafted().drop("b").unwrap();
         assert!(fit.apply(without_b, &keys()).is_err());
+    }
+
+    /// `rows` rows of `features` independent uniform columns f0, f1, ...
+    fn uniform_frame(rows: usize, features: usize, seed: u64) -> DataFrame {
+        let mut g = SplitMix64::new(seed);
+        let mut columns = vec![Column::new(
+            "id".into(),
+            (0..rows as i64).collect::<Vec<_>>(),
+        )];
+        for j in 0..features {
+            let values: Vec<f64> = (0..rows).map(|_| uniform(&mut g)).collect();
+            columns.push(Column::new(format!("f{j}").into(), values));
+        }
+        DataFrame::new_infer_height(columns).unwrap()
+    }
+
+    /// Steps 1 and 2 at their defaults, 3 and 4 off, and `cap`.
+    fn cap_reduction(cap: Cap) -> Reduction {
+        Reduction {
+            max_correlation: None,
+            noise_sensitivity: None,
+            cap: Some(cap),
+            ..Default::default()
+        }
+    }
+
+    fn cap_ranks(df: &DataFrame) -> Vec<Option<i64>> {
+        df.column("cap_rank")
+            .unwrap()
+            .i64()
+            .unwrap()
+            .iter()
+            .collect()
+    }
+
+    fn floats(df: &DataFrame, name: &str) -> Vec<Option<f64>> {
+        df.column(name).unwrap().f64().unwrap().iter().collect()
+    }
+
+    fn count(values: &[Option<String>], value: &str) -> usize {
+        values
+            .iter()
+            .filter(|v| v.as_deref() == Some(value))
+            .count()
+    }
+
+    /// The picks' explained shares, in pick order.
+    fn explained_by_rank(df: &DataFrame) -> Vec<f64> {
+        let mut picks: Vec<(i64, f64)> = cap_ranks(df)
+            .into_iter()
+            .zip(floats(df, "cap_explained"))
+            .filter_map(|(rank, share)| Some((rank?, share?)))
+            .collect();
+        picks.sort_by_key(|&(rank, _)| rank);
+        picks.into_iter().map(|(_, share)| share).collect()
+    }
+
+    const NO_NOISE: &str = "the cap ran without the noise step";
+
+    #[test]
+    fn test_cap_rows_limit() {
+        let fit = cap_reduction(Cap::default())
+            .fit(&uniform_frame(12, 40, 21), &keys())
+            .unwrap();
+        assert_eq!(fit.kept.len(), 11);
+        let rep = &fit.report;
+        let dropped = strs(rep, "dropped_by");
+        assert_eq!(count(&dropped, "explained"), 29);
+        for (drop, gain) in dropped.iter().zip(floats(rep, "cap_gain")) {
+            if drop.as_deref() == Some("explained") {
+                assert_eq!(gain, Some(0.0));
+            }
+        }
+        let mut ranks: Vec<i64> = cap_ranks(rep).into_iter().flatten().collect();
+        ranks.sort_unstable();
+        assert_eq!(ranks, (1..=11).collect::<Vec<_>>());
+        let kept = rep.column("kept").unwrap().bool().unwrap();
+        for (k, rank) in kept.iter().zip(cap_ranks(rep)) {
+            assert_eq!(k, Some(rank.is_some()));
+        }
+        assert_eq!(fit.warnings.len(), 1, "{:?}", fit.warnings);
+        assert!(fit.warnings[0].starts_with(NO_NOISE), "{}", fit.warnings[0]);
+    }
+
+    #[test]
+    fn test_cap_rows_limit_with_max_features() {
+        let cap = Cap {
+            max_features: Some(200),
+            ..Default::default()
+        };
+        let fit = cap_reduction(cap)
+            .fit(&uniform_frame(12, 40, 21), &keys())
+            .unwrap();
+        assert_eq!(fit.kept.len(), 11);
+        assert!(
+            fit.warnings
+                .iter()
+                .any(|w| w.contains("fewer than max_features=200")
+                    && w.contains("12 rows span at most 11 directions")),
+            "{:?}",
+            fit.warnings
+        );
+    }
+
+    /// Sampled rows with step 3 off: the cap ranks the sample itself, and the
+    /// sample's size is what stops it.
+    #[test]
+    fn test_cap_sample_limit() {
+        let r = Reduction {
+            max_samples: 20,
+            ..cap_reduction(Cap::default())
+        };
+        let fit = r.fit(&uniform_frame(30, 40, 23), &keys()).unwrap();
+        assert_eq!(fit.kept.len(), 19);
+        assert!(
+            fit.warnings
+                .iter()
+                .any(|w| w.contains("max_samples=20 of the 30 rows")
+                    && w.contains("raise max_samples")),
+            "{:?}",
+            fit.warnings
+        );
+    }
+
+    #[test]
+    fn test_cap_max_features() {
+        let cap = Cap {
+            max_features: Some(5),
+            ..Default::default()
+        };
+        let fit = cap_reduction(cap)
+            .fit(&uniform_frame(60, 30, 24), &keys())
+            .unwrap();
+        assert_eq!(fit.kept.len(), 5);
+        let rep = &fit.report;
+        let dropped = strs(rep, "dropped_by");
+        assert_eq!(count(&dropped, "cap"), 25);
+        for (drop, gain) in dropped.iter().zip(floats(rep, "cap_gain")) {
+            if drop.as_deref() == Some("cap") {
+                assert!(gain.is_some_and(|g| g > 0.0), "{gain:?}");
+            }
+        }
+        let shares = explained_by_rank(rep);
+        assert_eq!(shares.len(), 5);
+        assert!(shares.windows(2).all(|w| w[0] < w[1]), "{shares:?}");
+        assert!(!fit.warnings.iter().any(|w| w.contains("fewer than")));
+    }
+
+    #[test]
+    fn test_cap_min_explained() {
+        let cap = Cap {
+            min_explained: 0.6,
+            ..Default::default()
+        };
+        let fit = cap_reduction(cap)
+            .fit(&uniform_frame(60, 30, 24), &keys())
+            .unwrap();
+        let shares = explained_by_rank(&fit.report);
+        let k = shares.len();
+        assert_eq!(fit.kept.len(), k);
+        assert!(k >= 2, "{shares:?}");
+        assert!(shares[k - 1] >= 0.6 && shares[k - 2] < 0.6, "{shares:?}");
+    }
+
+    #[test]
+    fn test_cap_fewer_candidates_than_rows() {
+        let fit = cap_reduction(Cap::default())
+            .fit(&uniform_frame(60, 30, 24), &keys())
+            .unwrap();
+        assert_eq!(fit.kept.len(), 30);
+        assert_eq!(cap_ranks(&fit.report).iter().flatten().count(), 30);
+        assert_eq!(fit.warnings.len(), 1, "{:?}", fit.warnings);
+    }
+
+    #[test]
+    fn test_cap_step3_off_matches_on() {
+        let df = uniform_frame(60, 30, 26);
+        let off = cap_reduction(Cap::default()).fit(&df, &keys()).unwrap();
+        let on = Reduction {
+            max_correlation: Some(0.999999),
+            ..cap_reduction(Cap::default())
+        }
+        .fit(&df, &keys())
+        .unwrap();
+        assert_eq!(count(&strs(&on.report, "dropped_by"), "duplicate"), 0);
+        assert_eq!(cap_ranks(&off.report), cap_ranks(&on.report));
+    }
+
+    #[test]
+    fn test_cap_all_missing_column_is_explained() {
+        let mut df = uniform_frame(40, 20, 27);
+        df.with_column(Column::new("nan".into(), vec![f64::NAN; 40]))
+            .unwrap();
+        let r = Reduction {
+            max_missing: None,
+            max_top_share: None,
+            ..cap_reduction(Cap::default())
+        };
+        let fit = r.fit(&df, &keys()).unwrap();
+        let rep = &fit.report;
+        assert_eq!(strs(rep, "dropped_by")[20].as_deref(), Some("explained"));
+        assert_eq!(floats(rep, "cap_gain")[20], Some(0.0));
+        assert_eq!(fit.kept.len(), 20);
+        for name in ["cap_gain", "cap_explained"] {
+            assert!(
+                floats(rep, name).into_iter().flatten().all(f64::is_finite),
+                "{name}"
+            );
+        }
+    }
+
+    /// Rows 6..12 repeat rows 0..6: the rows span at most 5 directions, so the
+    /// cap stops early, and the rows warning still fires.
+    #[test]
+    fn test_cap_duplicated_rows() {
+        let base = uniform_frame(6, 40, 28);
+        let index = IdxCa::from_vec("idx".into(), (0..12).map(|i| i % 6).collect());
+        let mut df = base.take(&index).unwrap();
+        df.with_column(Column::new("id".into(), (0..12i64).collect::<Vec<_>>()))
+            .unwrap();
+        let cap = Cap {
+            max_features: Some(20),
+            ..Default::default()
+        };
+        let fit = cap_reduction(cap).fit(&df, &keys()).unwrap();
+        assert!(fit.kept.len() <= 5, "{}", fit.kept.len());
+        let dropped = strs(&fit.report, "dropped_by");
+        assert_eq!(count(&dropped, "explained"), 40 - fit.kept.len());
+        assert!(
+            fit.warnings
+                .iter()
+                .any(|w| w.contains("fewer than max_features=20")),
+            "{:?}",
+            fit.warnings
+        );
+    }
+
+    #[test]
+    fn test_cap_noise_on_no_cap_warning() {
+        let n = 60;
+        let mut g = SplitMix64::new(29);
+        let mut columns = vec![Column::new("id".into(), (0..n as i64).collect::<Vec<_>>())];
+        for j in 0..50 {
+            let values: Vec<f64> = (0..n)
+                .map(|i| (i % 3) as f64 + 0.3 * uniform(&mut g) + j as f64)
+                .collect();
+            columns.push(Column::new(format!("f{j}").into(), values));
+        }
+        let df = DataFrame::new_infer_height(columns).unwrap();
+        let r = Reduction {
+            cap: Some(Cap::default()),
+            ..Default::default()
+        };
+        let fit = r.fit(&df, &keys()).unwrap();
+        assert!(
+            !fit.warnings.iter().any(|w| w.contains("cap")),
+            "{:?}",
+            fit.warnings
+        );
     }
 }
