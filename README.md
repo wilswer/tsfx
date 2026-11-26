@@ -393,6 +393,24 @@ print(
 )
 ```
 
+which produces the following output (the gains fall quickly: a few
+features carry most of the spread):
+
+```bash
+shape: (5, 4)
+┌─────────────────────────────────┬──────────┬───────────┬───────────────┐
+│ feature                         ┆ cap_rank ┆ cap_gain  ┆ cap_explained │
+│ ---                             ┆ ---      ┆ ---       ┆ ---           │
+│ str                             ┆ i64      ┆ f64       ┆ f64           │
+╞═════════════════════════════════╪══════════╪═══════════╪═══════════════╡
+│ val__sum_values                 ┆ 1        ┆ 41.871614 ┆ 0.279144      │
+│ val__cwt_coefficients__coeff_2… ┆ 2        ┆ 28.541687 ┆ 0.469422      │
+│ val__cwt_coefficients__coeff_6… ┆ 3        ┆ 19.677955 ┆ 0.600608      │
+│ val__autocorrelation__lag_3     ┆ 4        ┆ 10.187262 ┆ 0.668523      │
+│ val__cwt_coefficients__coeff_1… ┆ 5        ┆ 8.484321  ┆ 0.725086      │
+└─────────────────────────────────┴──────────┴───────────┴───────────────┘
+```
+
 For more examples, see the [examples](examples) directory.
 
 ## Contributing
