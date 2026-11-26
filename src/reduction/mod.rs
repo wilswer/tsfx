@@ -1291,10 +1291,41 @@ mod fit_tests {
             fit.warnings
                 .iter()
                 .any(|w| w.contains("fewer than max_features=200")
-                    && w.contains("12 rows span at most 11 directions")),
+                    && w.contains("explain the other 29 candidates fully on these 12 rows")
+                    && w.contains("at most 11")),
             "{:?}",
             fit.warnings
         );
+    }
+
+    /// Exact (rank) copies with step 3 off run out before max_features while
+    /// the rows allow far more. Regression: the warning blamed the rows ("40
+    /// rows span at most 39 directions"); it says the kept features explain
+    /// the rest.
+    #[test]
+    fn test_cap_copies_run_out_warning() {
+        let mut df = uniform_frame(40, 10, 31);
+        for j in 0..10 {
+            let copy = df.column(&format!("f{j}")).unwrap().clone();
+            df.with_column(copy.with_name(format!("copy{j}").into()))
+                .unwrap();
+        }
+        let cap = Cap {
+            max_features: Some(30),
+            ..Default::default()
+        };
+        let fit = cap_reduction(cap).fit(&df, &keys()).unwrap();
+        assert_eq!(fit.kept.len(), 10);
+        let warning = fit
+            .warnings
+            .iter()
+            .find(|w| w.contains("fewer than max_features=30"))
+            .expect("a max_features warning");
+        assert!(
+            warning.contains("explain the other 10 candidates fully on these 40 rows"),
+            "{warning}"
+        );
+        assert!(!warning.contains("span"), "{warning}");
     }
 
     /// Sampled rows with step 3 off: the cap ranks the sample itself, and the
