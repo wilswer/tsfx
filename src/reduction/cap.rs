@@ -21,6 +21,12 @@ use super::Cap;
 /// (each candidate's own variance is 1, or 0 if it is constant).
 pub(crate) const EXPLAINED_TOLERANCE: f64 = 1e-9;
 
+/// Gains within this relative distance of the best are equal, and the
+/// earliest candidate wins. Rounding alone separates gains that are equal by
+/// construction, such as the last pick at the rows limit (one direction is
+/// left, and every remaining candidate explains all of it).
+pub(crate) const GAIN_TIE: f64 = 1e-9;
+
 /// Why the cap stopped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CapStop {
@@ -49,7 +55,7 @@ pub(crate) struct CapResult {
 }
 
 /// Picks candidates greedily, the highest gain first (the first in column
-/// order on ties), until `cap.max_features` are picked, the explained share
+/// order on ties, gains within a relative [`GAIN_TIE`] counting as equal), until `cap.max_features` are picked, the explained share
 /// reaches `cap.min_explained` (checked only below 1.0), or every candidate
 /// left is fully explained. `c`: the candidates' correlation matrix (d × d,
 /// symmetric, diagonal 1, or 0 for a constant candidate). The products with
@@ -73,17 +79,19 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
         CapStop::NothingLeft
     } else {
         loop {
-            // Highest gain; an equal gain keeps the earlier candidate
-            let best = (0..d)
+            // The highest gain; gains within GAIN_TIE of it are equal, and the
+            // earliest candidate wins
+            let options: Vec<(usize, f64)> = (0..d)
                 .filter(|&i| open(i, &picked, &g))
                 .map(|i| (i, f[i] / g[i]))
-                .fold(None, |best: Option<(usize, f64)>, (i, gain)| match best {
-                    Some((_, b)) if b >= gain => best,
-                    _ => Some((i, gain)),
-                });
-            let Some((l, gain)) = best else {
+                .collect();
+            let Some(top) = options.iter().map(|&(_, gain)| gain).reduce(f64::max) else {
                 break CapStop::NothingLeft;
             };
+            let (l, gain) = options
+                .into_iter()
+                .find(|&(_, gain)| gain >= top * (1.0 - GAIN_TIE))
+                .expect("the best gain is among the options");
             picked[l] = true;
             share += gain / trace;
             picks.push(l);
