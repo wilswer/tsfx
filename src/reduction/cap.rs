@@ -561,6 +561,44 @@ mod tests {
         }
     }
 
+    /// Five uniform columns and near-copies of four of them (one or two pairs
+    /// of neighboring values tied), each in six identical copies, as the cap
+    /// fuzz test's Minimal features of one-row groups with step 3 off. Late
+    /// picks rank near-copies by gains of about 4e-6 from running scores of
+    /// about 3e-12, known to only about 1% relative, wider than the near-top
+    /// window. Regression: the fuzz test found a pick order that differed from
+    /// the exact one (at 200 rows); the picks match the brute force on every
+    /// seed.
+    #[test]
+    fn near_copies_pick_as_the_brute_force() {
+        for seed in 0..12u64 {
+            let mut g = SplitMix64::new(900 + seed);
+            let n = 200 + 40 * seed as usize;
+            let base: Vec<Vec<f64>> = (0..5)
+                .map(|_| (0..n).map(|_| uniform(&mut g)).collect())
+                .collect();
+            let mut distinct = base.clone();
+            for (column, ties) in [(0, 1), (1, 2), (2, 1), (3, 1)] {
+                let v = &base[column];
+                let mut order: Vec<usize> = (0..n).collect();
+                order.sort_by(|&a, &b| v[a].total_cmp(&v[b]));
+                let mut copy = v.clone();
+                for t in 0..ties {
+                    copy[order[2 * t + 1]] = v[order[2 * t]];
+                }
+                distinct.push(copy);
+            }
+            let columns: Vec<&[f64]> = distinct
+                .iter()
+                .flat_map(|column| std::iter::repeat_n(column.as_slice(), 6))
+                .collect();
+            let z = rank_matrix(&columns, &(0..n).collect::<Vec<_>>());
+            let got = greedy_subset(&correlation_matrix(&z), &Cap::default());
+            let (picks, _) = brute_force(&z, &Cap::default());
+            assert_eq!(got.picks, picks, "seed {seed}, n {n}");
+        }
+    }
+
     /// A near-copy whose residual variance is just above EXPLAINED_TOLERANCE
     /// (candidate 1 is candidate 0 with one pair of neighboring values tied,
     /// 1000 rows): its running score, about g² ≈ 4e-17, rounds below zero.
