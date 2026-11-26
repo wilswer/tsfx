@@ -2,6 +2,27 @@
 
 All notable changes to TSFX are documented here.
 
+## Unreleased
+
+### Added
+
+- **Feature cap**:
+  `ReductionSetting(cap=CapSetting(max_features=None, min_explained=1.0))` adds
+  a fifth reduction step that keeps only the most informative features, so their
+  number does not grow much larger than the number of rows. After the noise
+  step, it picks features one at a time by greedy column subset selection on
+  their Spearman correlations: each pick explains the most of the remaining
+  features' spread not yet explained. It stops at `max_features` or once
+  `min_explained` of the spread is explained, and never keeps more than the rows
+  used minus one, so `CapSetting()` caps the features at the number of rows. The
+  report gains `cap_rank`, `cap_gain` (the information a pick adds, in features'
+  worth) and `cap_explained`, and `dropped_by` the values `cap` and `explained`.
+  The report always has these three columns (12 in all), null without a cap:
+  code that checks its schema or selects columns by position sees them.
+  `UserWarning`s say when the cap runs without the noise step, or the rows or
+  the `max_samples` sample stop it before `max_features`. Defaults to
+  `cap=None`: no cap, as before.
+
 ## 0.10.0 (2026-11-26)
 
 ### Added

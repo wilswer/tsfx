@@ -1,5 +1,6 @@
 from ._tsfx import extract_features, reduction_report
 from .tsfx import (
+    CapSetting,
     DynamicGroupBySettings,
     ExtractionSettings,
     FeatureSetting,
@@ -11,6 +12,7 @@ from .tsfx import (
 __all__ = [
     "extract_features",
     "reduction_report",
+    "CapSetting",
     "DynamicGroupBySettings",
     "ExtractionSettings",
     "FeatureSetting",

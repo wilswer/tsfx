@@ -26,15 +26,32 @@ Arbitrary feature matrices come from one-row groups, whose Minimal features
 repeat the drawn values; some value columns are monotone maps of others, to
 make exact and monotone copies. The tests on Efficient features of real
 series are slow and run at most 20 examples.
+
+The cap (step 5) is compared with the greedy by definition on the step-3
+survivors' standardized ranks: per step, every unpicked candidate's gain,
+the share of the total spread its unit residual off the picks captures
+(Gram-Schmidt, computed directly so small gains stay accurate), a residual
+variance of at most 1e-9 meaning fully explained, and the spec's stop rules;
+gains within a relative 1e-6 of the best are ties, won by the earliest
+candidate. Picks and ``dropped_by`` must match exactly, gains and shares to a
+relative 1e-6 (plus 1e-9): from the correlation matrix, a nearly explained
+candidate's residual variance v is known only to about ε · picks / v
+relative. Examples with a gain between a relative 0.5e-6 and 2e-6 below the best,
+a residual variance between 1e-11 and 1e-7, or a share within 1e-9 of
+``min_explained`` are skipped, after tsfx has run on them, so a crash still
+shows. A second cap test turns step 3 off and adds near-copies (one or two
+tied pairs, 200-1500 rows), whose residual variance falls in that band.
 """
 
 import math
+import warnings
 from collections.abc import Callable, Sequence
 from typing import Any
 
 import polars as pl
 import pytest
 from tsfx import (
+    CapSetting,
     ExtractionSettings,
     FeatureSetting,
     ReductionSetting,
@@ -125,8 +142,15 @@ def _standardized_ranks(column: np.ndarray) -> np.ndarray:
     return (ranks - ranks.mean()) / sd if sd > 0 else np.zeros(len(ranks))
 
 
-def _reference(features: pl.DataFrame, keys: Sequence[str]) -> dict[str, list[Any]]:
-    """Run steps 1-3 in numpy/scipy, `hypothesis.assume` away borderline cases."""
+def _reference(
+    features: pl.DataFrame,
+    keys: Sequence[str],
+    max_correlation: float | None = MAX_CORRELATION,
+) -> dict[str, list[Any]]:
+    """Run steps 1-3 in numpy/scipy, `hypothesis.assume` away borderline cases.
+
+    Step 3 is skipped with `max_correlation=None`.
+    """
     df = features.sort(keys)
     names = [c for c in df.columns if c not in keys]
     x = df.select(names).cast(pl.Float64).to_numpy()
@@ -146,7 +170,7 @@ def _reference(features: pl.DataFrame, keys: Sequence[str]) -> dict[str, list[An
     alive = [j for j in range(d) if dropped[j] is None]
     duplicate_of: list[str | None] = [None] * d
     correlation: list[float | None] = [None] * d
-    if alive:
+    if alive and max_correlation is not None:
         z = np.column_stack([_standardized_ranks(x[:, j]) for j in alive])
         corr = z.T @ z / len(z)
         kept: list[int] = []
@@ -154,8 +178,8 @@ def _reference(features: pl.DataFrame, keys: Sequence[str]) -> dict[str, list[An
             above = []
             for b in kept:
                 r = float(corr[a, b])
-                hypothesis.assume(abs(abs(r) - MAX_CORRELATION) > 1e-9)
-                if abs(r) > MAX_CORRELATION:
+                hypothesis.assume(abs(abs(r) - max_correlation) > 1e-9)
+                if abs(r) > max_correlation:
                     above.append((abs(r), b, r))
             if not above:
                 kept.append(a)
@@ -214,3 +238,201 @@ def test_matches_reference_matrices(case: tuple[pl.LazyFrame, list[str]]) -> Non
 def test_matches_reference_real_series(case: tuple[pl.LazyFrame, list[str]]) -> None:
     lf, value_cols = case
     _check(lf, value_cols, FeatureSetting.Efficient)
+
+
+@st.composite
+def cap_case(draw: st.DrawFn) -> tuple[pl.LazyFrame, list[str], CapSetting]:
+    """Draw one-row groups of independent value columns, and a cap."""
+    n = draw(st.integers(10, 40))
+    k = draw(st.integers(2, 25))
+    value = st.floats(-1e6, 1e6, allow_nan=False, allow_infinity=False)
+    columns = {f"v{c}": draw(st.lists(value, min_size=n, max_size=n)) for c in range(k)}
+    ids = [f"g{i:03}" for i in range(n)]
+    cap = CapSetting(
+        max_features=draw(st.one_of(st.none(), st.integers(1, 30))),
+        min_explained=draw(st.one_of(st.just(1.0), st.floats(0.05, 0.99))),
+    )
+    return pl.DataFrame({"id": ids, **columns}).lazy(), list(columns), cap
+
+
+def _cap_reference(
+    features: pl.DataFrame,
+    keys: Sequence[str],
+    cap: CapSetting,
+    max_correlation: float | None = MAX_CORRELATION,
+) -> dict[str, list[Any]]:
+    """Run steps 1-3 and the cap in numpy, `hypothesis.assume` away borderline cases."""
+    want = _reference(features, keys, max_correlation)
+    names = want["feature"]
+    x = features.sort(keys).select(names).cast(pl.Float64).to_numpy()
+    x = np.where(np.isfinite(x), x, np.nan)
+    n = len(x)
+    candidates = [j for j, drop in enumerate(want["dropped_by"]) if drop is None]
+    dropped = list(want["dropped_by"])
+    rank: list[int | None] = [None] * len(names)
+    gain: list[float | None] = [None] * len(names)
+    explained: list[float | None] = [None] * len(names)
+    if not candidates:
+        return {
+            "dropped_by": dropped,
+            "cap_rank": rank,
+            "cap_gain": gain,
+            "cap_explained": explained,
+        }
+    z = np.column_stack([_standardized_ranks(x[:, j]) for j in candidates])
+    total = float((z**2).sum())
+    basis = np.zeros((n, 0))  # orthonormal, spanning the picks
+
+    def residual(p: int) -> tuple[float, np.ndarray]:
+        """Candidate p's residual variance and residual, off the picks."""
+        r = z[:, p] - basis @ (basis.T @ z[:, p])
+        r = r - basis @ (basis.T @ r)  # twice, for precision
+        v = float(r @ r) / n
+        hypothesis.assume(not 1e-11 <= v <= 1e-7)
+        return v, r
+
+    def gain_share(r: np.ndarray) -> tuple[float, np.ndarray]:
+        """The share of the spread a residual's unit vector u captures, directly
+        as Σᵢ (u · zᵢ)² (a difference of totals loses small gains), and u.
+        """
+        u = r / np.sqrt(r @ r)
+        return float(((u @ z) ** 2).sum()) / total, u
+
+    picked: list[int] = []
+    share = 0.0
+    while True:
+        options = []
+        for p in range(len(candidates)):
+            if p not in picked:
+                v, r = residual(p)
+                if v > 1e-9:
+                    options.append((*gain_share(r), p))
+        if not options:
+            break
+        # Gains within a relative 1e-6 of the best are ties, won by the
+        # earliest candidate; skip gains that rounding could put on either
+        # side of that line
+        top = max(o[0] for o in options)
+        for g, _, _ in options:
+            hypothesis.assume(not 0.5e-6 <= 1 - g / top <= 2e-6)
+        g, u, p = min(
+            (o for o in options if o[0] >= top * (1 - 1e-6)),
+            key=lambda o: o[2],
+        )
+        basis = np.column_stack([basis, u])
+        j = candidates[p]
+        picked.append(p)
+        share += g
+        rank[j], gain[j], explained[j] = len(picked), g * total / n, share
+        if cap.max_features == len(picked):
+            break
+        if cap.min_explained < 1.0:
+            hypothesis.assume(abs(share - cap.min_explained) > 1e-9)
+            if share >= cap.min_explained:
+                break
+    for p in range(len(candidates)):
+        if p in picked:
+            continue
+        j = candidates[p]
+        v, r = residual(p)
+        if v <= 1e-9:
+            dropped[j], gain[j] = "explained", 0.0
+        else:
+            dropped[j], gain[j] = "cap", gain_share(r)[0] * total / n
+    return {
+        "dropped_by": dropped,
+        "cap_rank": rank,
+        "cap_gain": gain,
+        "cap_explained": explained,
+    }
+
+
+def _check_cap(
+    lf: pl.LazyFrame,
+    value_cols: list[str],
+    cap: CapSetting,
+    max_correlation: float | None,
+) -> None:
+    # A LazyFrame's repr hides its values: show them with a failure
+    hypothesis.note(f"values: {lf.collect().to_dict(as_series=False)}")
+    reduction = ReductionSetting(
+        max_missing=MAX_MISSING,
+        max_top_share=MAX_TOP_SHARE,
+        max_correlation=max_correlation,
+        noise_sensitivity=None,
+        cap=cap,
+    )
+    settings = ExtractionSettings(
+        ["id"],
+        value_cols,
+        FeatureSetting.Minimal,
+        reduction=reduction,
+    )
+    # tsfx first, so that a crash shows on every example, also on those the
+    # reference then skips
+    with warnings.catch_warnings():
+        # The cap warns without the noise step, and when the rows stop it
+        warnings.simplefilter("ignore", UserWarning)
+        report = reduction_report(lf, settings)
+    plain = ExtractionSettings(["id"], value_cols, FeatureSetting.Minimal)
+    want = _cap_reference(extract_features(lf, plain), ["id"], cap, max_correlation)
+    assert report["dropped_by"].to_list() == want["dropped_by"]
+    assert report["cap_rank"].to_list() == want["cap_rank"]
+    for name in ["cap_gain", "cap_explained"]:
+        for got, expected in zip(report[name].to_list(), want[name], strict=True):
+            assert (got is None) == (expected is None), name
+            if expected is not None:
+                assert got == pytest.approx(expected, rel=1e-6, abs=1e-9), name
+
+
+@hypothesis.given(cap_case())
+def test_cap_matches_reference(
+    case: tuple[pl.LazyFrame, list[str], CapSetting],
+) -> None:
+    lf, value_cols, cap = case
+    _check_cap(lf, value_cols, cap, MAX_CORRELATION)
+
+
+@st.composite
+def near_copies(draw: st.DrawFn) -> tuple[pl.LazyFrame, list[str], CapSetting]:
+    """Draw 200-1500 one-row groups of uniform value columns and near-copies of
+    some (one or two pairs of neighboring values tied), and a cap.
+
+    With step 3 off a near-copy reaches the cap, and its residual variance
+    after its source lands near the tolerance (about 6e-9 at 1000 rows for one
+    tie), where the running scores are most fragile.
+    """
+    n = draw(st.integers(200, 1500))
+    rng = np.random.default_rng(draw(st.integers(0, 2**32 - 1)))
+    k = draw(st.integers(2, 6))
+    columns = {f"v{c}": rng.random(n) for c in range(k)}
+    for c in range(draw(st.integers(1, k))):
+        source = columns[f"v{c}"]
+        order = np.argsort(source)
+        copy = source.copy()
+        for t in range(draw(st.integers(1, 2))):
+            copy[order[2 * t + 1]] = source[order[2 * t]]
+        columns[f"n{c}"] = copy
+    ids = [f"g{i:04}" for i in range(n)]
+    cap = CapSetting(
+        max_features=draw(st.one_of(st.none(), st.integers(1, 20))),
+        min_explained=draw(st.one_of(st.just(1.0), st.floats(0.05, 0.99))),
+    )
+    frame = pl.DataFrame({"id": ids, **{c: v.tolist() for c, v in columns.items()}})
+    return frame.lazy(), list(columns), cap
+
+
+# Many examples land in the band the reference skips; tsfx still runs on them
+@hypothesis.settings(
+    max_examples=min(hypothesis.settings().max_examples, 50),
+    suppress_health_check=[
+        hypothesis.HealthCheck.filter_too_much,
+        hypothesis.HealthCheck.too_slow,
+    ],
+)
+@hypothesis.given(near_copies())
+def test_cap_matches_reference_near_copies_without_step_3(
+    case: tuple[pl.LazyFrame, list[str], CapSetting],
+) -> None:
+    lf, value_cols, cap = case
+    _check_cap(lf, value_cols, cap, None)

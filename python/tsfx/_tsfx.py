@@ -102,14 +102,19 @@ def reduction_report(
     - `feature`: the feature's column name;
     - `kept`: whether the reduction keeps it;
     - `dropped_by`: the step that dropped it (`"missing"`, `"one_value"`,
-      `"duplicate"` or `"noise"`), null if kept;
+      `"duplicate"`, `"noise"`, or the cap's `"cap"` and `"explained"`), null
+      if kept;
     - `missing_share`: its share of missing values (null, NaN, ±inf);
     - `top_share`: the share of its most frequent value among its non-missing
       values;
     - `duplicate_of` and `correlation`: the kept feature it copies, and their
       Spearman correlation;
     - `noise_score` and `noise_cutoff`: its Laplacian score and the best
-      shadow feature's score; it is noise unless its score is below.
+      shadow feature's score; it is noise unless its score is below;
+    - `cap_rank`, `cap_gain` and `cap_explained` (with a `CapSetting`): its
+      pick order (from 1), the information it added in features' worth (for
+      a feature the cap dropped: what it would have added next, 0 if
+      `"explained"`), and the share of the spread explained after its pick.
 
     A step that is turned off, or that a feature did not reach, leaves its
     columns null.
@@ -136,7 +141,9 @@ def reduction_report(
     -----
     UserWarning
         If the noise step runs on fewer than 50 features or rows: it may then
-        drop real features as noise.
+        drop real features as noise. If the cap runs without the noise step,
+        or the rows (or the `max_samples` sample) stop it before
+        `max_features`.
 
     """
     df = lf.select(settings._input_columns).collect()

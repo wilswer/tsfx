@@ -11,7 +11,7 @@ use polars_core::runtime::RAYON;
 use tsfx::extract::{
     DynamicGroupBySettings, ExtractionSettings, FeatureSetting, collect_in_memory, lazy_feature_df,
 };
-use tsfx::reduction::Reduction;
+use tsfx::reduction::{Cap, Reduction};
 
 const STOCK_VALUE_COLS: [&str; 5] = ["open", "high", "low", "close", "volume"];
 
@@ -103,8 +103,80 @@ fn bench_fit(c: &mut Criterion, name: &str, features: &DataFrame, keys: &[String
     });
 }
 
+/// `rows` rows of `columns` uniform columns (xorshift), keyed by `id`: the
+/// cap's worst case, with about as many candidates as rows.
+fn uniform_features(rows: usize, columns: usize) -> DataFrame {
+    let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut next = || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 11) as f64 / (1u64 << 53) as f64
+    };
+    let mut frame = vec![Column::new(
+        "id".into(),
+        (0..rows as i64).collect::<Vec<_>>(),
+    )];
+    for j in 0..columns {
+        let values: Vec<f64> = (0..rows).map(|_| next()).collect();
+        frame.push(Column::new(format!("f{j}").into(), values));
+    }
+    DataFrame::new_infer_height(frame).unwrap()
+}
+
+/// A fit of `reduction` (with a cap) in polars' pool.
+fn bench_cap(
+    c: &mut Criterion,
+    name: &str,
+    features: &DataFrame,
+    keys: &[String],
+    reduction: Reduction,
+) {
+    c.bench_function(name, |b| {
+        b.iter(|| RAYON.install(|| reduction.fit(black_box(features), keys).unwrap()))
+    });
+}
+
 fn criterion_benchmark(c: &mut Criterion) {
     let stock_keys = vec!["Name".to_string(), "date".to_string()];
+    bench_cap(
+        c,
+        "cap_stocks_close",
+        &stock_features(&["close"], "1y"),
+        &stock_keys,
+        Reduction {
+            cap: Some(Cap {
+                max_features: Some(50),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    // Steps 1 to 4 off: the cap alone, about 2,999 picks
+    let cap_alone = Reduction {
+        max_missing: None,
+        max_top_share: None,
+        max_correlation: None,
+        noise_sensitivity: None,
+        cap: Some(Cap::default()),
+        ..Default::default()
+    };
+    bench_cap(
+        c,
+        "cap_wide",
+        &uniform_features(3000, 3000),
+        &["id".to_string()],
+        cap_alone.clone(),
+    );
+    // Three times more candidates than rows, the shape of many value columns:
+    // at the rows limit every remaining candidate ties, about 3,000 of them
+    bench_cap(
+        c,
+        "cap_many_candidates",
+        &uniform_features(1500, 4500),
+        &["id".to_string()],
+        cap_alone,
+    );
     bench_fit(
         c,
         "reduce_stocks_close",

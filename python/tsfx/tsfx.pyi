@@ -73,10 +73,14 @@ class ReductionSetting:
     noise_neighbors:
         Nearest rows per row in the noise step, at least 1.
     max_samples:
-        Row cap for the correlation and noise steps (a seeded sample above
-        it), larger than `noise_neighbors`.
+        Row cap for the correlation and noise steps and the cap (a seeded
+        sample above it), larger than `noise_neighbors`; the cap then keeps at
+        most `max_samples` - 1 features.
     seed:
         Seed of the row sample and the noise step.
+    cap:
+        A `CapSetting` to keep only the most informative features after the
+        noise step. `None` (the default): no cap.
 
     """
 
@@ -87,6 +91,7 @@ class ReductionSetting:
     noise_neighbors: int
     max_samples: int
     seed: int
+    cap: CapSetting | None
 
     def __init__(
         self,
@@ -97,6 +102,47 @@ class ReductionSetting:
         noise_neighbors: int = 10,
         max_samples: int = 5000,
         seed: int = 0,
+        cap: CapSetting | None = None,
+    ) -> None: ...
+
+class CapSetting:
+    """Caps the number of feature columns kept; never changes values.
+
+    The cap is the reduction's last step: after the noise step it keeps the
+    most informative of the remaining features, by greedy column subset
+    selection. Each pick is the feature that explains the most of the
+    remaining features' spread (Spearman, on ranks) not yet explained by the
+    ones picked before it; its gain, in features' worth, is the information it
+    adds per dimension (`cap_gain` in the reduction report, with the pick
+    order in `cap_rank` and the share explained so far in `cap_explained`).
+
+    It never keeps more features than the rows used minus one (all rows, or a
+    sample of `max_samples` of them): past that, the kept features explain the
+    others fully, and those are dropped as `explained`. `CapSetting()` keeps
+    picking until nothing is left to explain, so it caps the features at the
+    number of rows; `ReductionSetting(cap=None)` turns the cap off. Run it with
+    the noise step on: it cannot tell noise from a feature unrelated to all
+    the others.
+
+    Parameters
+    ----------
+    max_features:
+        Keep at most this many features, at least 1. `None` (the default): no
+        count limit.
+    min_explained:
+        Stop once the kept features explain this share of the spread of the
+        features reaching the cap, in (0, 1]. 1.0 (the default): until
+        nothing is left to explain.
+
+    """
+
+    max_features: int | None
+    min_explained: float
+
+    def __init__(
+        self,
+        max_features: int | None = None,
+        min_explained: float = 1.0,
     ) -> None: ...
 
 class DynamicGroupBySettings:

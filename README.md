@@ -261,7 +261,9 @@ extraction and before scaling:
    move together;
 4. noise: features that respect which rows are neighbors no better than shuffled
    copies of the data (`noise_sensitivity`, 0.99: about 99% of pure-noise
-   features are dropped).
+   features are dropped);
+5. with a cap (`cap=CapSetting(...)`, off by default), all but the most
+   informative of the rest (see "Capping the number of features" below).
 
 Each step is turned off with `None`, e.g.
 `ReductionSetting(noise_sensitivity=None)`. The columns kept are unchanged, only
@@ -344,6 +346,69 @@ shape: (3, 3)
 │ val__median  ┆ val__sum_values ┆ 0.9995      │
 │ val__maximum ┆ val__sum_values ┆ 0.999833    │
 └──────────────┴─────────────────┴─────────────┘
+```
+
+#### Capping the number of features
+
+The four steps drop what is redundant or noise, but keep as many features as
+pass them. To keep the number of features from growing much larger than the
+number of rows (groups or windows), add a cap:
+`ReductionSetting(cap=CapSetting(max_features=..., min_explained=...))`. After
+the noise step it picks features one at a time, each time the one that explains
+the most of the remaining features' spread not yet explained by the ones picked
+before it (greedy column subset selection on the Spearman correlations). A
+pick's gain, in features' worth, is the information it adds per dimension. The
+report shows it in `cap_gain`, with the pick order in `cap_rank` and the share
+explained so far in `cap_explained`, so you can read off how many features carry
+most of the information.
+
+The cap stops at `max_features` features or once `min_explained` of the spread
+is explained, whichever comes first. It never keeps more features than the rows
+minus one: by then the kept features explain the others fully, and those are
+dropped as `explained`. So `CapSetting()`, with neither limit, caps the features
+at the number of rows, and keeps them all when there are fewer features than
+rows. A `UserWarning` says when the rows stop it before `max_features`. With
+more rows than `max_samples` (5000), the cap works on that sample and keeps at
+most 4999 features; a warning says so, and a larger `max_samples` keeps more, at
+the cost of a slower noise step. Run the cap with the noise step on: a
+pure-noise feature explains nothing but itself, just like a meaningful feature
+unrelated to all the others, so the cap cannot tell them apart. On thousands of
+features and rows, `CapSetting()` can take minutes.
+
+```python
+from tsfx import CapSetting
+
+settings = ExtractionSettings(
+    grouping_cols=["id"],
+    value_cols=["val"],
+    feature_setting=FeatureSetting.Efficient,
+    reduction=ReductionSetting(cap=CapSetting(max_features=20)),
+)
+report = reduction_report(df, settings)
+print(
+    report.filter(pl.col("cap_rank").is_not_null())
+    .sort("cap_rank")
+    .select("feature", "cap_rank", "cap_gain", "cap_explained")
+    .head(5),
+)
+```
+
+which produces the following output (the gains fall quickly: a few
+features carry most of the spread):
+
+```bash
+shape: (5, 4)
+┌─────────────────────────────────┬──────────┬───────────┬───────────────┐
+│ feature                         ┆ cap_rank ┆ cap_gain  ┆ cap_explained │
+│ ---                             ┆ ---      ┆ ---       ┆ ---           │
+│ str                             ┆ i64      ┆ f64       ┆ f64           │
+╞═════════════════════════════════╪══════════╪═══════════╪═══════════════╡
+│ val__sum_values                 ┆ 1        ┆ 41.871614 ┆ 0.279144      │
+│ val__cwt_coefficients__coeff_2… ┆ 2        ┆ 28.541687 ┆ 0.469422      │
+│ val__cwt_coefficients__coeff_6… ┆ 3        ┆ 19.677955 ┆ 0.600608      │
+│ val__autocorrelation__lag_3     ┆ 4        ┆ 10.187262 ┆ 0.668523      │
+│ val__cwt_coefficients__coeff_1… ┆ 5        ┆ 8.484321  ┆ 0.725086      │
+└─────────────────────────────────┴──────────┴───────────┴───────────────┘
 ```
 
 For more examples, see the [examples](examples) directory.

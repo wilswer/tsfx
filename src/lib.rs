@@ -14,7 +14,7 @@ use pyo3::exceptions::{PyUserWarning, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyType;
 use pyo3_polars::{PyDataFrame, PyLazyFrame};
-use reduction::Reduction;
+use reduction::{Cap, Reduction};
 use scaling::Scaling;
 
 /// Defines the complexity level of the feature extraction process.
@@ -73,9 +73,12 @@ enum PyScalerSetting {
 ///         features by mistake (a warning says so below 50 features or rows).
 ///         `None` turns the step off.
 ///     noise_neighbors: Nearest rows per row in the noise step, at least 1.
-///     max_samples: Row cap for the correlation and noise steps (a seeded
-///         sample above it), larger than `noise_neighbors`.
+///     max_samples: Row cap for the correlation and noise steps and the cap
+///         (a seeded sample above it), larger than `noise_neighbors`; the cap
+///         then keeps at most `max_samples` - 1 features.
 ///     seed: Seed of the row sample and the noise step.
+///     cap: A `CapSetting` to keep only the most informative features after
+///         the noise step. Defaults to None: no cap.
 #[pyclass(from_py_object, name = "ReductionSetting", eq, get_all)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyReductionSetting {
@@ -86,6 +89,7 @@ struct PyReductionSetting {
     noise_neighbors: usize,
     max_samples: usize,
     seed: u64,
+    cap: Option<PyCapSetting>,
 }
 
 #[pymethods]
@@ -100,7 +104,9 @@ impl PyReductionSetting {
         noise_neighbors=10,
         max_samples=5000,
         seed=0,
+        cap=None,
     ))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         max_missing: Option<f64>,
         max_top_share: Option<f64>,
@@ -109,6 +115,7 @@ impl PyReductionSetting {
         noise_neighbors: usize,
         max_samples: usize,
         seed: u64,
+        cap: Option<PyCapSetting>,
     ) -> PyResult<Self> {
         let setting = PyReductionSetting {
             max_missing,
@@ -118,6 +125,7 @@ impl PyReductionSetting {
             noise_neighbors,
             max_samples,
             seed,
+            cap,
         };
         Reduction::from(setting.clone()).validate()?;
         Ok(setting)
@@ -127,14 +135,82 @@ impl PyReductionSetting {
         let opt = |v: Option<f64>| v.map_or("None".to_string(), |v| v.to_string());
         format!(
             "ReductionSetting(max_missing={}, max_top_share={}, max_correlation={}, \
-             noise_sensitivity={}, noise_neighbors={}, max_samples={}, seed={})",
+             noise_sensitivity={}, noise_neighbors={}, max_samples={}, seed={}, cap={})",
             opt(self.max_missing),
             opt(self.max_top_share),
             opt(self.max_correlation),
             opt(self.noise_sensitivity),
             self.noise_neighbors,
             self.max_samples,
-            self.seed
+            self.seed,
+            self.cap
+                .as_ref()
+                .map_or("None".to_string(), PyCapSetting::__repr__)
+        )
+    }
+}
+
+/// Caps the number of feature columns kept; never changes values.
+///
+/// The cap is the reduction's last step: after the noise step it keeps the
+/// most informative of the remaining features, by greedy column subset
+/// selection. Each pick is the feature that explains the most of the
+/// remaining features' spread (Spearman, on ranks) not yet explained by the
+/// ones picked before it; its gain, in features' worth, is the information it
+/// adds per dimension (`cap_gain` in the reduction report, with the pick
+/// order in `cap_rank` and the share explained so far in `cap_explained`).
+///
+/// It never keeps more features than the rows used minus one (all rows, or
+/// a sample of `max_samples` of them): past that, the kept features explain
+/// the others fully, and those are dropped as `explained`. `CapSetting()`
+/// keeps picking until nothing is left to explain, so it caps the features
+/// at the number of rows; `ReductionSetting(cap=None)` turns the cap off. Run
+/// it with the noise step on: it cannot tell noise from a feature unrelated
+/// to all the others.
+///
+/// Attributes:
+///     max_features: Keep at most this many features, at least 1. Defaults
+///         to None: no count limit.
+///     min_explained: Stop once the kept features explain this share of the
+///         spread of the features reaching the cap, in (0, 1]. Defaults to
+///         1.0: until nothing is left to explain.
+#[pyclass(from_py_object, name = "CapSetting", eq, get_all)]
+#[derive(Clone, Debug, PartialEq)]
+struct PyCapSetting {
+    max_features: Option<usize>,
+    min_explained: f64,
+}
+
+#[pymethods]
+impl PyCapSetting {
+    /// Initialize the cap; invalid values raise `ValueError`.
+    #[new]
+    #[pyo3(signature = (max_features=None, min_explained=1.0))]
+    fn new(max_features: Option<i64>, min_explained: f64) -> PyResult<Self> {
+        // A negative count is a ValueError, as 0 is, not usize's OverflowError
+        let max_features = max_features
+            .map(|max| {
+                usize::try_from(max).map_err(|_| {
+                    PyValueError::new_err(format!(
+                        "CapSetting max_features must be at least 1, got {max}"
+                    ))
+                })
+            })
+            .transpose()?;
+        let setting = PyCapSetting {
+            max_features,
+            min_explained,
+        };
+        Cap::from(setting.clone()).validate()?;
+        Ok(setting)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "CapSetting(max_features={}, min_explained={:?})",
+            self.max_features
+                .map_or("None".to_string(), |max| max.to_string()),
+            self.min_explained
         )
     }
 }
@@ -283,6 +359,16 @@ impl From<PyReductionSetting> for Reduction {
             noise_neighbors: setting.noise_neighbors,
             max_samples: setting.max_samples,
             seed: setting.seed,
+            cap: setting.cap.map(Cap::from),
+        }
+    }
+}
+
+impl From<PyCapSetting> for Cap {
+    fn from(setting: PyCapSetting) -> Self {
+        Cap {
+            max_features: setting.max_features,
+            min_explained: setting.min_explained,
         }
     }
 }
@@ -336,7 +422,9 @@ impl From<PyExtractionSettings> for ExtractionSettings {
 ///
 /// Warns:
 ///     UserWarning: If the reduction's noise step runs on fewer than 50
-///         features or rows: it may then drop real features as noise.
+///         features or rows: it may then drop real features as noise. If
+///         the cap runs without the noise step, or the rows (or the
+///         `max_samples` sample) stop it before `max_features`.
 #[pyfunction]
 #[pyo3(signature = (lf, settings, streaming=false))]
 fn extract_features(
@@ -433,6 +521,7 @@ fn tsfx(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyDynamicGroupBySettings>()?;
     m.add_class::<PyScalerSetting>()?;
     m.add_class::<PyReductionSetting>()?;
+    m.add_class::<PyCapSetting>()?;
     m.add_function(wrap_pyfunction!(extract_features, m)?)?;
     m.add_function(wrap_pyfunction!(extract_features_df, m)?)?;
     m.add_function(wrap_pyfunction!(reduction_report_df, m)?)?;
