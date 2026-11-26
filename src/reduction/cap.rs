@@ -25,7 +25,13 @@ pub(crate) const EXPLAINED_TOLERANCE: f64 = 1e-9;
 /// earliest candidate wins. Rounding alone separates gains that are equal by
 /// construction, such as the last pick at the rows limit (one direction is
 /// left, and every remaining candidate explains all of it).
-pub(crate) const GAIN_TIE: f64 = 1e-9;
+pub(crate) const GAIN_TIE: f64 = 1e-6;
+
+/// Candidates whose running score is within this relative distance of the
+/// best get it recomputed exactly before each choice: the running score
+/// shrinks by subtraction and loses relative precision for a nearly
+/// explained candidate, too much to tell ties at [`GAIN_TIE`].
+const NEAR_TOP: f64 = 1e-3;
 
 /// Why the cap stopped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,9 +61,10 @@ pub(crate) struct CapResult {
 }
 
 /// Picks candidates greedily, the highest gain first (the first in column
-/// order on ties, gains within a relative [`GAIN_TIE`] counting as equal), until `cap.max_features` are picked, the explained share
-/// reaches `cap.min_explained` (checked only below 1.0), or every candidate
-/// left is fully explained. `c`: the candidates' correlation matrix (d × d,
+/// order on ties, gains within a relative [`GAIN_TIE`] counting as equal),
+/// until `cap.max_features` are picked, the explained share reaches
+/// `cap.min_explained` (checked only below 1.0), or every candidate left is
+/// fully explained. `c`: the candidates' correlation matrix (d × d,
 /// symmetric, diagonal 1, or 0 for a constant candidate). The products with
 /// `c` run in parallel over its rows, each a sequential dot product, so the
 /// result does not depend on the thread count.
@@ -81,13 +88,30 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
         loop {
             // The highest gain; gains within GAIN_TIE of it are equal, and the
             // earliest candidate wins
-            let options: Vec<(usize, f64)> = (0..d)
+            let mut options: Vec<(usize, f64)> = (0..d)
                 .filter(|&i| open(i, &picked, &g))
                 .map(|i| (i, f[i] / g[i]))
                 .collect();
             let Some(top) = options.iter().map(|&(_, gain)| gain).reduce(f64::max) else {
                 break CapStop::NothingLeft;
             };
+            // Near the top, where the choice is made, f exactly: ‖G eᵢ‖² from
+            // C and the picked ω (O(d · picks) per candidate, usually a few)
+            for (i, gain) in options.iter_mut() {
+                if *gain >= top * (1.0 - NEAR_TOP) {
+                    let mut column = c.column(*i).to_owned();
+                    for w in &omegas {
+                        column.scaled_add(-w[*i], w);
+                    }
+                    f[*i] = column.dot(&column);
+                    *gain = f[*i] / g[*i];
+                }
+            }
+            let top = options
+                .iter()
+                .map(|&(_, gain)| gain)
+                .reduce(f64::max)
+                .expect("options is not empty");
             let (l, gain) = options
                 .into_iter()
                 .find(|&(_, gain)| gain >= top * (1.0 - GAIN_TIE))
