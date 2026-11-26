@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -338,6 +338,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tsfx.ReductionSetting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ReductionSetting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tsfx.ScalerSetting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -353,6 +364,17 @@
     <span class="md-ellipsis">
       
         extract_features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tsfx.reduction_report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reduction_report
       
     </span>
   </a>
@@ -471,6 +493,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tsfx.ReductionSetting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ReductionSetting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#tsfx.ScalerSetting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -486,6 +519,17 @@
     <span class="md-ellipsis">
       
         extract_features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tsfx.reduction_report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        reduction_report
       
     </span>
   </a>
@@ -693,7 +737,7 @@
 
 
 <h3 id="tsfx.ExtractionSettings" class="doc doc-heading">
-              <code class="highlight language-python"><span class="n">ExtractionSettings</span><span class="p">(</span><span class="n">grouping_cols</span><span class="p">,</span> <span class="n">value_cols</span><span class="p">,</span> <span class="n">feature_setting</span><span class="p">,</span> <span class="n">config_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dynamic_settings</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scaling</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+              <code class="highlight language-python"><span class="n">ExtractionSettings</span><span class="p">(</span><span class="n">grouping_cols</span><span class="p">,</span> <span class="n">value_cols</span><span class="p">,</span> <span class="n">feature_setting</span><span class="p">,</span> <span class="n">config_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dynamic_settings</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scaling</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h3>
 
@@ -820,6 +864,24 @@ or minimum not below maximum) raises <code>ValueError</code>.</p>
                   <code>None</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>reduction</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ReductionSetting(max_missing=0.05, max_top_share=0.95, max_correlation=0.95, noise_sensitivity=0.99, noise_neighbors=10, max_samples=5000, seed=0) (tsfx.tsfx.ReductionSetting)" href="#tsfx.ReductionSetting">ReductionSetting</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional <code>ReductionSetting</code> to drop redundant and uninformative
+features after extraction, before scaling. Defaults to None: no
+reduction.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -875,6 +937,193 @@ or minimum not below maximum) raises <code>ValueError</code>.</p>
 <li><code>Efficient</code>: balanced set of commonly useful features (default choice).</li>
 <li><code>Comprehensive</code>: largest set of features for maximum coverage.</li>
 </ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="tsfx.ReductionSetting" class="doc doc-heading">
+              <code class="highlight language-python"><span class="n">ReductionSetting</span><span class="p">(</span><span class="n">max_missing</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">max_top_share</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">max_correlation</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">noise_sensitivity</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span> <span class="n">noise_neighbors</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">max_samples</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>How to drop redundant and uninformative features after extraction.</p>
+<p>Runs after extraction and before scaling. Drops features that are mostly
+missing, almost always one value, near-duplicates of an earlier feature
+(Spearman correlation), or noise (no better than shuffled shadow features
+at respecting which rows are neighbors). Each step is turned off with
+<code>None</code>. The reduction is fitted across the extracted rows (groups or
+windows), so it needs several of them and cannot be fitted on a single
+series. <code>reduction_report</code> explains every decision.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_missing</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Drop a feature whose share of missing values (null, NaN, ±inf) is
+above this, in [0, 1). <code>0.0</code> drops every feature with a missing value.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.05</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_top_share</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Drop a feature whose most frequent value covers more than this share
+of its non-missing values, in (0, 1).</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.95</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_correlation</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Drop a feature whose |Spearman correlation| with an earlier kept
+feature is above this, in (0, 1).</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.95</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>noise_sensitivity</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>About this share of pure-noise features is dropped (0.99 lets about 1
+in 100 through), in [0.5, 0.999]. Higher is stricter and slower and,
+with few features left, drops more real features by mistake: with
+fewer than 50 features or rows reaching the noise step, a
+<code>UserWarning</code> says so. <code>None</code> turns the step off.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.99</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>noise_neighbors</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Nearest rows per row in the noise step, at least 1.</p>
+              </div>
+            </td>
+            <td>
+                  <code>10</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_samples</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Row cap for the correlation and noise steps (a seeded sample above
+it), larger than <code>noise_neighbors</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>5000</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>seed</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Seed of the row sample and the noise step.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -1012,7 +1261,7 @@ columns produced are unnested to top-level columns.</p>
                 <code>settings</code>
             </td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="ExtractionSettings(grouping_cols, value_cols, feature_setting, config_path=None, dynamic_settings=None, scaling=None) (tsfx.tsfx.ExtractionSettings)" href="#tsfx.ExtractionSettings">ExtractionSettings</a></code>
+                  <code><a class="autorefs autorefs-internal" title="ExtractionSettings(grouping_cols, value_cols, feature_setting, config_path=None, dynamic_settings=None, scaling=None, reduction=None) (tsfx.tsfx.ExtractionSettings)" href="#tsfx.ExtractionSettings">ExtractionSettings</a></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -1066,6 +1315,54 @@ columns produced are unnested to top-level columns.</p>
     </table>
 
 
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the settings are invalid, or <code>settings.reduction</code> cannot be fitted
+(fewer groups or windows than it needs).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Warns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="UserWarning">UserWarning</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the reduction's noise step runs on fewer than 50 features or rows:
+it may then drop real features as noise.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
 <details class="example" open>
   <summary>Example</summary>
   <pre><code class="language-python">import polars as pl
@@ -1088,6 +1385,161 @@ settings = ExtractionSettings(
 gdf = extract_features(df, settings)
 </code></pre>
 </details>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="tsfx.reduction_report" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">reduction_report</span><span class="p">(</span><span class="n">lf</span><span class="p">,</span> <span class="n">settings</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Explain which features the reduction keeps and why.</p>
+<p>Extracts the features of <code>lf</code> as <code>settings</code> say (without scaling, which
+the reduction does not depend on), fits <code>settings.reduction</code> and returns
+its report: one row per extracted feature, in extraction order, with the
+columns</p>
+<ul>
+<li><code>feature</code>: the feature's column name;</li>
+<li><code>kept</code>: whether the reduction keeps it;</li>
+<li><code>dropped_by</code>: the step that dropped it (<code>"missing"</code>, <code>"one_value"</code>,
+  <code>"duplicate"</code> or <code>"noise"</code>), null if kept;</li>
+<li><code>missing_share</code>: its share of missing values (null, NaN, ±inf);</li>
+<li><code>top_share</code>: the share of its most frequent value among its non-missing
+  values;</li>
+<li><code>duplicate_of</code> and <code>correlation</code>: the kept feature it copies, and their
+  Spearman correlation;</li>
+<li><code>noise_score</code> and <code>noise_cutoff</code>: its Laplacian score and the best
+  shadow feature's score; it is noise unless its score is below.</li>
+</ul>
+<p>A step that is turned off, or that a feature did not reach, leaves its
+columns null.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>lf</code>
+            </td>
+            <td>
+                  <code><span title="polars.LazyFrame">LazyFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Input lazy frame.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>settings</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ExtractionSettings(grouping_cols, value_cols, feature_setting, config_path=None, dynamic_settings=None, scaling=None, reduction=None) (tsfx.tsfx.ExtractionSettings)" href="#tsfx.ExtractionSettings">ExtractionSettings</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Extraction configuration with a <code>reduction</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="polars.DataFrame">DataFrame</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The report.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>settings</code> has no reduction, or the reduction cannot be fitted
+(e.g. too few groups or windows).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Warns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="UserWarning">UserWarning</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the noise step runs on fewer than 50 features or rows: it may then
+drop real features as noise.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
 
     </div>
 

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_NOISE_SENSITIVITY","MIN_NOISE_SENSITIVITY","MIN_ROWS","NOISE_WARN_MIN_FEATURES","NOISE_WARN_MIN_ROWS"],"enum":["Dropped"],"fn":["key_order","remaining"],"mod":["duplicates","matrix","noise","rng","shares"],"struct":["Reduction","ReductionFit"]};

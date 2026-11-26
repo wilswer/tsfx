@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["assemble","average_ranks","filled","median","rank_matrix","standardize","tie_broken_rank_matrix","tie_broken_ranks"]};

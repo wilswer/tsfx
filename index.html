@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -349,6 +349,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#reducing-redundant-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reducing redundant features
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -553,6 +564,17 @@
     <span class="md-ellipsis">
       
         Scaling the features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reducing-redundant-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reducing redundant features
       
     </span>
   </a>
@@ -862,6 +884,102 @@ print(gdf.select(&quot;id&quot;, &quot;length&quot;, &quot;val__mean&quot;, &quo
 │ b   ┆ -1.0   ┆ 0.333333  ┆ 1.0          ┆ 1.0           │
 │ c   ┆ -1.0   ┆ 1.0       ┆ 0.333333     ┆ -1.0          │
 └─────┴────────┴───────────┴──────────────┴───────────────┘
+</code></pre>
+<h3 id="reducing-redundant-features">Reducing redundant features</h3>
+<p>Many extracted features say the same thing, or nothing. For similarity search in
+particular, every such feature is an extra dimension: near-copies make one
+property of the series count many times in a distance, and noise blurs the
+difference between near and far neighbors. Pass <code>reduction</code> to drop, after
+extraction and before scaling:</p>
+<ol>
+<li>features that are mostly missing: more than <code>max_missing</code> (0.05) of the
+   values null, NaN or infinite;</li>
+<li>features that are almost always one value: one value covers more than
+   <code>max_top_share</code> (0.95) of its non-missing values;</li>
+<li>near-duplicates: features whose Spearman correlation with an earlier, kept
+   feature is above <code>max_correlation</code> (0.95) in absolute value, e.g. the
+   variance and the standard deviation, or features of two value columns that
+   move together;</li>
+<li>noise: features that respect which rows are neighbors no better than shuffled
+   copies of the data (<code>noise_sensitivity</code>, 0.99: about 99% of pure-noise
+   features are dropped).</li>
+</ol>
+<p>Each step is turned off with <code>None</code>, e.g.
+<code>ReductionSetting(noise_sensitivity=None)</code>. The columns kept are unchanged, only
+fewer. The reduction is fitted across the extracted groups (or windows), so it
+needs several of them (at least 11 with the defaults) and cannot be fitted on a
+single series. With fewer than 50 features left for the noise step, a
+<code>UserWarning</code> says it may drop real features as noise, and so does a second one
+with fewer than 50 rows (groups or windows): the noise step needs enough rows to
+tell neighbors apart (in tests, it dropped 45% of medium-strength real features
+at 20 rows, 6% at 40, 2% at 60). The step is strict, keeping a feature only if
+it beats all 99 shuffled copies, so features with a weak signal and rare flags
+(a value on a few percent of the rows) are often dropped too; a lower
+<code>noise_sensitivity</code> (down to 0.5) keeps more of them. The correlation and
+noise steps work on at most <code>max_samples</code> (5000) rows, a sample drawn with
+<code>seed</code>, so the result is the same in every run. <code>reduction_report</code> shows what
+was kept, what was dropped and why (<code>dropped_by</code> is null for a kept feature).</p>
+<pre><code class="language-python">import math
+
+import polars as pl
+from tsfx import (
+    ExtractionSettings,
+    FeatureSetting,
+    ReductionSetting,
+    extract_features,
+    reduction_report,
+)
+
+df = pl.DataFrame(
+    {
+        &quot;id&quot;: [f&quot;s{g:02}&quot; for g in range(60) for _ in range(200)],
+        &quot;val&quot;: [
+            math.sin(0.1 * (g % 8 + 1) * t) * (1 + g % 5) + 0.02 * g * t
+            for g in range(60)
+            for t in range(200)
+        ],
+    },
+).lazy()
+settings = ExtractionSettings(
+    grouping_cols=[&quot;id&quot;],
+    value_cols=[&quot;val&quot;],
+    feature_setting=FeatureSetting.Efficient,
+    reduction=ReductionSetting(),
+)
+gdf = extract_features(df, settings)
+report = reduction_report(df, settings)
+print(f&quot;{report.height} features extracted, {gdf.width - 1} kept&quot;)
+print(report.group_by(&quot;dropped_by&quot;).len().sort(&quot;len&quot;, descending=True))
+print(
+    report.filter(pl.col(&quot;dropped_by&quot;) == &quot;duplicate&quot;)
+    .select(&quot;feature&quot;, &quot;duplicate_of&quot;, &quot;correlation&quot;)
+    .head(3),
+)
+</code></pre>
+<p>which produces the following output:</p>
+<pre><code class="language-bash">749 features extracted, 150 kept
+shape: (5, 2)
+┌────────────┬─────┐
+│ dropped_by ┆ len │
+│ ---        ┆ --- │
+│ str        ┆ u32 │
+╞════════════╪═════╡
+│ duplicate  ┆ 520 │
+│ null       ┆ 150 │
+│ one_value  ┆ 61  │
+│ noise      ┆ 17  │
+│ missing    ┆ 1   │
+└────────────┴─────┘
+shape: (3, 3)
+┌──────────────┬─────────────────┬─────────────┐
+│ feature      ┆ duplicate_of    ┆ correlation │
+│ ---          ┆ ---             ┆ ---         │
+│ str          ┆ str             ┆ f64         │
+╞══════════════╪═════════════════╪═════════════╡
+│ val__mean    ┆ val__sum_values ┆ 1.0         │
+│ val__median  ┆ val__sum_values ┆ 0.9995      │
+│ val__maximum ┆ val__sum_values ┆ 0.999833    │
+└──────────────┴─────────────────┴─────────────┘
 </code></pre>
 <p>For more examples, see the <a href="examples">examples</a> directory.</p>
 <h2 id="contributing">Contributing</h2>

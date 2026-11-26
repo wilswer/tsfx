@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["FeatureSetting"],"fn":["collect_in_memory","lazy_feature_df","parse_window_duration"],"struct":["DynamicGroupBySettings","ExtractionSettings"]};
+window.SIDEBAR_ITEMS = {"enum":["FeatureSetting","PostStep"],"fn":["collect_in_memory","extract","lazy_feature_df","parse_window_duration"],"struct":["DynamicGroupBySettings","Extraction","ExtractionSettings"]};
