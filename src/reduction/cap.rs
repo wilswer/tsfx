@@ -538,6 +538,45 @@ mod tests {
         }
     }
 
+    /// A near-copy whose residual variance is just above EXPLAINED_TOLERANCE
+    /// (candidate 1 is candidate 0 with one pair of neighboring values tied,
+    /// 1000 rows): its running score, about g² ≈ 4e-17, rounds below zero.
+    /// Regression: with every open score negative, the tie line lay above the
+    /// best and the choice panicked. From the final review's bit-faithful
+    /// port of this function.
+    #[test]
+    fn negative_running_scores_do_not_panic() {
+        let c = array![
+            [
+                0.9999999999999999,
+                0.9999999969999968,
+                0.029522873522873517,
+                0.012846216846216847
+            ],
+            [
+                0.9999999969999968,
+                1.0000000000000002,
+                0.029525543614120235,
+                0.012845670884207896
+            ],
+            [
+                0.029522873522873517,
+                0.029525543614120235,
+                1.0000000000000002,
+                0.01237382437382437
+            ],
+            [
+                0.012846216846216847,
+                0.012845670884207896,
+                0.01237382437382437,
+                0.9999999999999997
+            ],
+        ];
+        let r = greedy_subset(&c, &Cap::default());
+        assert_eq!(&r.picks[..3], &[0, 3, 2]);
+        assert!(r.gains.iter().all(|&gain| gain >= 0.0), "{:?}", r.gains);
+    }
+
     #[test]
     fn rows_limit() {
         let c = correlation_matrix(&ranked(12, 20, 7));

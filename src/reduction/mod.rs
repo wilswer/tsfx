@@ -1453,4 +1453,42 @@ mod fit_tests {
             fit.warnings
         );
     }
+
+    /// With step 3 off, a near-copy (a feature equal to another but for one
+    /// tied pair of neighboring values) reaches the cap with a residual
+    /// variance just above the tolerance at 1000 rows, where its running
+    /// score can round below zero. Regression: the fit panicked for about
+    /// half the seeds (the final review's ports); all 20 must fit, keeping
+    /// a and the two uniform columns.
+    #[test]
+    fn test_cap_near_copy_without_step_3() {
+        let n = 1000;
+        for seed in 0..20 {
+            let mut g = SplitMix64::new(300 + seed);
+            let a: Vec<f64> = (0..n).map(|_| uniform(&mut g)).collect();
+            // a with its two smallest values tied
+            let mut order: Vec<usize> = (0..n).collect();
+            order.sort_by(|&x, &y| a[x].total_cmp(&a[y]));
+            let mut tied = a.clone();
+            tied[order[1]] = a[order[0]];
+            let u1: Vec<f64> = (0..n).map(|_| uniform(&mut g)).collect();
+            let u2: Vec<f64> = (0..n).map(|_| uniform(&mut g)).collect();
+            let df = df![
+                "id" => (0..n as i64).collect::<Vec<_>>(),
+                "a" => a,
+                "a_tied" => tied,
+                "u1" => u1,
+                "u2" => u2,
+            ]
+            .unwrap();
+            let fit = cap_reduction(Cap::default()).fit(&df, &keys()).unwrap();
+            for name in ["a", "u1", "u2"] {
+                assert!(
+                    fit.kept.iter().any(|k| k == name),
+                    "seed {seed}: {:?}",
+                    fit.kept
+                );
+            }
+        }
+    }
 }
