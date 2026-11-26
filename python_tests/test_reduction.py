@@ -246,6 +246,7 @@ def test_cap_setting() -> None:
     "kwargs",
     [
         {"max_features": 0},
+        {"max_features": -1},
         {"min_explained": 0.0},
         {"min_explained": 1.5},
         {"min_explained": -0.1},
