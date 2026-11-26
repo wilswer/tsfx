@@ -73,8 +73,9 @@ class ReductionSetting:
     noise_neighbors:
         Nearest rows per row in the noise step, at least 1.
     max_samples:
-        Row cap for the correlation and noise steps (a seeded sample above
-        it), larger than `noise_neighbors`.
+        Row cap for the correlation and noise steps and the cap (a seeded
+        sample above it), larger than `noise_neighbors`; the cap then keeps at
+        most `max_samples` - 1 features.
     seed:
         Seed of the row sample and the noise step.
     cap:

@@ -62,7 +62,9 @@ pub struct Reduction {
     pub noise_sensitivity: Option<f64>,
     /// Nearest rows per row in the noise step's neighbor graph, at least 1.
     pub noise_neighbors: usize,
-    /// Row cap for the correlation and noise steps, above `noise_neighbors`.
+    /// Row cap for the correlation and noise steps and the cap, above
+    /// `noise_neighbors`; the cap then keeps at most `max_samples` − 1
+    /// features.
     pub max_samples: usize,
     /// Seed of the row sample and of the noise step (its tie-breaking and
     /// shadow features).

@@ -17,6 +17,8 @@ All notable changes to TSFX are documented here.
   used minus one, so `CapSetting()` caps the features at the number of rows. The
   report gains `cap_rank`, `cap_gain` (the information a pick adds, in features'
   worth) and `cap_explained`, and `dropped_by` the values `cap` and `explained`.
+  The report always has these three columns (12 in all), null without a cap:
+  code that checks its schema or selects columns by position sees them.
   `UserWarning`s say when the cap runs without the noise step, or the rows or
   the `max_samples` sample stop it before `max_features`. Defaults to
   `cap=None`: no cap, as before.
