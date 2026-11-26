@@ -33,8 +33,10 @@ the share of the total spread its unit residual off the picks captures
 (Gram-Schmidt, computed directly so small gains stay accurate), a residual
 variance of at most 1e-9 meaning fully explained, and the spec's stop rules;
 gains within a relative 1e-6 of the best are ties, won by the earliest
-candidate. Picks and ``dropped_by`` must match exactly, gains and shares to
-1e-9. Examples with a gain between a relative 0.5e-6 and 2e-6 below the best,
+candidate. Picks and ``dropped_by`` must match exactly, gains and shares to a
+relative 1e-6 (plus 1e-9): from the correlation matrix, a nearly explained
+candidate's residual variance v is known only to about ε · picks / v
+relative. Examples with a gain between a relative 0.5e-6 and 2e-6 below the best,
 a residual variance between 1e-11 and 1e-7, or a share within 1e-9 of
 ``min_explained`` are skipped.
 """
@@ -367,4 +369,4 @@ def test_cap_matches_reference(
         for got, expected in zip(report[name].to_list(), want[name], strict=True):
             assert (got is None) == (expected is None), name
             if expected is not None:
-                assert got == pytest.approx(expected, abs=1e-9), name
+                assert got == pytest.approx(expected, rel=1e-6, abs=1e-9), name
