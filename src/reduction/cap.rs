@@ -36,7 +36,9 @@ const NEAR_TOP: f64 = 1e-3;
 /// The running score f shrinks by subtraction from its start f₀, with an
 /// absolute error of about ε · picks · f₀: once f < SHRUNK · f₀, its
 /// relative error can come near [`GAIN_TIE`] (ε · 5,000 picks / 1e-4 =
-/// 5e-9 at most above it), and it is recomputed when it may decide a tie.
+/// 5e-9 at most above it), and it is recomputed where it may decide a tie
+/// or is reported as a dropped candidate's next gain. A pick's gain is
+/// always computed exactly.
 const SHRUNK: f64 = 1e-4;
 
 /// Why the cap stopped.
@@ -64,6 +66,16 @@ pub(crate) struct CapResult {
     pub next_gain: Vec<Option<f64>>,
     /// Why the cap stopped.
     pub stop: CapStop,
+}
+
+/// Gᵢ: candidate i's column of the residual matrix G = C − Σ ω ωᵀ, exactly,
+/// from C and the picked ω (O(d · picks)). ‖Gᵢ‖² is its running score f.
+fn residual_column(c: &Array2<f64>, omegas: &[Array1<f64>], i: usize) -> Array1<f64> {
+    let mut column = c.column(i).to_owned();
+    for w in omegas {
+        column.scaled_add(-w[i], w);
+    }
+    column
 }
 
 /// Picks candidates greedily, the highest gain first (the first in column
@@ -108,10 +120,7 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
             let possible_tie = options.iter().filter(|&&(_, gain)| near_top(gain)).count() > 1;
             for (i, gain) in options.iter_mut() {
                 if possible_tie && near_top(*gain) && f[*i] < SHRUNK * f0[*i] {
-                    let mut column = c.column(*i).to_owned();
-                    for w in &omegas {
-                        column.scaled_add(-w[*i], w);
-                    }
+                    let column = residual_column(c, &omegas, *i);
                     f[*i] = column.dot(&column);
                     *gain = f[*i] / g[*i];
                 }
@@ -121,21 +130,20 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
                 .map(|&(_, gain)| gain)
                 .reduce(f64::max)
                 .expect("options is not empty");
-            let (l, gain) = options
+            let (l, _) = options
                 .into_iter()
                 .find(|&(_, gain)| gain >= top * (1.0 - GAIN_TIE))
                 .expect("the best gain is among the options");
+
+            // The residual column of l: its exact gain, and ω, scaled to
+            // unit residual variance
+            let delta = residual_column(c, &omegas, l);
+            let gain = delta.dot(&delta) / delta[l];
             picked[l] = true;
             share += gain / trace;
             picks.push(l);
             gains.push(gain);
             explained.push(share);
-
-            // ω: the residual column of l, scaled to unit residual variance
-            let mut delta = c.column(l).to_owned();
-            for w in &omegas {
-                delta.scaled_add(-w[l], w);
-            }
             let omega = &delta / delta[l].sqrt();
             // h = G ω with the residual matrix before this pick
             let c_omega: Vec<f64> = (0..d)
@@ -168,12 +176,17 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
             }
         }
     };
+    // Reported: a shrunk running score exactly (each independent, in parallel)
     let next_gain = (0..d)
+        .into_par_iter()
         .map(|i| {
             if picked[i] {
                 None
             } else if g[i] <= EXPLAINED_TOLERANCE {
                 Some(0.0)
+            } else if f[i] < SHRUNK * f0[i] {
+                let column = residual_column(c, &omegas, i);
+                Some(column.dot(&column) / g[i])
             } else {
                 Some(f[i] / g[i])
             }
