@@ -340,6 +340,8 @@ def test_cap_matches_reference(
     case: tuple[pl.LazyFrame, list[str], CapSetting],
 ) -> None:
     lf, value_cols, cap = case
+    # A LazyFrame's repr hides its values: show them with a failure
+    hypothesis.note(f"values: {lf.collect().to_dict(as_series=False)}")
     plain = ExtractionSettings(["id"], value_cols, FeatureSetting.Minimal)
     want = _cap_reference(extract_features(lf, plain), ["id"], cap)
     reduction = ReductionSetting(
