@@ -116,7 +116,8 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
             };
             // A possible tie near the top: f exactly there where it has
             // shrunk, ‖G eᵢ‖² from C and the picked ω (O(d · picks) each)
-            let near_top = |gain: f64| gain >= top * (1.0 - NEAR_TOP);
+            // (lines below the best whatever its sign)
+            let near_top = |gain: f64| gain >= top - NEAR_TOP * top.abs();
             let possible_tie = options.iter().filter(|&&(_, gain)| near_top(gain)).count() > 1;
             for (i, gain) in options.iter_mut() {
                 if possible_tie && near_top(*gain) && f[*i] < SHRUNK * f0[*i] {
@@ -128,12 +129,14 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
             let top = options
                 .iter()
                 .map(|&(_, gain)| gain)
-                .reduce(f64::max)
-                .expect("options is not empty");
+                .fold(f64::NEG_INFINITY, f64::max);
+            // The tie line is never above the best, so the best passes; the
+            // first option only guards against a NaN
             let (l, _) = options
-                .into_iter()
-                .find(|&(_, gain)| gain >= top * (1.0 - GAIN_TIE))
-                .expect("the best gain is among the options");
+                .iter()
+                .copied()
+                .find(|&(_, gain)| gain >= top - GAIN_TIE * top.abs())
+                .unwrap_or(options[0]);
 
             // The residual column of l: its exact gain, and ω, scaled to
             // unit residual variance
@@ -162,6 +165,8 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
             {
                 *fi += -2.0 * o * hi + norm2 * o * o;
                 *gi -= o * o;
+                // ‖Gᵢ‖² ≥ Gᵢᵢ²: rounding can take f below it, even below zero
+                *fi = fi.max(*gi * *gi);
             }
             omegas.push(omega);
 
