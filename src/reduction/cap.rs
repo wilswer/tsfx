@@ -1,0 +1,210 @@
+//! Step 5: the cap.
+
+#[cfg(test)]
+mod tests {
+    use super::{CapStop, greedy_subset};
+    use crate::reduction::Cap;
+    use crate::reduction::duplicates::correlation_matrix;
+    use crate::reduction::matrix::rank_matrix;
+    use crate::reduction::rng::SplitMix64;
+    use ndarray::{Array1, Array2, ArrayView1, array};
+
+    fn uniform(g: &mut SplitMix64) -> f64 {
+        (g.next_u64() >> 11) as f64 / (1u64 << 53) as f64
+    }
+
+    /// Standardized ranks of `d` uniform columns of `n` rows.
+    fn ranked(n: usize, d: usize, seed: u64) -> Array2<f64> {
+        let mut g = SplitMix64::new(seed);
+        let columns: Vec<Vec<f64>> = (0..d)
+            .map(|_| (0..n).map(|_| uniform(&mut g)).collect())
+            .collect();
+        let refs: Vec<&[f64]> = columns.iter().map(Vec::as_slice).collect();
+        rank_matrix(&refs, &(0..n).collect::<Vec<_>>())
+    }
+
+    /// `v` minus its projection onto the orthonormal `basis` (twice, for
+    /// stability).
+    fn residual(v: ArrayView1<f64>, basis: &[Array1<f64>]) -> Array1<f64> {
+        let mut r = v.to_owned();
+        for _ in 0..2 {
+            for q in basis {
+                let p = q.dot(&r);
+                r = r - p * q;
+            }
+        }
+        r
+    }
+
+    /// Σᵢ ‖P zᵢ‖², P the projection onto the span of `basis`.
+    fn captured(z: &Array2<f64>, basis: &[Array1<f64>]) -> f64 {
+        z.columns()
+            .into_iter()
+            .map(|column| basis.iter().map(|q| q.dot(&column).powi(2)).sum::<f64>())
+            .sum()
+    }
+
+    /// The cap's greedy by definition: at each step, the unpicked column
+    /// (residual variance above 1e-9) whose addition captures the largest
+    /// share Σᵢ ‖P zᵢ‖² / Σᵢ ‖zᵢ‖² (the lowest index on ties), with the same
+    /// stop rules. Returns the picks and the explained share after each.
+    fn brute_force(z: &Array2<f64>, cap: &Cap) -> (Vec<usize>, Vec<f64>) {
+        let (n, d) = z.dim();
+        let total: f64 = z.iter().map(|x| x * x).sum();
+        let (mut basis, mut picks, mut explained) = (Vec::new(), Vec::new(), Vec::new());
+        loop {
+            let mut best: Option<(usize, f64, Array1<f64>)> = None;
+            for j in (0..d).filter(|j| !picks.contains(j)) {
+                let r = residual(z.column(j), &basis);
+                let norm2 = r.dot(&r);
+                if norm2 / n as f64 <= 1e-9 {
+                    continue;
+                }
+                let mut with_j = basis.clone();
+                with_j.push(&r / norm2.sqrt());
+                let share = captured(z, &with_j) / total;
+                if best.as_ref().is_none_or(|b| share > b.1) {
+                    best = Some((j, share, with_j.pop().unwrap()));
+                }
+            }
+            let Some((j, share, q)) = best else { break };
+            picks.push(j);
+            explained.push(share);
+            basis.push(q);
+            if cap.max_features == Some(picks.len())
+                || (cap.min_explained < 1.0 && share >= cap.min_explained)
+            {
+                break;
+            }
+        }
+        (picks, explained)
+    }
+
+    fn trace(c: &Array2<f64>) -> f64 {
+        c.diag().sum()
+    }
+
+    fn caps() -> [Cap; 3] {
+        [
+            Cap::default(),
+            Cap {
+                max_features: Some(3),
+                ..Default::default()
+            },
+            Cap {
+                min_explained: 0.7,
+                ..Default::default()
+            },
+        ]
+    }
+
+    #[test]
+    fn matches_brute_force() {
+        for (case, (n, d)) in [(30, 8), (12, 20), (40, 40)].into_iter().enumerate() {
+            let z = ranked(n, d, 100 + case as u64);
+            let c = correlation_matrix(&z);
+            for cap in caps() {
+                let got = greedy_subset(&c, &cap);
+                let (picks, explained) = brute_force(&z, &cap);
+                assert_eq!(got.picks, picks, "n {n}, d {d}, {cap:?}");
+                for k in 0..picks.len() {
+                    assert!(
+                        (got.explained[k] - explained[k]).abs() < 1e-9,
+                        "n {n}, d {d}, {cap:?}, pick {k}"
+                    );
+                    let before = if k == 0 { 0.0 } else { explained[k - 1] };
+                    let gain = (explained[k] - before) * trace(&c);
+                    assert!((got.gains[k] - gain).abs() < 1e-9, "pick {k}");
+                }
+                assert!(got.explained.windows(2).all(|w| w[0] <= w[1]));
+            }
+        }
+    }
+
+    #[test]
+    fn rows_limit() {
+        let c = correlation_matrix(&ranked(12, 20, 7));
+        let r = greedy_subset(&c, &Cap::default());
+        assert_eq!(r.picks.len(), 11);
+        assert_eq!(r.stop, CapStop::NothingLeft);
+        let left: Vec<Option<f64>> = (0..20)
+            .filter(|j| !r.picks.contains(j))
+            .map(|j| r.next_gain[j])
+            .collect();
+        assert_eq!(left, vec![Some(0.0); 9]);
+        assert!((r.explained[10] - 1.0).abs() < 1e-9, "{}", r.explained[10]);
+    }
+
+    #[test]
+    fn fewer_candidates_than_rows() {
+        let c = correlation_matrix(&ranked(30, 8, 8));
+        let r = greedy_subset(&c, &Cap::default());
+        assert_eq!(r.picks.len(), 8);
+        assert!(r.next_gain.iter().all(Option::is_none));
+    }
+
+    #[test]
+    fn max_features_stop() {
+        let c = correlation_matrix(&ranked(30, 8, 9));
+        let cap = Cap {
+            max_features: Some(3),
+            ..Default::default()
+        };
+        let r = greedy_subset(&c, &cap);
+        assert_eq!(r.picks.len(), 3);
+        assert_eq!(r.stop, CapStop::MaxFeatures);
+        for j in (0..8).filter(|j| !r.picks.contains(j)) {
+            assert!(r.next_gain[j].is_some_and(|g| g > 0.0), "{j}");
+        }
+    }
+
+    #[test]
+    fn min_explained_crossing_pick_kept() {
+        let c = correlation_matrix(&ranked(30, 8, 10));
+        let cap = Cap {
+            min_explained: 0.7,
+            ..Default::default()
+        };
+        let r = greedy_subset(&c, &cap);
+        let k = r.picks.len();
+        assert!(k >= 2);
+        assert!(r.explained[k - 2] < 0.7 && 0.7 <= r.explained[k - 1]);
+        assert_eq!(r.stop, CapStop::MinExplained);
+    }
+
+    #[test]
+    fn exact_copy_never_picked() {
+        let mut z = ranked(30, 5, 11);
+        let first = z.column(0).to_owned();
+        z.column_mut(1).assign(&first);
+        let r = greedy_subset(&correlation_matrix(&z), &Cap::default());
+        assert_eq!(r.picks[0], 0);
+        assert!(!r.picks.contains(&1));
+        assert_eq!(r.next_gain[1], Some(0.0));
+    }
+
+    #[test]
+    fn all_constant_candidates() {
+        let r = greedy_subset(&Array2::zeros((3, 3)), &Cap::default());
+        assert!(r.picks.is_empty());
+        assert_eq!(r.next_gain, vec![Some(0.0); 3]);
+        assert_eq!(r.stop, CapStop::NothingLeft);
+    }
+
+    #[test]
+    fn single_candidate() {
+        let r = greedy_subset(&array![[1.0]], &Cap::default());
+        assert_eq!(r.picks, vec![0]);
+        assert_eq!(r.gains, vec![1.0]);
+        assert_eq!(r.explained, vec![1.0]);
+    }
+
+    #[test]
+    fn stop_at_one_is_nothing_left() {
+        for (case, (n, d)) in [(30, 8), (12, 20), (40, 40)].into_iter().enumerate() {
+            let c = correlation_matrix(&ranked(n, d, 200 + case as u64));
+            let r = greedy_subset(&c, &Cap::default());
+            assert_eq!(r.stop, CapStop::NothingLeft, "n {n}, d {d}");
+        }
+    }
+}
