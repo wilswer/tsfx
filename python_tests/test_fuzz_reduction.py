@@ -31,10 +31,11 @@ The cap (step 5) is compared with the greedy by definition on the step-3
 survivors' standardized ranks: per step, every unpicked candidate's share of
 the total spread explained together with the picks (``np.linalg.lstsq``
 projections), a residual variance of at most 1e-9 meaning fully explained,
-and the spec's stop rules. Picks and ``dropped_by`` must match exactly, gains
-and shares to 1e-9. Examples with two top gains within 1e-9, a residual
-variance between 1e-11 and 1e-7, or a share within 1e-9 of ``min_explained``
-are skipped.
+and the spec's stop rules; gains within a relative 1e-9 of the best are ties,
+won by the earliest candidate. Picks and ``dropped_by`` must match exactly,
+gains and shares to 1e-9. Examples with a gain between a relative 0.5e-9 and
+2e-9 below the best, a residual variance between 1e-11 and 1e-7, or a share
+within 1e-9 of ``min_explained`` are skipped.
 """
 
 import math
@@ -293,10 +294,16 @@ def _cap_reference(
         ]
         if not options:
             break
-        options.sort(key=lambda t: (-t[0], t[1]))
-        if len(options) > 1:
-            hypothesis.assume(options[0][0] - options[1][0] > 1e-9)
-        new_share, p = options[0]
+        # Gains within a relative 1e-9 of the best are ties, won by the
+        # earliest candidate; skip gains that rounding could put on either
+        # side of that line
+        top = max(s for s, _ in options) - share
+        for s, _ in options:
+            hypothesis.assume(not 0.5e-9 <= 1 - (s - share) / top <= 2e-9)
+        new_share, p = min(
+            (o for o in options if o[0] - share >= top * (1 - 1e-9)),
+            key=lambda o: o[1],
+        )
         j = candidates[p]
         picked.append(p)
         rank[j] = len(picked)
