@@ -200,10 +200,11 @@ mod tests {
     }
 
     /// The cap's greedy by definition: at each step, the unpicked column
-    /// (residual variance above 1e-9) whose addition captures the largest
-    /// share Σᵢ ‖P zᵢ‖² / Σᵢ ‖zᵢ‖² (gains within a relative 1e-9 of the best
-    /// are ties, won by the lowest index), with the same stop rules. Returns
-    /// the picks and the explained share after each.
+    /// (residual variance above 1e-9) whose unit residual q captures the most
+    /// spread, Σᵢ (q · zᵢ)² / Σᵢ ‖zᵢ‖² (computed directly, not as a
+    /// difference of totals, so small gains stay accurate; gains within a
+    /// relative 1e-6 of the best are ties, won by the lowest index), with the
+    /// same stop rules. Returns the picks and the explained share after each.
     fn brute_force(z: &Array2<f64>, cap: &Cap) -> (Vec<usize>, Vec<f64>) {
         let (n, d) = z.dim();
         let total: f64 = z.iter().map(|x| x * x).sum();
@@ -217,18 +218,18 @@ mod tests {
                 if norm2 / n as f64 <= 1e-9 {
                     continue;
                 }
-                let mut with_j = basis.clone();
-                with_j.push(&r / norm2.sqrt());
-                let share = captured(z, &with_j) / total;
-                options.push((j, share, with_j.pop().unwrap()));
+                let q = &r / norm2.sqrt();
+                let gain = captured(z, std::slice::from_ref(&q)) / total;
+                options.push((j, gain, q));
             }
-            let Some(top) = options.iter().map(|o| o.1 - current).reduce(f64::max) else {
+            let Some(top) = options.iter().map(|o| o.1).reduce(f64::max) else {
                 break;
             };
-            let (j, share, q) = options
+            let (j, gain, q) = options
                 .into_iter()
-                .find(|o| o.1 - current >= top * (1.0 - 1e-9))
+                .find(|o| o.1 >= top * (1.0 - 1e-6))
                 .unwrap();
+            let share = current + gain;
             picks.push(j);
             explained.push(share);
             basis.push(q);
@@ -292,6 +293,91 @@ mod tests {
         assert_eq!(r.picks.len(), 11);
         let earliest_left = (0..20).find(|j| !r.picks[..10].contains(j)).unwrap();
         assert_eq!(r.picks[10], earliest_left, "{:?}", r.picks);
+    }
+
+    /// Columns v and |v| of a few repeated values (as the fuzz test draws):
+    /// near the rows limit, nearly explained candidates tie, and the
+    /// recursive scores, which shrink by subtraction, are too imprecise for
+    /// them. Regression: rounding decided these ties; each case's picks now
+    /// match the accurate reference (the earliest candidate wins). Found with
+    /// a numpy port of `greedy_subset`, after the fuzz test failed.
+    #[test]
+    fn near_ties_of_nearly_explained_candidates() {
+        let cases: [(&[&[f64]], &[usize]); 4] = [
+            (
+                &[
+                    &[
+                        0.5, 0.0, 0.5, 2.0, 0.5, 2.0, 3.0, -0.5, 3.0, 3.0, -0.5, -0.5,
+                    ],
+                    &[
+                        0.0, 0.0, 0.0, -0.5, -1.0, 2.0, 0.0, 1.0, 3.0, -0.5, 3.0, -0.5,
+                    ],
+                    &[
+                        3.0, 2.0, 0.5, -0.5, -0.5, -0.5, 3.0, -0.5, -1.0, 0.5, 2.0, 2.0,
+                    ],
+                    &[
+                        -1.0, 2.0, -0.5, 2.0, 1.0, -1.0, 0.5, -1.0, -1.0, 1.0, 1.0, 0.0,
+                    ],
+                    &[0.0, 0.0, 0.5, 3.0, 0.0, 3.0, 2.0, 2.0, 0.0, 3.0, 3.0, -0.5],
+                    &[1.0, 2.0, 2.0, 3.0, 1.0, -1.0, 2.0, 0.5, -1.0, 3.0, 0.5, 1.0],
+                ],
+                &[10, 8, 4, 1, 7, 3, 2, 0, 6, 9, 5],
+            ),
+            (
+                &[
+                    &[-0.5, 2.0, -0.5, -1.0, 3.0, 2.0, 0.5, 1.0, -1.0, -0.5],
+                    &[0.5, 0.5, 1.0, -1.0, 0.0, 2.0, 0.5, 2.0, 2.0, 0.0],
+                    &[0.5, 1.0, 3.0, 2.0, 1.0, 0.5, 2.0, 3.0, -1.0, 1.0],
+                    &[-0.5, 2.0, 0.5, -0.5, 0.5, 2.0, -1.0, -0.5, -1.0, 2.0],
+                    &[-1.0, 1.0, -1.0, 2.0, 2.0, 3.0, 0.5, 3.0, 1.0, 1.0],
+                ],
+                &[8, 5, 3, 7, 0, 6, 1, 2, 4],
+            ),
+            (
+                &[
+                    &[
+                        0.0, -1.0, 0.0, -0.5, -0.5, 2.0, -0.5, 3.0, 2.0, 0.0, 3.0, 0.5,
+                    ],
+                    &[
+                        3.0, 3.0, -1.0, -0.5, 0.5, 0.0, 2.0, -0.5, -1.0, 3.0, 1.0, 3.0,
+                    ],
+                    &[
+                        -0.5, 3.0, 0.5, -0.5, 1.0, -1.0, 0.5, -0.5, 0.5, 1.0, 2.0, 1.0,
+                    ],
+                    &[
+                        2.0, 2.0, 0.0, 0.5, 0.5, 0.5, -0.5, 0.5, -1.0, -1.0, -0.5, -0.5,
+                    ],
+                    &[
+                        0.0, -1.0, 0.0, 1.0, 1.0, 2.0, 1.0, 0.0, -0.5, 3.0, 3.0, -1.0,
+                    ],
+                    &[1.0, 0.5, 2.0, 3.0, 2.0, -0.5, -0.5, 0.5, 0.0, 2.0, 0.5, 3.0],
+                ],
+                &[2, 11, 9, 6, 4, 0, 7, 8, 1, 3, 5],
+            ),
+            (
+                &[
+                    &[2.0, 1.0, -1.0, 2.0, 0.0, 0.5, 0.0, 3.0, -1.0, -1.0],
+                    &[3.0, 1.0, 0.0, 0.5, 2.0, -1.0, 0.5, 3.0, 3.0, 1.0],
+                    &[2.0, 0.5, 0.0, 0.5, 2.0, 2.0, 0.0, -0.5, 0.0, -0.5],
+                    &[2.0, 0.5, 0.5, 3.0, -1.0, 2.0, 1.0, 2.0, 2.0, 0.0],
+                    &[0.0, 0.0, -0.5, -0.5, -0.5, 3.0, 2.0, 0.0, 1.0, 1.0],
+                    &[-1.0, -1.0, 1.0, -0.5, 3.0, 2.0, -0.5, 3.0, 1.0, 1.0],
+                ],
+                &[0, 11, 9, 3, 4, 7, 6, 1, 2],
+            ),
+        ];
+        for (case, (values, want)) in cases.into_iter().enumerate() {
+            // The candidates: v and |v| of each column
+            let columns: Vec<Vec<f64>> = values
+                .iter()
+                .flat_map(|v| [v.to_vec(), v.iter().map(|x| x.abs()).collect()])
+                .collect();
+            let refs: Vec<&[f64]> = columns.iter().map(Vec::as_slice).collect();
+            let rows: Vec<usize> = (0..values[0].len()).collect();
+            let c = correlation_matrix(&rank_matrix(&refs, &rows));
+            let got = greedy_subset(&c, &Cap::default());
+            assert_eq!(got.picks, want, "case {case}");
+        }
     }
 
     #[test]
