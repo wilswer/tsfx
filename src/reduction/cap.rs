@@ -193,14 +193,16 @@ mod tests {
 
     /// The cap's greedy by definition: at each step, the unpicked column
     /// (residual variance above 1e-9) whose addition captures the largest
-    /// share Σᵢ ‖P zᵢ‖² / Σᵢ ‖zᵢ‖² (the lowest index on ties), with the same
-    /// stop rules. Returns the picks and the explained share after each.
+    /// share Σᵢ ‖P zᵢ‖² / Σᵢ ‖zᵢ‖² (gains within a relative 1e-9 of the best
+    /// are ties, won by the lowest index), with the same stop rules. Returns
+    /// the picks and the explained share after each.
     fn brute_force(z: &Array2<f64>, cap: &Cap) -> (Vec<usize>, Vec<f64>) {
         let (n, d) = z.dim();
         let total: f64 = z.iter().map(|x| x * x).sum();
         let (mut basis, mut picks, mut explained) = (Vec::new(), Vec::new(), Vec::new());
         loop {
-            let mut best: Option<(usize, f64, Array1<f64>)> = None;
+            let current = explained.last().copied().unwrap_or(0.0);
+            let mut options: Vec<(usize, f64, Array1<f64>)> = Vec::new();
             for j in (0..d).filter(|j| !picks.contains(j)) {
                 let r = residual(z.column(j), &basis);
                 let norm2 = r.dot(&r);
@@ -210,11 +212,15 @@ mod tests {
                 let mut with_j = basis.clone();
                 with_j.push(&r / norm2.sqrt());
                 let share = captured(z, &with_j) / total;
-                if best.as_ref().is_none_or(|b| share > b.1) {
-                    best = Some((j, share, with_j.pop().unwrap()));
-                }
+                options.push((j, share, with_j.pop().unwrap()));
             }
-            let Some((j, share, q)) = best else { break };
+            let Some(top) = options.iter().map(|o| o.1 - current).reduce(f64::max) else {
+                break;
+            };
+            let (j, share, q) = options
+                .into_iter()
+                .find(|o| o.1 - current >= top * (1.0 - 1e-9))
+                .unwrap();
             picks.push(j);
             explained.push(share);
             basis.push(q);
@@ -266,6 +272,18 @@ mod tests {
                 assert!(got.explained.windows(2).all(|w| w[0] <= w[1]));
             }
         }
+    }
+
+    /// At the rows limit the last pick is a tie by construction: one direction
+    /// is left, and every remaining candidate explains all of it. Regression:
+    /// rounding gave it to candidate 9 here, not to the earliest (1).
+    #[test]
+    fn rows_limit_tie_goes_to_the_earliest() {
+        let c = correlation_matrix(&ranked(12, 20, 101));
+        let r = greedy_subset(&c, &Cap::default());
+        assert_eq!(r.picks.len(), 11);
+        let earliest_left = (0..20).find(|j| !r.picks[..10].contains(j)).unwrap();
+        assert_eq!(r.picks[10], earliest_left, "{:?}", r.picks);
     }
 
     #[test]
