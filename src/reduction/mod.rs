@@ -7,6 +7,8 @@
 //! not changed. Missing means null, NaN or ±inf. Thresholds are strict: a
 //! feature is dropped when its value is above the threshold.
 
+// Used by step 5 of `Reduction::fit` (next commit)
+#[allow(dead_code)]
 mod cap;
 mod duplicates;
 mod matrix;

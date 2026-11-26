@@ -1,4 +1,151 @@
-//! Step 5: the cap.
+//! Step 5: the cap. Greedy column subset selection (Farahat, Ghodsi and
+//! Kamel, "An Efficient Greedy Method for Unsupervised Feature Selection",
+//! ICDM 2011) on the candidates' Spearman correlation matrix: each pick is the
+//! candidate that explains the most of all candidates' spread not yet explained
+//! by the ones picked before it. Its gain, in features' worth (each candidate's
+//! spread is 1, or 0 if it is constant), is the information it adds per
+//! dimension. With r rows everything is explained after at most r − 1 picks
+//! (centered rows span at most r − 1 directions), so the cap never keeps more.
+//!
+//! The recursive form keeps only the correlation matrix C and the picked
+//! vectors ω: for the residual matrix G = C − Σ ω ωᵀ it updates each
+//! candidate's ‖G eᵢ‖² (`f`) and Gᵢᵢ (`g`) after every pick, at O(d²) per pick
+//! for d candidates, without a second d × d matrix.
+
+use ndarray::{Array1, Array2};
+use rayon::prelude::*;
+
+use super::Cap;
+
+/// A candidate whose residual variance is at most this is fully explained
+/// (each candidate's own variance is 1, or 0 if it is constant).
+pub(crate) const EXPLAINED_TOLERANCE: f64 = 1e-9;
+
+/// Why the cap stopped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CapStop {
+    /// `max_features` candidates were picked.
+    MaxFeatures,
+    /// The picks explain at least `min_explained` (below 1.0).
+    MinExplained,
+    /// Every candidate left is fully explained.
+    NothingLeft,
+}
+
+/// The cap's picks.
+#[derive(Clone, Debug)]
+pub(crate) struct CapResult {
+    /// Candidate indices (columns of `c`) in pick order.
+    pub picks: Vec<usize>,
+    /// Gain of each pick, in features' worth.
+    pub gains: Vec<f64>,
+    /// Explained share after each pick.
+    pub explained: Vec<f64>,
+    /// Per candidate: `None` if picked; `Some(0.0)` if fully explained at the
+    /// stop; else `Some(the gain it would add as the next pick)`.
+    pub next_gain: Vec<Option<f64>>,
+    /// Why the cap stopped.
+    pub stop: CapStop,
+}
+
+/// Picks candidates greedily, the highest gain first (the first in column
+/// order on ties), until `cap.max_features` are picked, the explained share
+/// reaches `cap.min_explained` (checked only below 1.0), or every candidate
+/// left is fully explained. `c`: the candidates' correlation matrix (d × d,
+/// symmetric, diagonal 1, or 0 for a constant candidate). The products with
+/// `c` run in parallel over its rows, each a sequential dot product, so the
+/// result does not depend on the thread count.
+pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
+    let d = c.nrows();
+    let mut f: Vec<f64> = c
+        .columns()
+        .into_iter()
+        .map(|column| column.iter().map(|x| x * x).sum())
+        .collect();
+    let mut g: Vec<f64> = c.diag().to_vec();
+    let trace: f64 = g.iter().sum();
+    let mut picked = vec![false; d];
+    let mut omegas: Vec<Array1<f64>> = Vec::new();
+    let (mut picks, mut gains, mut explained) = (Vec::new(), Vec::new(), Vec::new());
+    let mut share = 0.0;
+    let open = |i: usize, picked: &[bool], g: &[f64]| !picked[i] && g[i] > EXPLAINED_TOLERANCE;
+    let stop = if trace <= 0.0 {
+        CapStop::NothingLeft
+    } else {
+        loop {
+            // Highest gain; an equal gain keeps the earlier candidate
+            let best = (0..d)
+                .filter(|&i| open(i, &picked, &g))
+                .map(|i| (i, f[i] / g[i]))
+                .fold(None, |best: Option<(usize, f64)>, (i, gain)| match best {
+                    Some((_, b)) if b >= gain => best,
+                    _ => Some((i, gain)),
+                });
+            let Some((l, gain)) = best else {
+                break CapStop::NothingLeft;
+            };
+            picked[l] = true;
+            share += gain / trace;
+            picks.push(l);
+            gains.push(gain);
+            explained.push(share);
+
+            // ω: the residual column of l, scaled to unit residual variance
+            let mut delta = c.column(l).to_owned();
+            for w in &omegas {
+                delta.scaled_add(-w[l], w);
+            }
+            let omega = &delta / delta[l].sqrt();
+            // h = G ω with the residual matrix before this pick
+            let c_omega: Vec<f64> = (0..d)
+                .into_par_iter()
+                .map(|i| c.row(i).dot(&omega))
+                .collect();
+            let mut h = Array1::from(c_omega);
+            for w in &omegas {
+                h.scaled_add(-w.dot(&omega), w);
+            }
+            let norm2 = omega.dot(&omega);
+            for ((fi, gi), (&o, &hi)) in f
+                .iter_mut()
+                .zip(g.iter_mut())
+                .zip(omega.iter().zip(h.iter()))
+            {
+                *fi += -2.0 * o * hi + norm2 * o * o;
+                *gi -= o * o;
+            }
+            omegas.push(omega);
+
+            if cap.max_features == Some(picks.len()) {
+                break CapStop::MaxFeatures;
+            }
+            if cap.min_explained < 1.0 && share >= cap.min_explained {
+                break CapStop::MinExplained;
+            }
+            if !(0..d).any(|i| open(i, &picked, &g)) {
+                break CapStop::NothingLeft;
+            }
+        }
+    };
+    let next_gain = (0..d)
+        .map(|i| {
+            if picked[i] {
+                None
+            } else if g[i] <= EXPLAINED_TOLERANCE {
+                Some(0.0)
+            } else {
+                Some(f[i] / g[i])
+            }
+        })
+        .collect();
+    CapResult {
+        picks,
+        gains,
+        explained,
+        next_gain,
+        stop,
+    }
+}
 
 #[cfg(test)]
 mod tests {
