@@ -28,14 +28,15 @@ make exact and monotone copies. The tests on Efficient features of real
 series are slow and run at most 20 examples.
 
 The cap (step 5) is compared with the greedy by definition on the step-3
-survivors' standardized ranks: per step, every unpicked candidate's share of
-the total spread explained together with the picks (``np.linalg.lstsq``
-projections), a residual variance of at most 1e-9 meaning fully explained,
-and the spec's stop rules; gains within a relative 1e-9 of the best are ties,
-won by the earliest candidate. Picks and ``dropped_by`` must match exactly,
-gains and shares to 1e-9. Examples with a gain between a relative 0.5e-9 and
-2e-9 below the best, a residual variance between 1e-11 and 1e-7, or a share
-within 1e-9 of ``min_explained`` are skipped.
+survivors' standardized ranks: per step, every unpicked candidate's gain,
+the share of the total spread its unit residual off the picks captures
+(Gram-Schmidt, computed directly so small gains stay accurate), a residual
+variance of at most 1e-9 meaning fully explained, and the spec's stop rules;
+gains within a relative 1e-6 of the best are ties, won by the earliest
+candidate. Picks and ``dropped_by`` must match exactly, gains and shares to
+1e-9. Examples with a gain between a relative 0.5e-6 and 2e-6 below the best,
+a residual variance between 1e-11 and 1e-7, or a share within 1e-9 of
+``min_explained`` are skipped.
 """
 
 import math
@@ -267,63 +268,64 @@ def _cap_reference(
             "cap_explained": explained,
         }
     z = np.column_stack([_standardized_ranks(x[:, j]) for j in candidates])
+    total = float((z**2).sum())
+    basis = np.zeros((n, 0))  # orthonormal, spanning the picks
 
-    def captured(basis: list[int]) -> float:
-        """Σᵢ ‖P zᵢ‖², P the projection onto the `basis` columns of z."""
-        if not basis:
-            return 0.0
-        coef = np.linalg.lstsq(z[:, basis], z, rcond=None)[0]
-        return float(((z[:, basis] @ coef) ** 2).sum())
-
-    def residual_variance(p: int, basis: list[int]) -> float:
-        r = z[:, p]
-        if basis:
-            r = r - z[:, basis] @ np.linalg.lstsq(z[:, basis], r, rcond=None)[0]
+    def residual(p: int) -> tuple[float, np.ndarray]:
+        """Candidate p's residual variance and residual, off the picks."""
+        r = z[:, p] - basis @ (basis.T @ z[:, p])
+        r = r - basis @ (basis.T @ r)  # twice, for precision
         v = float(r @ r) / n
         hypothesis.assume(not 1e-11 <= v <= 1e-7)
-        return v
+        return v, r
 
-    total = float((z**2).sum())
+    def gain_share(r: np.ndarray) -> tuple[float, np.ndarray]:
+        """The share of the spread a residual's unit vector u captures, directly
+        as Σᵢ (u · zᵢ)² (a difference of totals loses small gains), and u.
+        """
+        u = r / np.sqrt(r @ r)
+        return float(((u @ z) ** 2).sum()) / total, u
+
     picked: list[int] = []
     share = 0.0
     while True:
-        options = [
-            (captured([*picked, p]) / total, p)
-            for p in range(len(candidates))
-            if p not in picked and residual_variance(p, picked) > 1e-9
-        ]
+        options = []
+        for p in range(len(candidates)):
+            if p not in picked:
+                v, r = residual(p)
+                if v > 1e-9:
+                    options.append((*gain_share(r), p))
         if not options:
             break
-        # Gains within a relative 1e-9 of the best are ties, won by the
+        # Gains within a relative 1e-6 of the best are ties, won by the
         # earliest candidate; skip gains that rounding could put on either
         # side of that line
-        top = max(s for s, _ in options) - share
-        for s, _ in options:
-            hypothesis.assume(not 0.5e-9 <= 1 - (s - share) / top <= 2e-9)
-        new_share, p = min(
-            (o for o in options if o[0] - share >= top * (1 - 1e-9)),
-            key=lambda o: o[1],
+        top = max(o[0] for o in options)
+        for g, _, _ in options:
+            hypothesis.assume(not 0.5e-6 <= 1 - g / top <= 2e-6)
+        g, u, p = min(
+            (o for o in options if o[0] >= top * (1 - 1e-6)), key=lambda o: o[2]
         )
+        basis = np.column_stack([basis, u])
         j = candidates[p]
         picked.append(p)
-        rank[j] = len(picked)
-        gain[j] = (new_share - share) * total / n
-        explained[j] = share = new_share
+        share += g
+        rank[j], gain[j], explained[j] = len(picked), g * total / n, share
         if cap.max_features == len(picked):
             break
         if cap.min_explained < 1.0:
             hypothesis.assume(abs(share - cap.min_explained) > 1e-9)
             if share >= cap.min_explained:
                 break
-    before = captured(picked)
     for p in range(len(candidates)):
         if p in picked:
             continue
         j = candidates[p]
-        if residual_variance(p, picked) <= 1e-9:
+        v, r = residual(p)
+        if v <= 1e-9:
             dropped[j], gain[j] = "explained", 0.0
         else:
-            dropped[j], gain[j] = "cap", (captured([*picked, p]) - before) / n
+            dropped[j], gain[j] = "cap", gain_share(r)[0] * total / n
     return {
         "dropped_by": dropped,
         "cap_rank": rank,
