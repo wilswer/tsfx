@@ -435,8 +435,62 @@ impl ReductionFit {
 
 #[cfg(test)]
 mod tests {
-    use super::Reduction;
+    use super::{Cap, Reduction};
     use crate::error::ExtractionError;
+
+    #[test]
+    fn test_cap_defaults_and_validate() {
+        assert_eq!(Reduction::default().cap, None);
+        assert_eq!(
+            Cap::default(),
+            Cap {
+                max_features: None,
+                min_explained: 1.0
+            }
+        );
+        for ok in [
+            Cap::default(),
+            Cap {
+                max_features: Some(1),
+                min_explained: 0.5,
+            },
+        ] {
+            assert!(
+                Reduction {
+                    cap: Some(ok),
+                    ..Default::default()
+                }
+                .validate()
+                .is_ok()
+            );
+        }
+        let msg = |cap: Cap| {
+            Reduction {
+                cap: Some(cap),
+                ..Default::default()
+            }
+            .validate()
+            .unwrap_err()
+            .to_string()
+        };
+        assert!(
+            msg(Cap {
+                max_features: Some(0),
+                ..Default::default()
+            })
+            .contains("CapSetting max_features must be at least 1, got 0")
+        );
+        for bad in [0.0, -0.1, 1.5, f64::NAN] {
+            assert!(
+                msg(Cap {
+                    min_explained: bad,
+                    ..Default::default()
+                })
+                .contains("CapSetting min_explained must be in (0, 1]"),
+                "{bad}"
+            );
+        }
+    }
 
     #[test]
     fn test_shadow_count() {
