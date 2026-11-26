@@ -426,13 +426,14 @@ mod tests {
         }
     }
 
-    /// A reported gain, of a pick or of a candidate the cap dropped, comes
-    /// from the running score; where that score had shrunk far from its start
-    /// it was up to 2e-4 relative off in these cases (columns v and |v|, as
-    /// the fuzz test draws). Regression: every reported gain matches the
-    /// exact one (Gram-Schmidt on z) to a relative 1e-6, the most the
-    /// correlation matrix allows for nearly explained candidates. Found with
-    /// a numpy port of `greedy_subset`, after the fuzz test failed.
+    /// Every reported gain, of a pick or of a candidate the cap dropped,
+    /// matches the exact one (Gram-Schmidt on z) to a relative 1e-6, the most
+    /// the correlation matrix allows for nearly explained candidates. Cases
+    /// (columns v and |v|, as the fuzz test draws) where a numpy port of
+    /// `greedy_subset` that reported the running scores was up to 2e-4
+    /// relative off; in Rust the running scores happened to stay within 1e-6
+    /// here, so this guards the exact recompute rather than reproducing a
+    /// failure.
     #[test]
     fn reported_gains_are_accurate() {
         let cases: [(&[&[f64]], usize); 3] = [
