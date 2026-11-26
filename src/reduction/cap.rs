@@ -28,11 +28,16 @@ pub(crate) const EXPLAINED_TOLERANCE: f64 = 1e-9;
 pub(crate) const GAIN_TIE: f64 = 1e-6;
 
 /// When two or more candidates' running scores are within this relative
-/// distance of the best, theirs are recomputed exactly before the choice: the
-/// running score shrinks by subtraction and loses relative precision for a
-/// nearly explained candidate, too much to tell ties at [`GAIN_TIE`]. With a
-/// clear best there is no tie to tell, and nothing is recomputed.
+/// distance of the best, those that have shrunk (see [`SHRUNK`]) are
+/// recomputed exactly before the choice, so a tie at [`GAIN_TIE`] can be
+/// told. With a clear best there is no tie to tell.
 const NEAR_TOP: f64 = 1e-3;
+
+/// The running score f shrinks by subtraction from its start f₀, with an
+/// absolute error of about ε · picks · f₀: once f < SHRUNK · f₀, its
+/// relative error can come near [`GAIN_TIE`] (ε · 5,000 picks / 1e-4 =
+/// 5e-9 at most above it), and it is recomputed when it may decide a tie.
+const SHRUNK: f64 = 1e-4;
 
 /// Why the cap stopped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -76,6 +81,7 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
         .into_iter()
         .map(|column| column.iter().map(|x| x * x).sum())
         .collect();
+    let f0 = f.clone();
     let mut g: Vec<f64> = c.diag().to_vec();
     let trace: f64 = g.iter().sum();
     let mut picked = vec![false; d];
@@ -96,12 +102,12 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
             let Some(top) = options.iter().map(|&(_, gain)| gain).reduce(f64::max) else {
                 break CapStop::NothingLeft;
             };
-            // A possible tie near the top: f exactly there, ‖G eᵢ‖² from C and
-            // the picked ω (O(d · picks) per candidate, usually a few)
+            // A possible tie near the top: f exactly there where it has
+            // shrunk, ‖G eᵢ‖² from C and the picked ω (O(d · picks) each)
             let near_top = |gain: f64| gain >= top * (1.0 - NEAR_TOP);
             let possible_tie = options.iter().filter(|&&(_, gain)| near_top(gain)).count() > 1;
             for (i, gain) in options.iter_mut() {
-                if possible_tie && near_top(*gain) {
+                if possible_tie && near_top(*gain) && f[*i] < SHRUNK * f0[*i] {
                     let mut column = c.column(*i).to_owned();
                     for w in &omegas {
                         column.scaled_add(-w[*i], w);
