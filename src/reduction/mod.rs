@@ -63,6 +63,8 @@ pub struct Reduction {
     /// Seed of the row sample and of the noise step (its tie-breaking and
     /// shadow features).
     pub seed: u64,
+    /// The cap (step 5), `None` without it.
+    pub cap: Option<Cap>,
 }
 
 impl Default for Reduction {
@@ -75,7 +77,49 @@ impl Default for Reduction {
             noise_neighbors: 10,
             max_samples: 5000,
             seed: 0,
+            cap: None,
         }
+    }
+}
+
+/// Settings of the cap (step 5): keep the most informative features by greedy
+/// column subset selection, at most `max_features` and until `min_explained`
+/// of the candidates' spread is explained (1.0: until nothing is left to
+/// explain), never more than the rows used − 1.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Cap {
+    /// Keep at most this many features, at least 1; `None`: no count limit.
+    pub max_features: Option<usize>,
+    /// Stop once the kept features explain this share of the candidates'
+    /// spread, in (0, 1]; 1.0: until nothing is left to explain.
+    pub min_explained: f64,
+}
+
+impl Default for Cap {
+    fn default() -> Self {
+        Cap {
+            max_features: None,
+            min_explained: 1.0,
+        }
+    }
+}
+
+impl Cap {
+    /// Checks both settings' ranges; the error names the field and its value.
+    pub fn validate(&self) -> Result<(), ExtractionError> {
+        if self.max_features == Some(0) {
+            return Err(ExtractionError::InvalidSettings(
+                "CapSetting max_features must be at least 1, got 0".to_string(),
+            ));
+        }
+        // NaN fails the range
+        if !(self.min_explained > 0.0 && self.min_explained <= 1.0) {
+            return Err(ExtractionError::InvalidSettings(format!(
+                "CapSetting min_explained must be in (0, 1], got {}",
+                self.min_explained
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -117,6 +161,9 @@ impl Reduction {
                 "ReductionSetting max_samples must be larger than noise_neighbors ({}), got {}",
                 self.noise_neighbors, self.max_samples
             )));
+        }
+        if let Some(cap) = &self.cap {
+            cap.validate()?;
         }
         Ok(())
     }

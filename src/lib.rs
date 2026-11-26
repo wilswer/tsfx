@@ -283,6 +283,7 @@ impl From<PyReductionSetting> for Reduction {
             noise_neighbors: setting.noise_neighbors,
             max_samples: setting.max_samples,
             seed: setting.seed,
+            cap: None,
         }
     }
 }
