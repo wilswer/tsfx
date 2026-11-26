@@ -72,10 +72,35 @@ pub(crate) struct CapResult {
 /// from C and the picked ω (O(d · picks)). ‖Gᵢ‖² is its running score f.
 fn residual_column(c: &Array2<f64>, omegas: &[Array1<f64>], i: usize) -> Array1<f64> {
     let mut column = c.column(i).to_owned();
-    for w in omegas {
-        column.scaled_add(-w[i], w);
-    }
+    let coefs: Vec<f64> = omegas.iter().map(|w| w[i]).collect();
+    subtract_combination(&mut column, &coefs, omegas);
     column
+}
+
+/// Entries per parallel block in [`subtract_combination`].
+const OMEGA_BLOCK: usize = 256;
+
+/// `target` −= Σᵣ `coefs[r]` · `omegas[r]`, in parallel over blocks of
+/// entries; each entry takes its terms in pick order as `target + (−c) · x`,
+/// bit for bit what a sequential `scaled_add(−coefs[r], &omegas[r])` per r
+/// gives, so the result does not depend on the thread count.
+fn subtract_combination(target: &mut Array1<f64>, coefs: &[f64], omegas: &[Array1<f64>]) {
+    let target = target
+        .as_slice_mut()
+        .expect("an owned vector is contiguous");
+    target
+        .par_chunks_mut(OMEGA_BLOCK)
+        .enumerate()
+        .for_each(|(block, chunk)| {
+            let start = block * OMEGA_BLOCK;
+            for (&coef, w) in coefs.iter().zip(omegas) {
+                let w = &w.as_slice().expect("an owned vector is contiguous")
+                    [start..start + chunk.len()];
+                for (t, &x) in chunk.iter_mut().zip(w) {
+                    *t += -coef * x;
+                }
+            }
+        });
 }
 
 /// Picks candidates greedily, the highest gain first (the first in column
@@ -185,9 +210,8 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
                 .map(|i| c.row(i).dot(&omega))
                 .collect();
             let mut h = Array1::from(c_omega);
-            for w in &omegas {
-                h.scaled_add(-w.dot(&omega), w);
-            }
+            let coefs: Vec<f64> = omegas.par_iter().map(|w| w.dot(&omega)).collect();
+            subtract_combination(&mut h, &coefs, &omegas);
             let norm2 = omega.dot(&omega);
             for (((fi, gi), ei), (&o, &hi)) in f
                 .iter_mut()
