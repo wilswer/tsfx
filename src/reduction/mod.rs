@@ -1464,6 +1464,9 @@ mod fit_tests {
         );
     }
 
+    /// With the noise step on and no binding limit, the cap runs without a
+    /// warning. Step 3 is off, so that the 50 clustered features (near-copies
+    /// of each other) all reach the noise step and the cap.
     #[test]
     fn test_cap_noise_on_no_cap_warning() {
         let n = 60;
@@ -1477,10 +1480,13 @@ mod fit_tests {
         }
         let df = DataFrame::new_infer_height(columns).unwrap();
         let r = Reduction {
+            max_correlation: None,
             cap: Some(Cap::default()),
             ..Default::default()
         };
         let fit = r.fit(&df, &keys()).unwrap();
+        // Not vacuous: the cap ran and picked
+        assert!(cap_ranks(&fit.report).iter().flatten().count() > 0);
         assert!(
             !fit.warnings.iter().any(|w| w.contains("cap")),
             "{:?}",
