@@ -185,7 +185,17 @@ impl PyCapSetting {
     /// Initialize the cap; invalid values raise `ValueError`.
     #[new]
     #[pyo3(signature = (max_features=None, min_explained=1.0))]
-    fn new(max_features: Option<usize>, min_explained: f64) -> PyResult<Self> {
+    fn new(max_features: Option<i64>, min_explained: f64) -> PyResult<Self> {
+        // A negative count is a ValueError, as 0 is, not usize's OverflowError
+        let max_features = max_features
+            .map(|max| {
+                usize::try_from(max).map_err(|_| {
+                    PyValueError::new_err(format!(
+                        "CapSetting max_features must be at least 1, got {max}"
+                    ))
+                })
+            })
+            .transpose()?;
         let setting = PyCapSetting {
             max_features,
             min_explained,
