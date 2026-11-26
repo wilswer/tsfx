@@ -1,14 +1,13 @@
 //! Reduction of the extracted features before scaling: drop features that are
 //! mostly missing, almost always one value, near-duplicates of an earlier
 //! feature, or noise (no better than shuffled "shadow" features at respecting
-//! the neighbor structure of the rows).
+//! the neighbor structure of the rows); then, with a cap, keep only the most
+//! informative of the rest (greedy column subset selection).
 //!
 //! The steps decide which columns remain; the values of the columns kept are
 //! not changed. Missing means null, NaN or ±inf. Thresholds are strict: a
 //! feature is dropped when its value is above the threshold.
 
-// Used by step 5 of `Reduction::fit` (next commit)
-#[allow(dead_code)]
 mod cap;
 mod duplicates;
 mod matrix;
@@ -16,9 +15,11 @@ mod noise;
 mod rng;
 mod shares;
 
+use ndarray::Array2;
 use polars::prelude::*;
 use rayon::prelude::*;
 
+use self::cap::{CapStop, greedy_subset};
 use self::duplicates::{correlation_matrix, greedy_duplicates};
 use self::matrix::{rank_matrix, tie_broken_rank_matrix};
 use self::noise::noise_scores;
@@ -191,16 +192,19 @@ impl Reduction {
     }
 
     /// Decides which feature columns of `features` to keep: every column not
-    /// in `key_cols` (the grouping and time columns) is a feature. Steps 3
-    /// and 4 read the rows in the order of `key_cols`, so the decision does
-    /// not depend on the input row order as long as the keys identify the
-    /// rows, as they do for extracted features (one row per group or window).
+    /// in `key_cols` (the grouping and time columns) is a feature. Steps 3 to
+    /// 5 read the rows in the order of `key_cols`, so the decision does not
+    /// depend on the input row order as long as the keys identify the rows,
+    /// as they do for extracted features (one row per group or window).
     /// Memory: the shares of steps 1 and 2 are computed column by column, and
-    /// steps 3 and 4 hold only the sampled rows (at most `max_samples`) of the
+    /// steps 3 to 5 hold only the sampled rows (at most `max_samples`) of the
     /// features left, plus step 3's correlation matrix: 8 · d² bytes for the d
-    /// features left after step 2 (about 1.8 GB at 15,000 features). Errors on
-    /// invalid settings and on fewer rows than
-    /// [`Reduction::min_rows`]: the reduction is fitted across the rows.
+    /// features left after step 2 (about 1.8 GB at 15,000 features). With a
+    /// cap, that matrix is kept through step 4 (or computed for the cap's
+    /// candidates when step 3 is off), and the cap adds one vector of the
+    /// candidates' length per pick. Errors on invalid settings and on fewer
+    /// rows than [`Reduction::min_rows`]: the reduction is fitted across the
+    /// rows.
     pub fn fit(
         &self,
         features: &DataFrame,
@@ -255,7 +259,7 @@ impl Reduction {
             }
         }
 
-        // Steps 3 and 4 run on at most max_samples rows, in the order of the
+        // Steps 3 to 5 run on at most max_samples rows, in the order of the
         // key columns; the generator draws the sample first, then the noise
         // step's tie-breaking seeds and shadows
         let order = key_order(features, key_cols)?;
@@ -270,18 +274,20 @@ impl Reduction {
         };
         // Only the sampled rows of the features left after step 2 are read
         let candidates = remaining(&dropped);
-        let sampled: Vec<Vec<f64>> =
-            if self.max_correlation.is_some() || self.noise_sensitivity.is_some() {
-                candidates
-                    .par_iter()
-                    .map(|&j| {
-                        let values = column_values(features, &names[j])?;
-                        Ok(rows.iter().map(|&i| values[i]).collect())
-                    })
-                    .collect::<PolarsResult<_>>()?
-            } else {
-                Vec::new()
-            };
+        let sampled: Vec<Vec<f64>> = if self.max_correlation.is_some()
+            || self.noise_sensitivity.is_some()
+            || self.cap.is_some()
+        {
+            candidates
+                .par_iter()
+                .map(|&j| {
+                    let values = column_values(features, &names[j])?;
+                    Ok(rows.iter().map(|&i| values[i]).collect())
+                })
+                .collect::<PolarsResult<_>>()?
+        } else {
+            Vec::new()
+        };
         let mut position: Vec<Option<usize>> = vec![None; d];
         for (k, &j) in candidates.iter().enumerate() {
             position[j] = Some(k);
@@ -296,6 +302,8 @@ impl Reduction {
 
         // Step 3: near-duplicates
         let mut duplicate_of: Vec<Option<(usize, f64)>> = vec![None; d];
+        // Step 3's features and correlation matrix, kept for the cap
+        let mut step_3_correlations: Option<(Vec<usize>, Array2<f64>)> = None;
         if let Some(max) = self.max_correlation {
             let alive = remaining(&dropped);
             if !alive.is_empty() {
@@ -309,6 +317,9 @@ impl Reduction {
                         dropped[j] = Some(Dropped::Duplicate);
                         duplicate_of[j] = Some((alive[duplicate.of], duplicate.correlation));
                     }
+                }
+                if self.cap.is_some() {
+                    step_3_correlations = Some((alive, corr));
                 }
             }
         }
@@ -362,6 +373,79 @@ impl Reduction {
             }
         }
 
+        // Step 5: cap
+        let mut cap_rank: Vec<Option<i64>> = vec![None; d];
+        let mut cap_gain: Vec<Option<f64>> = vec![None; d];
+        let mut cap_explained: Vec<Option<f64>> = vec![None; d];
+        if let Some(cap) = &self.cap {
+            let candidates = remaining(&dropped);
+            if !candidates.is_empty() {
+                if self.noise_sensitivity.is_none() {
+                    warnings.push(
+                        "the cap ran without the noise step (noise_sensitivity=None): it cannot \
+                         tell noise from a feature unrelated to the others, and may keep noise; \
+                         consider turning the noise step on"
+                            .to_string(),
+                    );
+                }
+                // The candidates' Spearman correlations: step 3's, or their own
+                let corr = match step_3_correlations.take() {
+                    Some((alive, corr)) => {
+                        let mut at = vec![0; d];
+                        for (k, &j) in alive.iter().enumerate() {
+                            at[j] = k;
+                        }
+                        let positions: Vec<usize> = candidates.iter().map(|&j| at[j]).collect();
+                        corr.select(ndarray::Axis(0), &positions)
+                            .select(ndarray::Axis(1), &positions)
+                    }
+                    None => correlation_matrix(&rank_matrix(
+                        &sampled_columns(&candidates),
+                        &sample_rows,
+                    )),
+                };
+                let result = greedy_subset(&corr, cap);
+                drop(corr);
+                for (k, &p) in result.picks.iter().enumerate() {
+                    let j = candidates[p];
+                    cap_rank[j] = Some(k as i64 + 1);
+                    cap_gain[j] = Some(result.gains[k]);
+                    cap_explained[j] = Some(result.explained[k]);
+                }
+                for (&j, next_gain) in candidates.iter().zip(&result.next_gain) {
+                    if let Some(gain) = *next_gain {
+                        cap_gain[j] = Some(gain);
+                        dropped[j] = Some(if gain == 0.0 {
+                            Dropped::Explained
+                        } else {
+                            Dropped::Cap
+                        });
+                    }
+                }
+                let kept = result.picks.len();
+                let rows_limited = result.stop == CapStop::NothingLeft && kept < candidates.len();
+                let r = rows.len();
+                if rows_limited && n <= self.max_samples {
+                    if let Some(max) = cap.max_features.filter(|&max| kept < max) {
+                        warnings.push(format!(
+                            "the cap kept {kept} features, fewer than max_features={max}: {r} \
+                             rows span at most {} directions, and the kept features explain the \
+                             other candidates fully on them",
+                            r - 1
+                        ));
+                    }
+                } else if rows_limited && kept == r - 1 {
+                    warnings.push(format!(
+                        "the cap kept {kept} features: it works on a sample of max_samples={} of \
+                         the {n} rows, which spans at most {} directions; raise max_samples to \
+                         keep more (the noise step's time grows with the square of the rows)",
+                        self.max_samples,
+                        self.max_samples - 1
+                    ));
+                }
+            }
+        }
+
         let kept: Vec<String> = names
             .iter()
             .zip(&dropped)
@@ -396,6 +480,9 @@ impl Reduction {
             "correlation" => correlation,
             "noise_score" => noise_score,
             "noise_cutoff" => cutoff,
+            "cap_rank" => cap_rank,
+            "cap_gain" => cap_gain,
+            "cap_explained" => cap_explained,
         ]?;
         Ok(ReductionFit {
             kept,
@@ -412,6 +499,11 @@ enum Dropped {
     OneValue,
     Duplicate,
     Noise,
+    /// Cut by the cap's `max_features` or `min_explained`.
+    Cap,
+    /// Nothing left to explain when the cap stopped: the kept features
+    /// explain it fully on the rows used.
+    Explained,
 }
 
 impl Dropped {
@@ -422,6 +514,8 @@ impl Dropped {
             Dropped::OneValue => "one_value",
             Dropped::Duplicate => "duplicate",
             Dropped::Noise => "noise",
+            Dropped::Cap => "cap",
+            Dropped::Explained => "explained",
         }
     }
 }
@@ -464,13 +558,19 @@ pub struct ReductionFit {
     /// The kept feature columns, in the frame's column order.
     pub kept: Vec<String>,
     /// One row per feature column, in the frame's column order: `feature`,
-    /// `kept`, `dropped_by` (`missing`, `one_value`, `duplicate`, `noise` or
-    /// null), `missing_share`, `top_share`, `duplicate_of`, `correlation`
-    /// (signed Spearman ρ with `duplicate_of`), `noise_score` and
-    /// `noise_cutoff`. A step that is turned off, or that a feature did not
+    /// `kept`, `dropped_by` (`missing`, `one_value`, `duplicate`, `noise`,
+    /// `cap`, `explained` or null), `missing_share`, `top_share`,
+    /// `duplicate_of`, `correlation` (signed Spearman ρ with
+    /// `duplicate_of`), `noise_score`, `noise_cutoff`, and the cap's
+    /// `cap_rank` (pick order, from 1), `cap_gain` (a pick's gain in
+    /// features' worth; for a feature the cap dropped, the gain it would have
+    /// added next, 0 if `explained`) and `cap_explained` (the share explained
+    /// after a pick). A step that is turned off, or that a feature did not
     /// reach, leaves its columns null.
     pub report: DataFrame,
-    /// Warnings of the fit: too few features or rows for the noise step.
+    /// Warnings of the fit: too few features or rows for the noise step, the
+    /// cap without the noise step, and the cap stopped by the rows or the
+    /// sample before `max_features`.
     pub warnings: Vec<String>,
 }
 
