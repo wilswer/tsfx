@@ -27,10 +27,11 @@ pub(crate) const EXPLAINED_TOLERANCE: f64 = 1e-9;
 /// left, and every remaining candidate explains all of it).
 pub(crate) const GAIN_TIE: f64 = 1e-6;
 
-/// Candidates whose running score is within this relative distance of the
-/// best get it recomputed exactly before each choice: the running score
-/// shrinks by subtraction and loses relative precision for a nearly
-/// explained candidate, too much to tell ties at [`GAIN_TIE`].
+/// When two or more candidates' running scores are within this relative
+/// distance of the best, theirs are recomputed exactly before the choice: the
+/// running score shrinks by subtraction and loses relative precision for a
+/// nearly explained candidate, too much to tell ties at [`GAIN_TIE`]. With a
+/// clear best there is no tie to tell, and nothing is recomputed.
 const NEAR_TOP: f64 = 1e-3;
 
 /// Why the cap stopped.
@@ -95,10 +96,12 @@ pub(crate) fn greedy_subset(c: &Array2<f64>, cap: &Cap) -> CapResult {
             let Some(top) = options.iter().map(|&(_, gain)| gain).reduce(f64::max) else {
                 break CapStop::NothingLeft;
             };
-            // Near the top, where the choice is made, f exactly: ‖G eᵢ‖² from
-            // C and the picked ω (O(d · picks) per candidate, usually a few)
+            // A possible tie near the top: f exactly there, ‖G eᵢ‖² from C and
+            // the picked ω (O(d · picks) per candidate, usually a few)
+            let near_top = |gain: f64| gain >= top * (1.0 - NEAR_TOP);
+            let possible_tie = options.iter().filter(|&&(_, gain)| near_top(gain)).count() > 1;
             for (i, gain) in options.iter_mut() {
-                if *gain >= top * (1.0 - NEAR_TOP) {
+                if possible_tie && near_top(*gain) {
                     let mut column = c.column(*i).to_owned();
                     for w in &omegas {
                         column.scaled_add(-w[*i], w);

@@ -304,7 +304,8 @@ def _cap_reference(
         for g, _, _ in options:
             hypothesis.assume(not 0.5e-6 <= 1 - g / top <= 2e-6)
         g, u, p = min(
-            (o for o in options if o[0] >= top * (1 - 1e-6)), key=lambda o: o[2]
+            (o for o in options if o[0] >= top * (1 - 1e-6)),
+            key=lambda o: o[2],
         )
         basis = np.column_stack([basis, u])
         j = candidates[p]
