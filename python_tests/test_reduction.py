@@ -14,6 +14,7 @@ from collections.abc import Sequence
 import polars as pl
 import pytest
 from tsfx import (
+    CapSetting,
     ExtractionSettings,
     FeatureSetting,
     ReductionSetting,
@@ -89,6 +90,7 @@ def test_setting_defaults() -> None:
     ) == (0.05, 0.95, 0.95, 0.99, 10, 5000, 0)
     assert r == ReductionSetting()
     assert ReductionSetting(noise_sensitivity=None).noise_sensitivity is None
+    assert r.cap is None
 
 
 @pytest.mark.parametrize(
@@ -137,12 +139,17 @@ def test_output_matches_report() -> None:
         "correlation",
         "noise_score",
         "noise_cutoff",
+        "cap_rank",
+        "cap_gain",
+        "cap_explained",
     ]
     assert set(report["dropped_by"].drop_nulls()) <= {
         "missing",
         "one_value",
         "duplicate",
         "noise",
+        "cap",
+        "explained",
     }
 
 
@@ -222,6 +229,74 @@ def test_short_series_nan_features_dropped_as_missing() -> None:
     missing = report.filter(pl.col("missing_share") > 0.05)
     assert missing.height > 0
     assert (missing["dropped_by"] == "missing").all()
+
+
+def test_cap_setting() -> None:
+    c = CapSetting()
+    assert (c.max_features, c.min_explained) == (None, 1.0)
+    assert c == CapSetting(min_explained=1.0)
+    assert repr(c) == "CapSetting(max_features=None, min_explained=1.0)"
+    assert ReductionSetting().cap is None
+    r = ReductionSetting(cap=CapSetting(max_features=50, min_explained=0.9))
+    assert repr(r).endswith("cap=CapSetting(max_features=50, min_explained=0.9))")
+    assert r.cap == CapSetting(max_features=50, min_explained=0.9)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"max_features": 0},
+        {"min_explained": 0.0},
+        {"min_explained": 1.5},
+        {"min_explained": -0.1},
+        {"min_explained": math.nan},
+    ],
+)
+def test_invalid_cap_setting(kwargs: dict[str, float]) -> None:
+    with pytest.raises(ValueError, match="CapSetting"):
+        CapSetting(**kwargs)  # type: ignore[arg-type]
+
+
+def test_cap_setting_types() -> None:
+    with pytest.raises(TypeError):
+        CapSetting(min_explained=None)  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        ReductionSetting(cap=CapSetting)  # type: ignore[arg-type]
+
+
+def test_cap_keeps_max_features() -> None:
+    settings = _settings(reduction=ReductionSetting(cap=CapSetting(max_features=10)))
+    out = extract_features(_series(), settings)
+    report = reduction_report(_series(), settings)
+    picked = report.filter(pl.col("cap_rank").is_not_null())
+    assert sorted(picked["cap_rank"].to_list()) == list(range(1, 11))
+    assert out.columns == ["id", *picked["feature"]]
+
+
+def test_empty_cap_differs_from_none() -> None:
+    no_cap = reduction_report(_series(), _settings(reduction=ReductionSetting()))
+    for name in ["cap_rank", "cap_gain", "cap_explained"]:
+        assert no_cap[name].null_count() == no_cap.height, name
+    empty = reduction_report(
+        _series(),
+        _settings(reduction=ReductionSetting(cap=CapSetting())),
+    )
+    kept = empty.filter(pl.col("kept"))
+    assert kept["cap_rank"].null_count() == 0
+    assert 0 < kept.height <= 59
+
+
+def test_cap_warnings() -> None:
+    without_noise = ReductionSetting(noise_sensitivity=None, cap=CapSetting())
+    with pytest.warns(UserWarning, match="without the noise step"):
+        extract_features(_series(), _settings(reduction=without_noise))
+    many = ReductionSetting(
+        noise_sensitivity=None,
+        max_correlation=None,
+        cap=CapSetting(max_features=100),
+    )
+    with pytest.warns(UserWarning, match="fewer than max_features=100"):
+        extract_features(_series(n_groups=20), _settings(reduction=many))
 
 
 def test_streaming_same_output() -> None:
